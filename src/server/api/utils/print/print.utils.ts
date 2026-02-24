@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 const MAX_GCODE_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_GCODE_EXTENSIONS = [".gcode", ".gco", ".gc"] as const;
+const ALLOWED_GCODE_EXTENSIONS = [".gcode", ".gco", ".gc", ".bgcode"] as const;
 
 export const sanitizeFilename = (name: string) =>
   name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
@@ -20,7 +20,7 @@ export const validateGcodePayload = (fileName: string, fileBuffer: Buffer) => {
   }
 
   if (!hasAllowedGcodeExtension(fileName)) {
-    throw new Error("Only .gcode, .gco, and .gc files are supported.");
+    throw new Error("Only .gcode, .gco, .gc, and .bgcode files are supported.");
   }
 
   if (fileBuffer.length === 0) {

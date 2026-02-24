@@ -361,7 +361,6 @@ async function initializeAIProvider() {
     console.log("AI Provider initialized successfully");
   } catch (error) {
     console.error("Failed to initialize AI Provider:", error);
-    throw new Error("Failed to initialize AI Provider");
   }
 }
 
