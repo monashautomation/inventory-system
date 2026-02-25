@@ -133,7 +133,7 @@ const dispatchToPrinter = async (params: {
           "X-Api-Key": authToken,
         };
 
-        let body: FormData | Blob;
+        let body: FormData | Buffer;
         if (candidate.method === "POST") {
           const uploadForm = new FormData();
           uploadForm.append(
@@ -143,18 +143,36 @@ const dispatchToPrinter = async (params: {
           );
           body = uploadForm;
         } else {
-          headers["Content-Type"] = "application/octet-stream";
+          headers.Accept = "application/json";
+          headers["Content-Type"] = /\.(gcode|gco)$/i.test(originalFilename)
+            ? "text/x.gcode"
+            : "application/octet-stream";
+          headers["Content-Length"] = String(fileBuffer.length);
           // Keep the previous upload shape that worked in the combined flow.
-          headers["Print-After-Upload"] = "?1";
-          headers.Overwrite = "?1";
-          body = new Blob([fileBuffer], { type: "application/octet-stream" });
+          if (mode === "upload_and_start") {
+            headers["Print-After-Upload"] = "1";
+          }
+          headers.Overwrite = "1";
+          body = fileBuffer;
         }
 
-        const uploadRes = await fetch(`http://${ipAddress}${candidate.path}`, {
-          method: candidate.method,
-          headers,
-          body,
-        });
+        let uploadRes: Response;
+        try {
+          uploadRes = await fetch(`http://${ipAddress}${candidate.path}`, {
+            method: candidate.method,
+            headers,
+            body,
+          });
+        } catch (error) {
+          const networkMessage = sanitizeDbText(
+            error instanceof Error ? error.message : "Network upload error",
+          );
+          uploadAttemptErrors.push(
+            `NETWORK ${candidate.method} ${candidate.path}: ${networkMessage}`,
+          );
+          // Some PrusaLink builds drop the socket on unsupported methods. Keep probing.
+          continue;
+        }
 
         if (uploadRes.ok) {
           resolvedStorageForStart = candidate.storage;
