@@ -19,6 +19,36 @@ const ipAddressSchema = z.string().refine((value) => isIP(value) !== 0, {
 const sanitizeDbText = (value: string, maxLength = 4000) =>
   value.replace(/\u0000/g, "").slice(0, maxLength);
 
+const MAX_BAMBU_PRINT_FILE_SIZE_BYTES = 1024 * 1024 * 1024;
+
+const validateUploadPayloadForPrinter = (
+  printerType: "PRUSA" | "BAMBU",
+  fileName: string,
+  fileBuffer: Buffer,
+) => {
+  if (printerType === "PRUSA") {
+    validateGcodePayload(fileName, fileBuffer);
+    return;
+  }
+
+  if (!fileName.trim()) {
+    throw new Error("File name is required.");
+  }
+
+  const lower = fileName.toLowerCase();
+  if (!lower.endsWith(".3mf")) {
+    throw new Error("Bambu printers currently support .3mf uploads only.");
+  }
+
+  if (fileBuffer.length === 0) {
+    throw new Error(".3mf file cannot be empty.");
+  }
+
+  if (fileBuffer.length > MAX_BAMBU_PRINT_FILE_SIZE_BYTES) {
+    throw new Error(".3mf file is too large. Max size is 1GB.");
+  }
+};
+
 const dispatchToPrinter = async (params: {
   printerType: "PRUSA" | "BAMBU";
   ipAddress: string;
@@ -424,12 +454,12 @@ export const printRouter = router({
       const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
 
       try {
-        validateGcodePayload(input.fileName, fileBuffer);
+        validateUploadPayloadForPrinter(printer.type, input.fileName, fileBuffer);
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
-            error instanceof Error ? error.message : "Invalid G-code payload.",
+            error instanceof Error ? error.message : "Invalid print file payload.",
         });
       }
 
@@ -592,12 +622,16 @@ export const printRouter = router({
         const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
 
         try {
-          validateGcodePayload(input.fileName, fileBuffer);
+          validateUploadPayloadForPrinter(
+            printer.type,
+            input.fileName,
+            fileBuffer,
+          );
         } catch (error) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message:
-              error instanceof Error ? error.message : "Invalid G-code payload.",
+              error instanceof Error ? error.message : "Invalid print file payload.",
           });
         }
 

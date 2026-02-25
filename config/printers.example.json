@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Prusa XL",
+    "type": "PRUSA",
+    "ipAddress": "172.24.200.91",
+    "authToken": "AgVVNjRQYYCRP2S"
+  },
+  {
+    "name": "Bambu X1C",
+    "type": "BAMBU",
+    "ipAddress": "172.24.1.50",
+    "authToken": "BAMBU_ACCESS_CODE",
+    "serialNumber": "SERIAL_NUMBER"
+  }
+]

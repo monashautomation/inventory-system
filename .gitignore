@@ -29,3 +29,5 @@ prisma/dev.db
 notes.txt
 
 uploads/
+config/printers.json
+config/printers.local.json
