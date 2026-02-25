@@ -1,9 +1,10 @@
 [
   {
-    "name": "Prusa XL",
+    "name": "Prusa XL 01",
     "type": "PRUSA",
     "ipAddress": "172.24.200.91",
-    "authToken": "AgVVNjRQYYCRP2S"
+    "authToken": "PRUSALINK_API_KEY",
+    "webcamUrl": "http://172.24.200.81:8080/?action=stream"
   },
   {
     "name": "Bambu X1C",

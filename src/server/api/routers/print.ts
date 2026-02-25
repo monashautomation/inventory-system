@@ -20,6 +20,42 @@ const sanitizeDbText = (value: string, maxLength = 4000) =>
   value.replace(/\u0000/g, "").slice(0, maxLength);
 
 const MAX_BAMBU_PRINT_FILE_SIZE_BYTES = 1024 * 1024 * 1024;
+const printerConfigCandidates = [
+  join(process.cwd(), "config", "printers.local.json"),
+  join(process.cwd(), "config", "printers.json"),
+];
+
+type PrinterMonitoringConfigEntry = {
+  ipAddress?: string;
+  webcamUrl?: string;
+};
+
+const loadPrinterMonitoringConfigMap = async () => {
+  for (const path of printerConfigCandidates) {
+    try {
+      const raw = await readFile(path, "utf8");
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      const entries = parsed as PrinterMonitoringConfigEntry[];
+      const map = new Map<string, string>();
+      for (const entry of entries) {
+        const ipAddress = entry?.ipAddress?.trim();
+        const webcamUrl = entry?.webcamUrl?.trim();
+        if (ipAddress && webcamUrl) {
+          map.set(ipAddress, webcamUrl);
+        }
+      }
+      return map;
+    } catch {
+      // Try next config source or fall back to empty config.
+    }
+  }
+
+  return new Map<string, string>();
+};
 
 const validateUploadPayloadForPrinter = (
   printerType: "PRUSA" | "BAMBU",
@@ -384,6 +420,20 @@ export const printRouter = router({
     return ctx.prisma.printer.findMany({
       orderBy: { createdAt: "desc" },
     });
+  }),
+
+  getPrinterMonitoringOptions: userProcedure.query(async ({ ctx }) => {
+    const [printers, webcamUrlByIp] = await Promise.all([
+      ctx.prisma.printer.findMany({
+        orderBy: { createdAt: "desc" },
+      }),
+      loadPrinterMonitoringConfigMap(),
+    ]);
+
+    return printers.map((printer) => ({
+      ...printer,
+      webcamUrl: webcamUrlByIp.get(printer.ipAddress) ?? null,
+    }));
   }),
 
   listMyPrintJobs: userProcedure.query(async ({ ctx }) => {

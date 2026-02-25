@@ -17,6 +17,7 @@ import { ProtectedLayout } from "@/auth/ProtectedLayout.tsx";
 import CheckIn from "@/pages/CheckIn.tsx";
 import Chat from "./pages/Chat";
 import PrintGcode from "@/pages/PrintGcode";
+import PrintMonitoring from "@/pages/PrintMonitoring";
 
 const App = () => {
   React.useEffect(() => {
@@ -48,6 +49,7 @@ const App = () => {
               <Route path="/chat" element={<Chat />} />
               <Route path="/checkin" element={<CheckIn />} />
               <Route path="/print" element={<PrintGcode />} />
+              <Route path="/print-monitor" element={<PrintMonitoring />} />
             </Route>
           </Routes>
         </CartProvider>

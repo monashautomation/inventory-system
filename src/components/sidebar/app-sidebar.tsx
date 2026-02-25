@@ -10,6 +10,7 @@ import {
   ArrowRightToLine,
   MessageCircle,
   Printer,
+  Monitor,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -62,6 +63,11 @@ const items = [
     title: "Print",
     url: "/print",
     icon: Printer,
+  },
+  {
+    title: "Monitor",
+    url: "/print-monitor",
+    icon: Monitor,
   },
   {
     title: "Settings",
