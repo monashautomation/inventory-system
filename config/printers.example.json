@@ -4,6 +4,7 @@
     "type": "PRUSA",
     "ipAddress": "172.24.200.91",
     "authToken": "PRUSALINK_API_KEY",
+    "serialNumber": null,
     "webcamUrl": "http://172.24.200.81:8080/?action=stream"
   },
   {
@@ -11,6 +12,7 @@
     "type": "BAMBU",
     "ipAddress": "172.24.1.50",
     "authToken": "BAMBU_ACCESS_CODE",
-    "serialNumber": "SERIAL_NUMBER"
+    "serialNumber": "SERIAL_NUMBER",
+    "webcamUrl": null
   }
 ]
