@@ -1,10 +1,10 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { tagInput, tagUpdateInput } from "@/server/schema/tag.schema";
 
 export const tagRouter = router({
-  create: userProcedure.input(tagInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(tagInput).mutation(async ({ input }) => {
     return prisma.tag.create({
       data: input,
     });
@@ -18,7 +18,7 @@ export const tagRouter = router({
       });
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(
       z.object({
         id: z.uuid(),
@@ -32,7 +32,7 @@ export const tagRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.tag.delete({

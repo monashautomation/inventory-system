@@ -8,7 +8,7 @@ import {
 import { consumableRestock } from "../utils/consumable/consumable.restock";
 
 export const consumableRouter = router({
-  create: userProcedure.input(consumableInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(consumableInput).mutation(async ({ input }) => {
     return await prisma.consumable.create({
       data: input,
       include: { item: true },
@@ -30,7 +30,7 @@ export const consumableRouter = router({
       });
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(
       z.object({
         id: z.uuid(),
@@ -45,7 +45,7 @@ export const consumableRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.consumable.delete({

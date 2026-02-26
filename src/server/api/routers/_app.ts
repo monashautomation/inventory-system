@@ -9,6 +9,7 @@ import { dashboardRouter } from "./dashboardRouter";
 import { qrRouter } from "./qr";
 import z from "zod";
 import { chatRouter } from "./chat";
+import { printRouter } from "./print";
 
 export const appRouter = router({
   group: groupRouter,
@@ -20,6 +21,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   qr: qrRouter,
   chat: chatRouter,
+  print: printRouter,
   hello: userProcedure.query(() => {
     return "hello world";
   }),

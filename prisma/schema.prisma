@@ -110,6 +110,8 @@ model User {
     sessions      Session[]
     accounts      Account[]
     ItemRecords   ItemRecord[] @relation("UserToItemRecord")
+    printers      Printer[]
+    gcodePrintJobs GcodePrintJob[]
 
     role       String    @default("user")
     banned     Boolean?
@@ -166,6 +168,61 @@ model Verification {
     updatedAt  DateTime?
 
     @@map("verification")
+}
+
+
+
+enum PrinterType {
+    PRUSA
+    BAMBU
+}
+
+enum GcodePrintJobStatus {
+    STORED
+    DISPATCHED
+    DISPATCH_FAILED
+}
+
+
+
+model Printer {
+    id              String   @id @default(uuid())
+    name            String
+    type            PrinterType
+    ipAddress       String   @unique
+    authToken       String?
+    serialNumber    String?
+    webcamUrl        String?
+    createdByUserId String
+    createdByUser   User     @relation(fields: [createdByUserId], references: [id])
+    printJobs       GcodePrintJob[]
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
+
+    @@index([ipAddress])
+    @@index([createdByUserId])
+}
+
+model GcodePrintJob {
+    id               String              @id @default(uuid())
+    userId           String
+    user             User                @relation(fields: [userId], references: [id])
+    printerId        String
+    printer          Printer             @relation(fields: [printerId], references: [id])
+    originalFilename String
+    storedFilename   String
+    s3Key            String?
+    fileHashSha256   String
+    fileSizeBytes    Int
+    status           GcodePrintJobStatus @default(STORED)
+    dispatchResponse String?
+    dispatchError    String?
+    createdAt        DateTime            @default(now())
+    updatedAt        DateTime            @updatedAt
+
+    @@index([userId])
+    @@index([printerId])
+    @@index([fileHashSha256])
 }
 
 model Chat {

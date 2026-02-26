@@ -1,10 +1,10 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { groupInput, groupUpdateInput } from "@/server/schema/group.schema";
 
 export const groupRouter = router({
-  create: userProcedure.input(groupInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(groupInput).mutation(async ({ input }) => {
     return await prisma.group.create({
       data: input,
     });
@@ -23,7 +23,7 @@ export const groupRouter = router({
       });
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(
       z.object({
         id: z.uuid(),
@@ -37,7 +37,7 @@ export const groupRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(
       z.object({
         id: z.uuid(),

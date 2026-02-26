@@ -122,7 +122,10 @@ class OllamaMcpProvider implements AIProvider {
     this.mcpEndpoint = mcpEndpoint;
     this.authToken = authToken;
     const username = "bot";
-    const password = process.env.MCP_PASSWORD ?? "mcppassword";
+    const password = process.env.MCP_PASSWORD;
+    if (!password) {
+      throw new Error("MCP_PASSWORD environment variable is required");
+    }
 
     // Create a basic auth header
     const authHeader = "Basic " + btoa(`${username}:${password}`);
@@ -202,7 +205,10 @@ Strict Formatting Guidelines:
 
         // Add basic auth for MCP endpoint access
         const username = "bot";
-        const password = process.env.MCP_PASSWORD ?? "mcppassword";
+        const password = process.env.MCP_PASSWORD;
+        if (!password) {
+          throw new Error("MCP_PASSWORD environment variable is required");
+        }
         const authHeader = "Basic " + btoa(`${username}:${password}`);
         forwardedHeaders.Authorization = authHeader;
 
@@ -361,7 +367,6 @@ async function initializeAIProvider() {
     console.log("AI Provider initialized successfully");
   } catch (error) {
     console.error("Failed to initialize AI Provider:", error);
-    throw new Error("Failed to initialize AI Provider");
   }
 }
 

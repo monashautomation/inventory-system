@@ -1,4 +1,4 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { createItemInput, updateItemInput } from "@/server/schema/item.schema";
@@ -9,7 +9,7 @@ import type { PrintResponse } from "../utils/item/item.utils";
 import { itemBulkDelete } from "../utils/item/item.delete";
 
 export const itemRouter = router({
-  create: userProcedure
+  create: adminProcedure
     .input(createItemInput.omit({ serial: true, stored: true, tags: true }))
     .mutation(async ({ input }) => {
       return prisma.item.createSerial({
@@ -102,7 +102,7 @@ export const itemRouter = router({
     });
   }),
 
-  recover: userProcedure
+  recover: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.item.update({
@@ -112,7 +112,7 @@ export const itemRouter = router({
         },
       });
     }),
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.item.update({
@@ -123,7 +123,7 @@ export const itemRouter = router({
       });
     }),
 
-  bulkDelete: userProcedure
+  bulkDelete: adminProcedure
     .input(
       z.object({
         ids: z.array(z.uuid()),

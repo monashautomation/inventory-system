@@ -1,4 +1,4 @@
-import { userProcedure, router } from "@/server/trpc";
+import { userProcedure, adminProcedure, router } from "@/server/trpc";
 import z from "zod";
 import { prisma } from "@/server/lib/prisma";
 import { Prisma, type TagGroup } from "@prisma/client";
@@ -9,7 +9,7 @@ import {
 } from "../utils/tagGroup/tagGroup.utils";
 
 export const tagGroupRouter = router({
-  create: userProcedure
+  create: adminProcedure
     .input(
       z.object({
         parentId: z.uuid().optional(),
@@ -54,7 +54,7 @@ export const tagGroupRouter = router({
       }
     }),
 
-  createMany: userProcedure
+  createMany: adminProcedure
     .input(
       z.object({
         parentId: z.uuid(),
@@ -129,7 +129,7 @@ export const tagGroupRouter = router({
       }
     }),
 
-  move: userProcedure
+  move: adminProcedure
     .input(
       z.object({
         parentId: z.uuid(),
@@ -228,7 +228,7 @@ export const tagGroupRouter = router({
       }
     }),
 
-  cascadeDelete: userProcedure
+  cascadeDelete: adminProcedure
     .input(
       z.object({
         parentId: z.uuid(),
@@ -268,7 +268,7 @@ export const tagGroupRouter = router({
       }
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(
       z.object({
         tagGroupId: z.uuid(),
@@ -327,7 +327,7 @@ export const tagGroupRouter = router({
       }
     }),
 
-  addTags: userProcedure
+  addTags: adminProcedure
     .input(
       z.object({
         tagGroupId: z.uuid(),

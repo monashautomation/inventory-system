@@ -1,4 +1,4 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import {
@@ -7,7 +7,7 @@ import {
 } from "@/server/schema/itemRecord.schema";
 
 export const itemRecordRouter = router({
-  create: userProcedure.input(itemRecordInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(itemRecordInput).mutation(async ({ input }) => {
     return prisma.itemRecord.create({
       data: input,
       include: { actionBy: true, item: true },
@@ -23,7 +23,7 @@ export const itemRecordRouter = router({
       });
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(
       z.object({
         id: z.uuid(),
@@ -38,7 +38,7 @@ export const itemRecordRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.itemRecord.delete({

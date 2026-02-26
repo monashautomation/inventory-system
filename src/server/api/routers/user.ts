@@ -1,10 +1,10 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { userInput, userUpdateInput } from "@/server/schema/user.schema";
 
 export const userRouter = router({
-  create: userProcedure.input(userInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(userInput).mutation(async ({ input }) => {
     return prisma.user.create({
       data: input,
     });
@@ -22,7 +22,7 @@ export const userRouter = router({
       });
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(z.object({ id: z.uuid(), data: userUpdateInput }))
     .mutation(async ({ input }) => {
       return prisma.user.update({
@@ -31,7 +31,7 @@ export const userRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.user.delete({

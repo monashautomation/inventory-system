@@ -9,6 +9,9 @@ import {
   ShoppingCartIcon,
   ArrowRightToLine,
   MessageCircle,
+  Printer,
+  Monitor,
+  Wrench,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -56,6 +59,21 @@ const items = [
     title: "Chat",
     url: "/chat",
     icon: MessageCircle,
+  },
+  {
+    title: "Print",
+    url: "/print",
+    icon: Printer,
+  },
+  {
+    title: "Monitor",
+    url: "/print-monitor",
+    icon: Monitor,
+  },
+  {
+    title: "Printers",
+    url: "/printer-management",
+    icon: Wrench,
   },
   {
     title: "Settings",

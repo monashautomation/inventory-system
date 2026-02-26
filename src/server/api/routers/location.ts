@@ -1,4 +1,4 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import {
@@ -9,7 +9,7 @@ import {
 import type { Prisma } from "@prisma/client";
 
 export const locationRouter = router({
-  create: userProcedure.input(locationInput).mutation(async ({ input }) => {
+  create: adminProcedure.input(locationInput).mutation(async ({ input }) => {
     return prisma.location.create({
       data: input,
     });
@@ -91,7 +91,7 @@ export const locationRouter = router({
       return count > 0;
     }),
 
-  update: userProcedure
+  update: adminProcedure
     .input(z.object({ id: z.uuid(), data: locationUpdateInput }))
     .mutation(async ({ input }) => {
       return prisma.location.update({
@@ -100,7 +100,7 @@ export const locationRouter = router({
       });
     }),
 
-  delete: userProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.uuid() }))
     .mutation(async ({ input }) => {
       return prisma.location.delete({
