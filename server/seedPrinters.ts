@@ -3,14 +3,14 @@ import { PrismaClient, type PrinterType } from "@prisma/client";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-type PrinterSeedInput = {
+interface PrinterSeedInput {
   name: string;
   type: PrinterType;
   ipAddress: string;
   authToken?: string;
   serialNumber?: string;
   webcamUrl?: string;
-};
+}
 
 const prisma = new PrismaClient();
 
