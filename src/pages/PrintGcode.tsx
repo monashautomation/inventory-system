@@ -1,7 +1,7 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useState, useRef, useCallback } from "react";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Upload, X, File as FileIcon } from "lucide-react";
 
 const readFileAsBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -54,6 +55,31 @@ export default function PrintGcode() {
 
   const [selectedPrinterIp, setSelectedPrinterIp] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      setSelectedFile(files[0] ?? null);
+    }
+  }, []);
 
   const statusQuery = trpc.print.getPrinterStatus.useQuery(
     { printerIpAddress: selectedPrinterIp },
@@ -164,15 +190,91 @@ export default function PrintGcode() {
             </div>
             <div className="space-y-2">
               <Label>{isBambu ? "3MF file" : "G-code file"}</Label>
-              <Input
-                type="file"
-                accept={
-                  isBambu
-                    ? ".3mf,application/octet-stream"
-                    : ".gcode,.gc,.gco,.bgcode,text/plain"
-                }
-                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-              />
+              <div
+                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer
+                  ${
+                    isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/25 bg-muted/50 hover:bg-muted"
+                  }
+                `}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept={
+                    isBambu
+                      ? ".3mf,application/octet-stream"
+                      : ".gcode,.gc,.gco,.bgcode,text/plain"
+                  }
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setSelectedFile(file);
+                    }
+                  }}
+                />
+
+                {selectedFile ? (
+                  <div className="flex flex-col items-center gap-3 relative w-full max-w-sm mx-auto p-4 rounded-md border border-border/50 bg-background/50 shadow-sm transition-all hover:shadow-md">
+                    <div className="flex items-center gap-3 w-full">
+                      <div className="rounded-md bg-primary/10 p-2.5">
+                        <FileIcon className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex flex-col items-start flex-1 overflow-hidden text-left">
+                        <div
+                          className="text-sm font-medium truncate w-full"
+                          title={selectedFile.name}
+                        >
+                          {selectedFile.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = "";
+                          }
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Remove file</span>
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="rounded-full bg-background p-4 shadow-sm border border-border/50 transition-transform group-hover:scale-105">
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">
+                        Drag and drop your file here, or{" "}
+                        <span className="text-primary hover:underline">
+                          click to browse
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Supports{" "}
+                        {isBambu ? ".3mf" : ".gcode, .gc, .gco, .bgcode"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <Button
               type="submit"
