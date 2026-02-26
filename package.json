@@ -76,6 +76,7 @@
         "json-schema-to-zod": "^2.6.1",
         "lucide-react": "^0.525.0",
         "mcp-use": "^0.1.19",
+        "mqtt": "^5.15.0",
         "next-themes": "^0.4.6",
         "prisma": "^6.10.1",
         "qrcode": "^1.5.4",

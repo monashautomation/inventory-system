@@ -111,7 +111,7 @@ export default function PrintGcode() {
                   page.
                 </p>
               ) : null}
-              {selectedPrinter && statusQuery.data ? (
+              {selectedPrinter && !isBambu && statusQuery.data ? (
                 <div
                   className={`rounded-md border px-3 py-2 text-sm ${{
                     PRINTING: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
@@ -128,7 +128,7 @@ export default function PrintGcode() {
                   {statusQuery.data.stateMessage}
                 </div>
               ) : null}
-              {selectedPrinter && statusQuery.isLoading ? (
+              {selectedPrinter && !isBambu && statusQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">
                   Checking printer status…
                 </p>

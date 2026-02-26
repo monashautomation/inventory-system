@@ -5,9 +5,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isIP } from "node:net";
 import { Prisma } from "@prisma/client";
-import { tmpdir } from "node:os";
-import { writeFile as writeTmpFile, unlink } from "node:fs/promises";
-import { spawn } from "node:child_process";
 import {
   hashBufferSha256,
   sanitizeFilename,
@@ -19,6 +16,7 @@ import {
   presignDownload,
   buildPrintJobS3Key,
 } from "@/server/lib/s3";
+import { dispatchToBambu, getBambuStatus } from "@/server/lib/bambu";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 const ipAddressSchema = z.string().refine((value) => isIP(value) !== 0, {
@@ -58,142 +56,6 @@ const validateUploadPayloadForPrinter = (
   }
 };
 
-// ─── Bambu external command dispatch (inlined from bambuBridge.ts) ────────────
-
-const readJsonArrayEnv = (name: string): string[] => {
-  const raw = process.env[name]?.trim();
-  if (!raw) return [];
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed) || parsed.some((v) => typeof v !== "string")) {
-    throw new Error(`${name} must be a JSON string array.`);
-  }
-  return parsed;
-};
-
-const runBambuExternalDispatch = async (params: {
-  ipAddress: string;
-  serialNumber: string | null;
-  authToken: string;
-  fileName: string;
-  fileBuffer: Buffer;
-}): Promise<{
-  ok: boolean;
-  mode: "mock-success" | "external-command" | "no-adapter";
-  details: string;
-}> => {
-  // Mock mode for development/testing
-  if (process.env.BAMBU_BRIDGE_MOCK_SUCCESS === "1") {
-    return {
-      ok: true,
-      mode: "mock-success",
-      details:
-        "File accepted (mock mode). Printer dispatch is not implemented yet.",
-    };
-  }
-
-  const cmd = process.env.BAMBU_BRIDGE_DISPATCH_CMD?.trim();
-  if (!cmd) {
-    return {
-      ok: false,
-      mode: "no-adapter",
-      details:
-        "No Bambu dispatch adapter configured. Set BAMBU_BRIDGE_DISPATCH_CMD or use BAMBU_BRIDGE_MOCK_SUCCESS=1.",
-    };
-  }
-
-  // Write file to a temp location for the external command
-  const tmpPath = join(
-    tmpdir(),
-    `bambu_dispatch_${Date.now()}_${sanitizeFilename(params.fileName)}`,
-  );
-  await writeTmpFile(tmpPath, params.fileBuffer);
-
-  try {
-    const args = readJsonArrayEnv("BAMBU_BRIDGE_DISPATCH_ARGS_JSON");
-    const timeoutMs = Number(
-      process.env.BAMBU_BRIDGE_DISPATCH_TIMEOUT_MS ?? 120000,
-    );
-
-    const result = await new Promise<{
-      ok: boolean;
-      exitCode: number | null;
-      stdout: string;
-      stderr: string;
-    }>((resolve, reject) => {
-      const child = spawn(cmd, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          BAMBU_IP_ADDRESS: params.ipAddress,
-          BAMBU_SERIAL_NUMBER: params.serialNumber ?? "",
-          BAMBU_ACCESS_CODE: params.authToken,
-          BAMBU_FILE_NAME: params.fileName,
-          BAMBU_FILE_PATH: tmpPath,
-        },
-        windowsHide: true,
-      });
-
-      let stdout = "";
-      let stderr = "";
-      let killedForTimeout = false;
-
-      const timer = setTimeout(() => {
-        killedForTimeout = true;
-        child.kill();
-      }, timeoutMs);
-
-      child.stdout.on("data", (chunk) => {
-        stdout += String(chunk);
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += String(chunk);
-      });
-      child.on("error", (error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        if (killedForTimeout) {
-          resolve({
-            ok: false,
-            exitCode: code,
-            stdout,
-            stderr: `${stderr}\nTimed out after ${timeoutMs}ms.`.trim(),
-          });
-          return;
-        }
-        resolve({
-          ok: code === 0,
-          exitCode: code,
-          stdout,
-          stderr,
-        });
-      });
-    });
-
-    if (result.ok) {
-      return {
-        ok: true,
-        mode: "external-command",
-        details: `File dispatched via external command. ${result.stdout.trim().slice(0, 500)}`,
-      };
-    }
-
-    return {
-      ok: false,
-      mode: "external-command",
-      details: `External dispatch command failed (exit ${result.exitCode}): ${result.stderr.trim().slice(0, 500)}`,
-    };
-  } finally {
-    // Clean up temp file
-    try {
-      await unlink(tmpPath);
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
-};
 
 // ─── Printer dispatch ────────────────────────────────────────────────────────
 
@@ -508,10 +370,10 @@ const dispatchToPrinter = async (params: {
     });
   }
 
-  const bambuResult = await runBambuExternalDispatch({
+  const bambuResult = await dispatchToBambu({
     ipAddress,
-    serialNumber: serialNumber ?? null,
-    authToken,
+    accessCode: authToken,
+    serialNumber: serialNumber ?? "",
     fileName: originalFilename,
     fileBuffer,
   });
@@ -519,7 +381,7 @@ const dispatchToPrinter = async (params: {
   if (!bambuResult.ok) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: `Bambu dispatch failed (${bambuResult.mode}): ${bambuResult.details}`,
+      message: `Bambu dispatch failed: ${bambuResult.details}`,
     });
   }
 
@@ -557,44 +419,203 @@ export const printRouter = router({
       }
 
       if (printer.type === "BAMBU") {
-        return {
-          state: "UNKNOWN",
-          stateMessage: "Bambu printers do not expose an HTTP status API.",
-        };
+        if (!printer.authToken || !printer.serialNumber) {
+          return {
+            state: "UNKNOWN",
+            stateMessage: "Bambu printer requires an access code and serial number. Configure them in Printer Management.",
+            nozzleTemp: null,
+            targetNozzleTemp: null,
+            bedTemp: null,
+            targetBedTemp: null,
+            chamberTemp: null,
+            progress: null,
+            timeRemaining: null,
+            timePrinting: null,
+            fileName: null,
+            filamentType: null,
+          };
+        }
+
+        try {
+          const bambuStatus = getBambuStatus(
+            printer.ipAddress,
+            printer.authToken,
+            printer.serialNumber,
+          );
+
+          if (!bambuStatus) {
+            return {
+              state: "CONNECTING",
+              stateMessage: "Connecting to Bambu printer\u2026",
+              nozzleTemp: null,
+              targetNozzleTemp: null,
+              bedTemp: null,
+              targetBedTemp: null,
+              chamberTemp: null,
+              progress: null,
+              timeRemaining: null,
+              timePrinting: null,
+              fileName: null,
+              filamentType: null,
+            };
+          }
+
+          const gcodeState = bambuStatus.gcodeState.toUpperCase();
+          const progressText =
+            bambuStatus.progress != null ? ` (${Math.round(bambuStatus.progress)}%)` : "";
+
+          let state: string;
+          let stateMessage: string;
+          switch (gcodeState) {
+            case "RUNNING":
+              state = "PRINTING";
+              stateMessage = `Printing in progress${progressText}`;
+              break;
+            case "PAUSE":
+              state = "PAUSED";
+              stateMessage = "Paused";
+              break;
+            case "FINISH":
+              state = "FINISHED";
+              stateMessage = "Finished";
+              break;
+            case "FAILED":
+              state = "ATTENTION";
+              stateMessage = "Print failed";
+              break;
+            case "PREPARE":
+              state = "BUSY";
+              stateMessage = "Preparing";
+              break;
+            case "IDLE":
+            default:
+              state = gcodeState === "IDLE" ? "IDLE" : gcodeState;
+              stateMessage = gcodeState === "IDLE" ? "Ready" : gcodeState;
+              break;
+          }
+
+          return {
+            state,
+            stateMessage,
+            nozzleTemp: bambuStatus.nozzleTemp,
+            targetNozzleTemp: bambuStatus.targetNozzleTemp,
+            bedTemp: bambuStatus.bedTemp,
+            targetBedTemp: bambuStatus.targetBedTemp,
+            chamberTemp: bambuStatus.chamberTemp,
+            progress: bambuStatus.progress,
+            timeRemaining:
+              bambuStatus.remainingTimeMinutes != null
+                ? bambuStatus.remainingTimeMinutes * 60
+                : null,
+            timePrinting: null,
+            fileName: bambuStatus.fileName,
+            filamentType: null,
+          };
+        } catch {
+          return {
+            state: "UNREACHABLE",
+            stateMessage: "Could not connect to Bambu printer.",
+            nozzleTemp: null,
+            targetNozzleTemp: null,
+            bedTemp: null,
+            targetBedTemp: null,
+            chamberTemp: null,
+            progress: null,
+            timeRemaining: null,
+            timePrinting: null,
+            fileName: null,
+            filamentType: null,
+          };
+        }
       }
 
       if (!printer.authToken) {
         return {
           state: "UNKNOWN",
           stateMessage: "No auth token configured for this printer.",
+          nozzleTemp: null,
+          targetNozzleTemp: null,
+          bedTemp: null,
+          targetBedTemp: null,
+          progress: null,
+          timeRemaining: null,
+          timePrinting: null,
+          fileName: null,
+          filamentType: null,
+          chamberTemp: null,
         };
       }
 
       try {
-        const res = await fetch(
-          `http://${printer.ipAddress}/api/v1/status`,
-          {
+        const [statusRes, jobRes] = await Promise.all([
+          fetch(`http://${printer.ipAddress}/api/v1/status`, {
             headers: { "X-Api-Key": printer.authToken },
             signal: AbortSignal.timeout(5000),
-          },
-        );
+          }),
+          fetch(`http://${printer.ipAddress}/api/v1/job`, {
+            headers: { "X-Api-Key": printer.authToken },
+            signal: AbortSignal.timeout(5000),
+          }),
+        ]);
 
-        if (!res.ok) {
+        if (!statusRes.ok) {
           return {
             state: "UNREACHABLE",
-            stateMessage: `Status check failed (HTTP ${res.status}).`,
+            stateMessage: `Status check failed (HTTP ${statusRes.status}).`,
+            nozzleTemp: null,
+            targetNozzleTemp: null,
+            bedTemp: null,
+            targetBedTemp: null,
+            progress: null,
+            timeRemaining: null,
+            timePrinting: null,
+            fileName: null,
+            filamentType: null,
+            chamberTemp: null,
           };
         }
 
-        const json = (await res.json()) as {
-          printer?: { state?: string };
-          job?: { id?: number; progress?: number };
-        };
+        interface PrusaStatusResponse {
+          printer?: {
+            state?: string;
+            temp_nozzle?: number;
+            target_nozzle?: number;
+            temp_bed?: number;
+            target_bed?: number;
+          };
+          job?: {
+            id?: number;
+            progress?: number;
+            time_remaining?: number;
+            time_printing?: number;
+          };
+        }
 
-        const state = json.printer?.state?.trim() ?? "UNKNOWN";
-        const progress = json.job?.progress;
+        interface PrusaJobResponse {
+          id?: number;
+          state?: string;
+          progress?: number;
+          time_remaining?: number;
+          time_printing?: number;
+          file?: {
+            name?: string;
+            display_name?: string;
+            meta?: {
+              filament_type?: string;
+            };
+          };
+        }
+
+        const status = (await statusRes.json()) as PrusaStatusResponse;
+        const job =
+          jobRes.status === 204
+            ? null
+            : ((await jobRes.json()) as PrusaJobResponse);
+
+        const state = status.printer?.state?.trim() ?? "UNKNOWN";
+        const progressValue = status.job?.progress ?? job?.progress ?? null;
         const progressText =
-          progress != null ? ` (${Math.round(progress)}%)` : "";
+          progressValue != null ? ` (${Math.round(progressValue)}%)` : "";
 
         return {
           state,
@@ -604,11 +625,31 @@ export const printRouter = router({
               : state === "IDLE" || state === "READY" || state === "FINISHED"
                 ? "Ready"
                 : state,
+          nozzleTemp: status.printer?.temp_nozzle ?? null,
+          targetNozzleTemp: status.printer?.target_nozzle ?? null,
+          bedTemp: status.printer?.temp_bed ?? null,
+          targetBedTemp: status.printer?.target_bed ?? null,
+          progress: progressValue,
+          timeRemaining: status.job?.time_remaining ?? job?.time_remaining ?? null,
+          timePrinting: status.job?.time_printing ?? job?.time_printing ?? null,
+          fileName: job?.file?.display_name ?? job?.file?.name ?? null,
+          filamentType: job?.file?.meta?.filament_type ?? null,
+          chamberTemp: null,
         };
       } catch {
         return {
           state: "UNREACHABLE",
           stateMessage: "Could not reach printer.",
+          nozzleTemp: null,
+          targetNozzleTemp: null,
+          bedTemp: null,
+          targetBedTemp: null,
+          progress: null,
+          timeRemaining: null,
+          timePrinting: null,
+          fileName: null,
+          filamentType: null,
+            chamberTemp: null,
         };
       }
     }),
