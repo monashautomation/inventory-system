@@ -356,6 +356,21 @@ const dispatchToPrinter = async (params: {
     });
   }
 
+  // Check Bambu printer readiness via cached MQTT status
+  if (serialNumber && authToken) {
+    const bambuStatus = getBambuStatus(ipAddress, authToken, serialNumber);
+    if (bambuStatus) {
+      const gcodeState = bambuStatus.gcodeState.toUpperCase();
+      const blockedBambuStates = new Set(["RUNNING", "PAUSE", "PREPARE"]);
+      if (blockedBambuStates.has(gcodeState)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Bambu printer is not ready to start a new job (state=${gcodeState}).`,
+        });
+      }
+    }
+  }
+
   if (!fileBuffer) {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -480,8 +495,8 @@ export const printRouter = router({
               stateMessage = "Finished";
               break;
             case "FAILED":
-              state = "ATTENTION";
-              stateMessage = "Print failed";
+              state = "IDLE";
+              stateMessage = "Last print failed";
               break;
             case "PREPARE":
               state = "BUSY";
@@ -1191,4 +1206,125 @@ export const printRouter = router({
         });
       }
     }),
+
+  reprintJob: userProcedure
+    .input(
+      z.object({
+        printJobId: z.string().uuid(),
+        printerIpAddress: ipAddressSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const originalJob = await ctx.prisma.gcodePrintJob.findFirst({
+        where: {
+          id: input.printJobId,
+          userId: ctx.user.id,
+        },
+      });
+
+      if (!originalJob) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Print job not found.",
+        });
+      }
+
+      if (!originalJob.s3Key) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message:
+            "This print job was created before S3 storage was enabled. File is not available for reprint.",
+        });
+      }
+
+      const printer = await ctx.prisma.printer.findUnique({
+        where: { ipAddress: input.printerIpAddress },
+      });
+
+      if (!printer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No configured printer found for that IP address.",
+        });
+      }
+
+      let fileBuffer: Buffer;
+      try {
+        const bytes = await downloadFile(originalJob.s3Key);
+        fileBuffer = Buffer.from(bytes);
+      } catch (error) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message:
+            error instanceof Error
+              ? `S3 file not found: ${error.message}`
+              : "S3 file not found.",
+        });
+      }
+
+      try {
+        validateUploadPayloadForPrinter(
+          printer.type,
+          originalJob.originalFilename,
+          fileBuffer,
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "File is not compatible with the target printer.",
+        });
+      }
+
+      const newJob = await ctx.prisma.gcodePrintJob.create({
+        data: {
+          userId: ctx.user.id,
+          printerId: printer.id,
+          originalFilename: originalJob.originalFilename,
+          storedFilename: originalJob.storedFilename,
+          s3Key: originalJob.s3Key,
+          fileHashSha256: originalJob.fileHashSha256,
+          fileSizeBytes: originalJob.fileSizeBytes,
+          status: "STORED",
+        },
+      });
+
+      try {
+        const dispatchResult = await dispatchToPrinter({
+          printerType: printer.type,
+          ipAddress: printer.ipAddress,
+          fileBuffer,
+          originalFilename: sanitizeFilename(originalJob.originalFilename),
+          authToken: printer.authToken,
+          serialNumber: printer.serialNumber,
+        });
+
+        return await ctx.prisma.gcodePrintJob.update({
+          where: { id: newJob.id },
+          data: {
+            status: "DISPATCHED",
+            dispatchResponse: `Reprint. ${dispatchResult.details ?? ""}`.trim(),
+          },
+        });
+      } catch (error) {
+        const message = sanitizeDbText(
+          error instanceof Error ? error.message : "Unknown dispatch error",
+        );
+        await ctx.prisma.gcodePrintJob.update({
+          where: { id: newJob.id },
+          data: {
+            status: "DISPATCH_FAILED",
+            dispatchError: message,
+          },
+        });
+
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Reprint failed: ${message}`,
+        });
+      }
+    }),
+
 });

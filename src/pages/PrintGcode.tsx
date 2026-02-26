@@ -44,6 +44,16 @@ export default function PrintGcode() {
     onError: (error) => toast.error(error.message),
   });
 
+  const reprintMutation = trpc.print.reprintJob.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        result.dispatchResponse ?? "Reprint started.",
+      );
+      void jobsQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const [selectedPrinterIp, setSelectedPrinterIp] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -51,6 +61,9 @@ export default function PrintGcode() {
     { printerIpAddress: selectedPrinterIp },
     { enabled: !!selectedPrinterIp, refetchInterval: 10_000 },
   );
+
+  const BLOCKED_PRINTER_STATES = new Set(["PRINTING", "PAUSED", "BUSY", "ATTENTION", "UNREACHABLE"]);
+  const printerBusy = !!statusQuery.data && BLOCKED_PRINTER_STATES.has(statusQuery.data.state.toUpperCase());
 
   const printerOptions = printersQuery.data ?? [];
   const selectedPrinter =
@@ -111,7 +124,7 @@ export default function PrintGcode() {
                   page.
                 </p>
               ) : null}
-              {selectedPrinter && !isBambu && statusQuery.data ? (
+              {selectedPrinter && statusQuery.data ? (
                 <div
                   className={`rounded-md border px-3 py-2 text-sm ${{
                     PRINTING: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
@@ -128,7 +141,7 @@ export default function PrintGcode() {
                   {statusQuery.data.stateMessage}
                 </div>
               ) : null}
-              {selectedPrinter && !isBambu && statusQuery.isLoading ? (
+              {selectedPrinter && statusQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">
                   Checking printer status…
                 </p>
@@ -152,12 +165,19 @@ export default function PrintGcode() {
                 uploadAndPrintMutation.isPending ||
                 printersQuery.isLoading ||
                 printerOptions.length === 0 ||
-                !selectedFile
+                !selectedFile ||
+                !selectedPrinterIp ||
+                (!!selectedPrinterIp && statusQuery.isLoading) ||
+                printerBusy
               }
             >
               {uploadAndPrintMutation.isPending
                 ? "Printing..."
-                : "Upload and Print"}
+                : statusQuery.isLoading && selectedPrinterIp
+                  ? "Checking printer\u2026"
+                  : printerBusy
+                    ? "Printer busy"
+                    : "Upload and Print"}
             </Button>
           </form>
 
@@ -168,13 +188,37 @@ export default function PrintGcode() {
                 {jobsQuery.data.slice(0, 5).map((job) => (
                   <div
                     key={job.id}
-                    className="flex flex-col gap-1 rounded-md border p-3 text-sm"
+                    className="flex items-center gap-3 rounded-md border p-3 text-sm"
                   >
-                    <div className="font-medium">{job.originalFilename}</div>
-                    <div className="text-muted-foreground">
-                      {job.printer.name} ({job.printer.type}) &bull;{" "}
-                      {job.status}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{job.originalFilename}</div>
+                      <div className="text-muted-foreground">
+                        {job.printer.name} ({job.printer.type}) &bull;{" "}
+                        {job.status}
+                      </div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        !selectedPrinterIp ||
+                        printerBusy ||
+                        (!!selectedPrinterIp && statusQuery.isLoading) ||
+                        reprintMutation.isPending
+                      }
+                      onClick={() =>
+                        reprintMutation.mutate({
+                          printJobId: job.id,
+                          printerIpAddress: selectedPrinterIp,
+                        })
+                      }
+                    >
+                      {reprintMutation.isPending &&
+                      reprintMutation.variables?.printJobId === job.id
+                        ? "Reprinting\u2026"
+                        : "Reprint"}
+                    </Button>
                   </div>
                 ))}
               </div>
