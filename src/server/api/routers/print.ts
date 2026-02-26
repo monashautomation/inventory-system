@@ -56,7 +56,6 @@ const validateUploadPayloadForPrinter = (
   }
 };
 
-
 // ─── Printer dispatch ────────────────────────────────────────────────────────
 
 const dispatchToPrinter = async (params: {
@@ -265,7 +264,12 @@ const dispatchToPrinter = async (params: {
     let startSucceeded = false;
     const startErrors: string[] = [];
     const encodedStartFilename = encodeURIComponent(originalFilename);
-    const startAttempts: { method: "POST"; endpoint: string; headers: Record<string, string>; body: string | undefined }[] = [
+    const startAttempts: {
+      method: "POST";
+      endpoint: string;
+      headers: Record<string, string>;
+      body: string | undefined;
+    }[] = [
       {
         method: "POST" as const,
         endpoint: `/api/v1/files/${resolvedStorageForStart}/${encodedStartFilename}`,
@@ -437,7 +441,8 @@ export const printRouter = router({
         if (!printer.authToken || !printer.serialNumber) {
           return {
             state: "UNKNOWN",
-            stateMessage: "Bambu printer requires an access code and serial number. Configure them in Printer Management.",
+            stateMessage:
+              "Bambu printer requires an access code and serial number. Configure them in Printer Management.",
             nozzleTemp: null,
             targetNozzleTemp: null,
             bedTemp: null,
@@ -477,7 +482,9 @@ export const printRouter = router({
 
           const gcodeState = bambuStatus.gcodeState.toUpperCase();
           const progressText =
-            bambuStatus.progress != null ? ` (${Math.round(bambuStatus.progress)}%)` : "";
+            bambuStatus.progress != null
+              ? ` (${Math.round(bambuStatus.progress)}%)`
+              : "";
 
           let state: string;
           let stateMessage: string;
@@ -645,7 +652,8 @@ export const printRouter = router({
           bedTemp: status.printer?.temp_bed ?? null,
           targetBedTemp: status.printer?.target_bed ?? null,
           progress: progressValue,
-          timeRemaining: status.job?.time_remaining ?? job?.time_remaining ?? null,
+          timeRemaining:
+            status.job?.time_remaining ?? job?.time_remaining ?? null,
           timePrinting: status.job?.time_printing ?? job?.time_printing ?? null,
           fileName: job?.file?.display_name ?? job?.file?.name ?? null,
           filamentType: job?.file?.meta?.filament_type ?? null,
@@ -664,7 +672,7 @@ export const printRouter = router({
           timePrinting: null,
           fileName: null,
           filamentType: null,
-            chamberTemp: null,
+          chamberTemp: null,
         };
       }
     }),
@@ -731,7 +739,6 @@ export const printRouter = router({
         authToken: z.string().optional(),
         serialNumber: z.string().optional(),
         webcamUrl: z.string().url().optional(),
-
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -806,7 +813,6 @@ export const printRouter = router({
         authToken: z.string().nullable().optional(),
         serialNumber: z.string().nullable().optional(),
         webcamUrl: z.string().url().nullable().optional(),
-
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1124,7 +1130,8 @@ export const printRouter = router({
             where: { id: newJob.id },
             data: {
               status: "DISPATCHED",
-              dispatchResponse: `Re-used existing file. ${dispatchResult.details ?? ""}`.trim(),
+              dispatchResponse:
+                `Re-used existing file. ${dispatchResult.details ?? ""}`.trim(),
             },
           });
         } catch (error) {
@@ -1326,5 +1333,4 @@ export const printRouter = router({
         });
       }
     }),
-
 });

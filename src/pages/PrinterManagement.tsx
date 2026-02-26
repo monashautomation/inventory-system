@@ -32,7 +32,6 @@ interface PrinterFormState {
   authToken: string;
   serialNumber: string;
   webcamUrl: string;
-
 }
 
 const emptyForm: PrinterFormState = {
@@ -42,7 +41,6 @@ const emptyForm: PrinterFormState = {
   authToken: "",
   serialNumber: "",
   webcamUrl: "",
-
 };
 
 function PrinterFormFields({
@@ -149,7 +147,6 @@ function AddPrinterDialog({ onSuccess }: { onSuccess: () => void }) {
       authToken: form.authToken.trim() || undefined,
       serialNumber: form.serialNumber.trim() || undefined,
       webcamUrl: form.webcamUrl.trim() || undefined,
-
     });
   };
 
@@ -195,7 +192,6 @@ function EditPrinterDialog({
     authToken: string | null;
     serialNumber: string | null;
     webcamUrl: string | null;
-
   };
   onSuccess: () => void;
 }) {
@@ -207,7 +203,6 @@ function EditPrinterDialog({
     authToken: printer.authToken ?? "",
     serialNumber: printer.serialNumber ?? "",
     webcamUrl: printer.webcamUrl ?? "",
-
   });
 
   const onChange = (patch: Partial<PrinterFormState>) =>
@@ -236,7 +231,6 @@ function EditPrinterDialog({
       authToken: form.authToken.trim() || null,
       serialNumber: form.serialNumber.trim() || null,
       webcamUrl: form.webcamUrl.trim() || null,
-
     });
   };
 
@@ -250,7 +244,6 @@ function EditPrinterDialog({
         authToken: printer.authToken ?? "",
         serialNumber: printer.serialNumber ?? "",
         webcamUrl: printer.webcamUrl ?? "",
-
       });
     }
     setIsOpen(open);

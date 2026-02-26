@@ -52,14 +52,17 @@ async function uploadViaFtps(
       execFile(
         "curl",
         [
-          "-k",             // accept self-signed cert
-          "--ssl-reqd",     // require TLS
-          "-T", tmpPath,    // upload file
+          "-k", // accept self-signed cert
+          "--ssl-reqd", // require TLS
+          "-T",
+          tmpPath, // upload file
           ftpsUrl,
-          "--connect-timeout", "10",
-          "--max-time", "120",
-          "-s",             // silent
-          "-S",             // show errors
+          "--connect-timeout",
+          "10",
+          "--max-time",
+          "120",
+          "-s", // silent
+          "-S", // show errors
         ],
         { timeout: 130_000 },
         (error, _stdout, stderr) => {

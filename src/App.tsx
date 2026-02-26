@@ -51,7 +51,10 @@ const App = () => {
               <Route path="/checkin" element={<CheckIn />} />
               <Route path="/print" element={<PrintGcode />} />
               <Route path="/print-monitor" element={<PrintMonitoring />} />
-              <Route path="/printer-management" element={<PrinterManagement />} />
+              <Route
+                path="/printer-management"
+                element={<PrinterManagement />}
+              />
             </Route>
           </Routes>
         </CartProvider>

@@ -46,9 +46,7 @@ export default function PrintGcode() {
 
   const reprintMutation = trpc.print.reprintJob.useMutation({
     onSuccess: (result) => {
-      toast.success(
-        result.dispatchResponse ?? "Reprint started.",
-      );
+      toast.success(result.dispatchResponse ?? "Reprint started.");
       void jobsQuery.refetch();
     },
     onError: (error) => toast.error(error.message),
@@ -62,8 +60,16 @@ export default function PrintGcode() {
     { enabled: !!selectedPrinterIp, refetchInterval: 10_000 },
   );
 
-  const BLOCKED_PRINTER_STATES = new Set(["PRINTING", "PAUSED", "BUSY", "ATTENTION", "UNREACHABLE"]);
-  const printerBusy = !!statusQuery.data && BLOCKED_PRINTER_STATES.has(statusQuery.data.state.toUpperCase());
+  const BLOCKED_PRINTER_STATES = new Set([
+    "PRINTING",
+    "PAUSED",
+    "BUSY",
+    "ATTENTION",
+    "UNREACHABLE",
+  ]);
+  const printerBusy =
+    !!statusQuery.data &&
+    BLOCKED_PRINTER_STATES.has(statusQuery.data.state.toUpperCase());
 
   const printerOptions = printersQuery.data ?? [];
   const selectedPrinter =
@@ -126,16 +132,25 @@ export default function PrintGcode() {
               ) : null}
               {selectedPrinter && statusQuery.data ? (
                 <div
-                  className={`rounded-md border px-3 py-2 text-sm ${{
-                    PRINTING: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                    PAUSED: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                    BUSY: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                    ATTENTION: "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-                    UNREACHABLE: "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
-                    IDLE: "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
-                    READY: "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
-                    FINISHED: "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
-                  }[statusQuery.data.state] ?? "border-muted bg-muted/50 text-muted-foreground"}`}
+                  className={`rounded-md border px-3 py-2 text-sm ${
+                    {
+                      PRINTING:
+                        "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                      PAUSED:
+                        "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                      BUSY: "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                      ATTENTION:
+                        "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
+                      UNREACHABLE:
+                        "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400",
+                      IDLE: "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
+                      READY:
+                        "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
+                      FINISHED:
+                        "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400",
+                    }[statusQuery.data.state] ??
+                    "border-muted bg-muted/50 text-muted-foreground"
+                  }`}
                 >
                   <span className="font-medium">Status:</span>{" "}
                   {statusQuery.data.stateMessage}
@@ -191,7 +206,9 @@ export default function PrintGcode() {
                     className="flex items-center gap-3 rounded-md border p-3 text-sm"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{job.originalFilename}</div>
+                      <div className="font-medium truncate">
+                        {job.originalFilename}
+                      </div>
                       <div className="text-muted-foreground">
                         {job.printer.name} ({job.printer.type}) &bull;{" "}
                         {job.status}
