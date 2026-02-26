@@ -21,17 +21,19 @@ import { dispatchToBambu, getBambuStatus } from "@/server/lib/bambu";
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 const isBlockedIp = (ip: string): boolean => {
   // Block loopback
-  if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('127.')) return true;
+  if (ip === "127.0.0.1" || ip === "::1" || ip.startsWith("127.")) return true;
   // Block IPv6 loopback/unspecified
-  if (ip === '::' || ip === '0.0.0.0') return true;
+  if (ip === "::" || ip === "0.0.0.0") return true;
   // Block cloud metadata endpoints (169.254.169.254)
-  if (ip === '169.254.169.254') return true;
+  if (ip === "169.254.169.254") return true;
   // Block IPv6 link-local that maps to metadata
-  if (ip.toLowerCase() === 'fd00::a9fe:a9fe') return true;
+  if (ip.toLowerCase() === "fd00::a9fe:a9fe") return true;
   return false;
 };
 
-const ipAddressSchema = z.string().refine((value) => isIP(value) !== 0, {
+const ipAddressSchema = z
+  .string()
+  .refine((value) => isIP(value) !== 0, {
     message: "Invalid IP address",
   })
   .refine((value) => !isBlockedIp(value), {
@@ -137,7 +139,10 @@ const dispatchToPrinter = async (params: {
         prusaStorageName = storageName;
       }
     } catch (error) {
-      console.error("Prusa status probe failed:", error instanceof Error ? error.message : error);
+      console.error(
+        "Prusa status probe failed:",
+        error instanceof Error ? error.message : error,
+      );
       // Ignore status probe failures; upload attempt below will surface the real error.
     }
 
@@ -354,7 +359,10 @@ const dispatchToPrinter = async (params: {
         await new Promise((resolve) => setTimeout(resolve, 750));
       }
     } catch (error) {
-      console.error("Post-start status poll failed:", error instanceof Error ? error.message : error);
+      console.error(
+        "Post-start status poll failed:",
+        error instanceof Error ? error.message : error,
+      );
       // Non-fatal: upload+start already succeeded.
     }
 
@@ -547,9 +555,12 @@ export const printRouter = router({
             fileName: bambuStatus.fileName,
             filamentType: null,
           };
-      } catch (error) {
-        console.error("Bambu status check failed:", error instanceof Error ? error.message : error);
-        return {
+        } catch (error) {
+          console.error(
+            "Bambu status check failed:",
+            error instanceof Error ? error.message : error,
+          );
+          return {
             state: "UNREACHABLE",
             stateMessage: "Could not connect to Bambu printer.",
             nozzleTemp: null,
@@ -675,7 +686,10 @@ export const printRouter = router({
           chamberTemp: null,
         };
       } catch (error) {
-        console.error("Prusa status/job fetch failed:", error instanceof Error ? error.message : error);
+        console.error(
+          "Prusa status/job fetch failed:",
+          error instanceof Error ? error.message : error,
+        );
         return {
           state: "UNREACHABLE",
           stateMessage: "Could not reach printer.",

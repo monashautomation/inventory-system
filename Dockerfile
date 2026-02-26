@@ -23,6 +23,9 @@ FROM oven/bun:1-alpine
 
 WORKDIR /app
 
+# curl is required at runtime for Bambu printer FTPS uploads
+RUN apk add --no-cache curl
+
 # Copy only necessary files from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src

@@ -2,7 +2,8 @@ import mqtt from "mqtt";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile, unlink } from "node:fs/promises";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { isIP } from "node:net";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,27 @@ const BAMBU_FTP_PORT = 990;
 const BAMBU_MQTT_PORT = 8883;
 const BAMBU_MQTT_USER = "bblp";
 const BAMBU_CACHE_DIR = "cache";
+let resolvedCurlPath: string | null = null;
+
+async function resolveCurlPath(): Promise<string> {
+  if (resolvedCurlPath) return resolvedCurlPath;
+
+  return new Promise((resolve, reject) => {
+    execFile("/usr/bin/which", ["curl"], (error, stdout) => {
+      const curlPath = stdout?.trim();
+      if (error || !curlPath) {
+        reject(
+          new Error(
+            "curl is not installed or not found in PATH. curl is required for Bambu printer FTPS uploads. Install it with: apt-get install curl (Debian/Ubuntu) or brew install curl (macOS).",
+          ),
+        );
+        return;
+      }
+      resolvedCurlPath = curlPath;
+      resolve(curlPath);
+    });
+  });
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,38 +67,57 @@ async function uploadViaFtps(
   await writeFile(tmpPath, fileBuffer);
 
   const remotePath = `${BAMBU_CACHE_DIR}/${fileName}`;
-  const ftpsUrl = `ftps://${BAMBU_FTP_USER}:${accessCode}@${ipAddress}:${BAMBU_FTP_PORT}/${remotePath}`;
+  const ftpsUrl = `ftps://${ipAddress}:${BAMBU_FTP_PORT}/${remotePath}`;
+  const curlConfig = `user = "${BAMBU_FTP_USER}:${accessCode}"\n`;
+
+  const curlPath = await resolveCurlPath();
 
   try {
     await new Promise<void>((resolve, reject) => {
-      execFile(
-        "curl",
+      const proc = spawn(
+        curlPath,
         [
           "-k", // accept self-signed cert
           "--ssl-reqd", // require TLS
           "-T",
           tmpPath, // upload file
-          ftpsUrl,
           "--connect-timeout",
           "10",
           "--max-time",
           "120",
           "-s", // silent
           "-S", // show errors
+          "--config",
+          "-",
+          "--",
+          ftpsUrl,
         ],
-        { timeout: 130_000 },
-        (error, _stdout, stderr) => {
-          if (error) {
-            reject(
-              new Error(
-                `FTPS upload failed: ${stderr?.trim() || error.message}`,
-              ),
-            );
-          } else {
-            resolve();
-          }
-        },
+        { stdio: ["pipe", "pipe", "pipe"], timeout: 130_000 },
       );
+
+      proc.stdin.write(curlConfig);
+      proc.stdin.end();
+
+      let stderr = "";
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      proc.on("error", (err) => {
+        reject(new Error(`Failed to start curl: ${err.message}`));
+      });
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(
+              `FTPS upload failed (exit ${code}): ${stderr.trim() || "unknown error"}`,
+            ),
+          );
+        } else {
+          resolve();
+        }
+      });
     });
 
     return remotePath;
@@ -136,6 +177,9 @@ async function sendPrintCommand(
       username: BAMBU_MQTT_USER,
       password: accessCode,
       clientId,
+      // SECURITY: Bambu printers use self-signed TLS certificates.
+      // rejectUnauthorized must be false to connect. MitM risk is limited
+      // to the local network where the printer resides.
       rejectUnauthorized: false,
       protocol: "mqtts",
       connectTimeout: 10_000,
@@ -167,6 +211,47 @@ async function sendPrintCommand(
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
+// Serial number: Bambu serial numbers are alphanumeric only (e.g. "01S00C000000001")
+const SERIAL_NUMBER_RE = /^[A-Za-z0-9]{1,30}$/;
+
+// Filename: only safe chars (should already be sanitized upstream, but defense-in-depth)
+const SAFE_FILENAME_RE = /^[a-zA-Z0-9._-]{1,120}$/;
+
+function validateBambuInputs(params: {
+  ipAddress: string;
+  accessCode: string;
+  serialNumber?: string;
+  fileName?: string;
+}): void {
+  // Validate IP
+  if (isIP(params.ipAddress) === 0) {
+    throw new Error("Invalid IP address for Bambu printer.");
+  }
+
+  // Validate access code is non-empty and doesn't contain control chars
+  if (!params.accessCode || /[\x00-\x1f]/.test(params.accessCode)) {
+    throw new Error("Invalid or missing Bambu access code.");
+  }
+
+  // Validate serial number if provided (prevents MQTT topic injection with /, +, #)
+  if (params.serialNumber !== undefined && params.serialNumber !== "") {
+    if (!SERIAL_NUMBER_RE.test(params.serialNumber)) {
+      throw new Error(
+        "Invalid Bambu serial number. Expected alphanumeric characters only (e.g. '01S00C000000001').",
+      );
+    }
+  }
+
+  // Validate fileName if provided (defense-in-depth, should be sanitized upstream)
+  if (params.fileName !== undefined) {
+    if (!params.fileName || !SAFE_FILENAME_RE.test(params.fileName)) {
+      throw new Error(
+        "Invalid file name for Bambu upload. Only alphanumeric, dots, hyphens, and underscores are allowed.",
+      );
+    }
+  }
+}
+
 export async function dispatchToBambu(
   params: BambuDispatchParams,
 ): Promise<BambuDispatchResult> {
@@ -179,6 +264,7 @@ export async function dispatchToBambu(
     plateNumber = 1,
     useLeveling = true,
   } = params;
+  validateBambuInputs({ ipAddress, accessCode, serialNumber, fileName });
 
   if (!serialNumber) {
     return {
@@ -341,6 +427,7 @@ function connectBambuMonitor(
   accessCode: string,
   serialNumber: string,
 ): void {
+  validateBambuInputs({ ipAddress, accessCode, serialNumber });
   if (monitorCache.has(serialNumber)) return;
 
   const reportTopic = `device/${serialNumber}/report`;
@@ -353,6 +440,9 @@ function connectBambuMonitor(
     username: BAMBU_MQTT_USER,
     password: accessCode,
     clientId,
+    // SECURITY: Bambu printers use self-signed TLS certificates.
+    // rejectUnauthorized must be false to connect. MitM risk is limited
+    // to the local network where the printer resides.
     rejectUnauthorized: false,
     protocol: "mqtts",
     connectTimeout: 10_000,
@@ -413,6 +503,7 @@ export function getBambuStatus(
   accessCode: string,
   serialNumber: string,
 ): BambuCachedStatus | null {
+  validateBambuInputs({ ipAddress, accessCode, serialNumber });
   const existing = monitorCache.get(serialNumber);
 
   if (!existing) {
