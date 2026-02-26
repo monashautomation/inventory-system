@@ -192,6 +192,7 @@ model Printer {
     ipAddress       String   @unique
     authToken       String?
     serialNumber    String?
+    webcamUrl        String?
     createdByUserId String
     createdByUser   User     @relation(fields: [createdByUserId], references: [id])
     printJobs       GcodePrintJob[]
@@ -210,6 +211,7 @@ model GcodePrintJob {
     printer          Printer             @relation(fields: [printerId], references: [id])
     originalFilename String
     storedFilename   String
+    s3Key            String?
     fileHashSha256   String
     fileSizeBytes    Int
     status           GcodePrintJobStatus @default(STORED)

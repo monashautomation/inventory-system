@@ -89,7 +89,7 @@ export default function PrintMonitoring() {
             </p>
           ) : !hasCamera ? (
             <p className="text-sm text-muted-foreground">
-              No `webcamUrl` configured for this printer in `config/printers.local.json`.
+              No webcam URL configured for this printer. An admin can add one via the Add Printer dialog on the G-code Printing page.
             </p>
           ) : (
             <div className="space-y-3">

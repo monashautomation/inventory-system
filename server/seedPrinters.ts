@@ -9,6 +9,7 @@ type PrinterSeedInput = {
   ipAddress: string;
   authToken?: string;
   serialNumber?: string;
+  webcamUrl?: string;
 };
 
 const prisma = new PrismaClient();
@@ -47,6 +48,8 @@ function normalizePrinter(item: unknown, index: number): PrinterSeedInput {
     authToken: value.authToken == null ? undefined : String(value.authToken).trim(),
     serialNumber:
       value.serialNumber == null ? undefined : String(value.serialNumber).trim(),
+    webcamUrl:
+      value.webcamUrl == null ? undefined : String(value.webcamUrl).trim(),
   };
 
   if (!printer.name || !printer.ipAddress) {
@@ -128,6 +131,7 @@ async function main() {
         type: printer.type,
         authToken: printer.authToken ?? null,
         serialNumber: printer.serialNumber ?? null,
+        webcamUrl: printer.webcamUrl ?? null,
       },
       create: {
         name: printer.name,
@@ -135,6 +139,7 @@ async function main() {
         ipAddress: printer.ipAddress,
         authToken: printer.authToken ?? null,
         serialNumber: printer.serialNumber ?? null,
+        webcamUrl: printer.webcamUrl ?? null,
         createdByUserId: ownerUserId,
       },
       select: {
