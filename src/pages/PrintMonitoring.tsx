@@ -46,6 +46,7 @@ export default function PrintMonitoring() {
   }, [cameraMode, selectedPrinter, snapshotTick]);
 
   const hasCamera = Boolean(selectedPrinter?.webcamUrl);
+  const displayUrl = cameraUrl;
 
   return (
     <div className="p-6 space-y-6">
@@ -146,7 +147,7 @@ export default function PrintMonitoring() {
               {cameraUrl ? (
                 <div className="overflow-hidden rounded-lg border bg-black">
                   <img
-                    src={cameraUrl}
+                    src={displayUrl ?? undefined}
                     alt={`${selectedPrinter.name} camera`}
                     className="h-auto w-full object-contain"
                   />

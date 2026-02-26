@@ -12,6 +12,7 @@ import { createMcpServer } from 'trpc-to-mcp';
 import { basicAuth } from 'hono/basic-auth'
 
 
+
 // Load environment variables
 config();
 
@@ -71,6 +72,7 @@ app.onError((err, c) => {
 
 // Health check endpoint
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
 
 
 // MCP route

@@ -265,7 +265,7 @@ const dispatchToPrinter = async (params: {
     let startSucceeded = false;
     const startErrors: string[] = [];
     const encodedStartFilename = encodeURIComponent(originalFilename);
-    const startAttempts = [
+    const startAttempts: { method: "POST"; endpoint: string; headers: Record<string, string>; body: string | undefined }[] = [
       {
         method: "POST" as const,
         endpoint: `/api/v1/files/${resolvedStorageForStart}/${encodedStartFilename}`,
@@ -716,6 +716,7 @@ export const printRouter = router({
         authToken: z.string().optional(),
         serialNumber: z.string().optional(),
         webcamUrl: z.string().url().optional(),
+
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -728,6 +729,7 @@ export const printRouter = router({
             authToken: input.authToken,
             serialNumber: input.serialNumber,
             webcamUrl: input.webcamUrl,
+
             createdByUserId: ctx.user.id,
           },
         });
@@ -789,6 +791,7 @@ export const printRouter = router({
         authToken: z.string().nullable().optional(),
         serialNumber: z.string().nullable().optional(),
         webcamUrl: z.string().url().nullable().optional(),
+
       }),
     )
     .mutation(async ({ ctx, input }) => {
