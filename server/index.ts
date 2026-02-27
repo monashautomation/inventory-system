@@ -234,7 +234,7 @@ initBambuMqttPool().then(() => {
     // Register status listener (for getBambuStatus in print routes)
     initBambuStatusListener();
     // Register metrics listener (for /metrics endpoint) when metrics enabled
-    if (metricsEnabled) {
+    if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== 'false') {
         initBambuMetricsListener();
     }
 }).catch((err) => {

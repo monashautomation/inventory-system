@@ -6,10 +6,15 @@ import { collectPrusaMetrics } from "./metrics/prusaCollector";
 import { collectBambuMetrics } from "./metrics/bambuCollector";
 
 export async function collectMetrics(): Promise<string> {
+  const prusaEnabled = process.env.METRICS_PRUSA_ENABLED !== 'false';
+  const bambuEnabled = process.env.METRICS_BAMBU_ENABLED !== 'false';
+
   const sections: Promise<string>[] = [];
 
   // Prusa metrics: pull model — scrapes REST API on each request
-  sections.push(collectPrusaMetrics());
+  if (prusaEnabled) {
+    sections.push(collectPrusaMetrics());
+  }
 
   // Inventory metrics: pull from DB on each request
   sections.push(collectInventoryMetrics());
@@ -27,9 +32,11 @@ export async function collectMetrics(): Promise<string> {
   }
 
   // Bambu metrics: push model — reads from cached MQTT data (synchronous)
-  const bambuOutput = collectBambuMetrics();
-  if (bambuOutput) {
-    output.push(bambuOutput.trimEnd());
+  if (bambuEnabled) {
+    const bambuOutput = collectBambuMetrics();
+    if (bambuOutput) {
+      output.push(bambuOutput.trimEnd());
+    }
   }
 
   return output.join("\n\n") + "\n";
