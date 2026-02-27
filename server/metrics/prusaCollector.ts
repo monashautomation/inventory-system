@@ -20,12 +20,12 @@ interface PrusaJob {
   job: {
     estimatedPrintTime: number;
     file: { name: string; path: string; display: string; size: number };
-  };
+  } | null;
   progress: {
     printTimeLeft: number;
     completion: number;
     printTime: number;
-  };
+  } | null;
 }
 
 interface PrusaPrinter {
@@ -332,7 +332,7 @@ async function scrapePrinter(printer: {
   s(
     "prusa_print_time_seconds",
     "Current print elapsed time in seconds",
-    job.progress.printTime ?? 0,
+    job.progress?.printTime ?? 0,
     common(),
   );
 
@@ -340,7 +340,7 @@ async function scrapePrinter(printer: {
   s(
     "prusa_printing_time_remaining_seconds",
     "Estimated remaining print time in seconds",
-    job.progress.printTimeLeft ?? 0,
+    job.progress?.printTimeLeft ?? 0,
     common(),
   );
 
@@ -348,7 +348,7 @@ async function scrapePrinter(printer: {
   s(
     "prusa_printing_progress_ratio",
     "Print completion ratio (0.0–1.0)",
-    job.progress.completion ?? 0,
+    job.progress?.completion ?? 0,
     common(),
   );
 
