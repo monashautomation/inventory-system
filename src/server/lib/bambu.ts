@@ -175,20 +175,40 @@ async function sendPrintCommand(
   useAms: boolean,
   amsMapping: number[],
 ): Promise<void> {
+  const requestTopic = `device/${serialNumber}/request`;
+  const payload = buildPrintPayload(
+    remotePath,
+    plateNumber,
+    useLeveling,
+    useAms,
+    amsMapping,
+  );
+
+  // Reuse existing monitor connection if available — Bambu printers only
+  // support 1–2 concurrent MQTT clients. Opening a second connection while
+  // the status monitor is active causes intermittent connack timeouts.
+  const existing = monitorCache.get(serialNumber);
+  if (existing && !existing.connecting && existing.client.connected) {
+    resetIdleTimeout(serialNumber);
+    return new Promise((resolve, reject) => {
+      existing.client.publish(requestTopic, payload, { qos: 0 }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // No active monitor — safe to open a one-shot connection
   return new Promise((resolve, reject) => {
-    const requestTopic = `device/${serialNumber}/request`;
     const clientId = `inventory-${serialNumber}-${Date.now()}`;
 
     const client = mqtt.connect(`mqtts://${ipAddress}:${BAMBU_MQTT_PORT}`, {
       username: BAMBU_MQTT_USER,
       password: accessCode,
       clientId,
-      // SECURITY: Bambu printers use self-signed TLS certificates.
-      // rejectUnauthorized must be false to connect. MitM risk is limited
-      // to the local network where the printer resides.
       rejectUnauthorized: false,
       protocol: "mqtts",
-      protocolVersion: 4, // MQTT 3.1.1 — Bambu printers don't support MQTT 5.0
+      protocolVersion: 4, // MQTT 3.1.1
       connectTimeout: 10_000,
     });
 
@@ -198,14 +218,6 @@ async function sendPrintCommand(
     }, 15_000);
 
     client.on("connect", () => {
-      const payload = buildPrintPayload(
-        remotePath,
-        plateNumber,
-        useLeveling,
-        useAms,
-        amsMapping,
-      );
-
       client.publish(requestTopic, payload, { qos: 0 }, (err) => {
         clearTimeout(timeout);
         client.end();
