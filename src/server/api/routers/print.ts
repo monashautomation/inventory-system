@@ -553,7 +553,7 @@ export const printRouter = router({
                 : null,
             timePrinting: null,
             fileName: bambuStatus.fileName,
-            filamentType: null,
+            filamentType: bambuStatus.filamentType ?? null,
           };
         } catch (error) {
           console.error(
@@ -650,6 +650,7 @@ export const printRouter = router({
             display_name?: string;
             meta?: {
               filament_type?: string;
+              material?: string;
             };
           };
         }
@@ -682,7 +683,7 @@ export const printRouter = router({
             status.job?.time_remaining ?? job?.time_remaining ?? null,
           timePrinting: status.job?.time_printing ?? job?.time_printing ?? null,
           fileName: job?.file?.display_name ?? job?.file?.name ?? null,
-          filamentType: job?.file?.meta?.filament_type ?? null,
+          filamentType: job?.file?.meta?.filament_type ?? job?.file?.meta?.material ?? null,
           chamberTemp: null,
         };
       } catch (error) {

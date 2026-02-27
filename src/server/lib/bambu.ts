@@ -44,6 +44,8 @@ export interface BambuDispatchParams {
   fileBuffer: Buffer;
   plateNumber?: number;
   useLeveling?: boolean;
+  useAms?: boolean;
+  amsMapping?: number[];
 }
 
 export interface BambuDispatchResult {
@@ -136,6 +138,8 @@ function buildPrintPayload(
   remotePath: string,
   plateNumber: number,
   useLeveling: boolean,
+  useAms: boolean,
+  amsMapping: number[],
 ): string {
   return JSON.stringify({
     print: {
@@ -154,8 +158,8 @@ function buildPrintPayload(
       flow_cali: false,
       vibration_cali: false,
       layer_inspect: false,
-      ams_mapping: [],
-      use_ams: false,
+      ams_mapping: amsMapping,
+      use_ams: useAms,
       job_type: 1,
     },
   });
@@ -168,6 +172,8 @@ async function sendPrintCommand(
   remotePath: string,
   plateNumber: number,
   useLeveling: boolean,
+  useAms: boolean,
+  amsMapping: number[],
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const requestTopic = `device/${serialNumber}/request`;
@@ -182,6 +188,7 @@ async function sendPrintCommand(
       // to the local network where the printer resides.
       rejectUnauthorized: false,
       protocol: "mqtts",
+      protocolVersion: 4, // MQTT 3.1.1 — Bambu printers don't support MQTT 5.0
       connectTimeout: 10_000,
     });
 
@@ -191,7 +198,7 @@ async function sendPrintCommand(
     }, 15_000);
 
     client.on("connect", () => {
-      const payload = buildPrintPayload(remotePath, plateNumber, useLeveling);
+      const payload = buildPrintPayload(remotePath, plateNumber, useLeveling, useAms, amsMapping);
 
       client.publish(requestTopic, payload, { qos: 0 }, (err) => {
         clearTimeout(timeout);
@@ -263,6 +270,8 @@ export async function dispatchToBambu(
     fileBuffer,
     plateNumber = 1,
     useLeveling = true,
+    useAms = true,
+    amsMapping = [0],
   } = params;
   validateBambuInputs({ ipAddress, accessCode, serialNumber, fileName });
 
@@ -298,6 +307,8 @@ export async function dispatchToBambu(
       remotePath,
       plateNumber,
       useLeveling,
+      useAms,
+      amsMapping,
     );
 
     return {
@@ -327,6 +338,7 @@ export interface BambuCachedStatus {
   progress: number | null;
   remainingTimeMinutes: number | null;
   fileName: string | null;
+  filamentType: string | null;
   layerNum: number | null;
   totalLayerNum: number | null;
   lastUpdated: number;
@@ -355,6 +367,7 @@ function createEmptyStatus(): BambuCachedStatus {
     progress: null,
     remainingTimeMinutes: null,
     fileName: null,
+    filamentType: null,
     layerNum: null,
     totalLayerNum: null,
     lastUpdated: 0,
@@ -399,6 +412,43 @@ function mergeReportIntoStatus(
     status.totalLayerNum = report.total_layer_num;
   }
   status.lastUpdated = Date.now();
+
+  // Extract active filament type from AMS or virtual tray data
+  const ams = report.ams as Record<string, unknown> | undefined;
+  const vtTray = report.vt_tray as Record<string, unknown> | undefined;
+
+  if (ams && typeof ams === "object") {
+    const trayNow = typeof ams.tray_now === "string" ? ams.tray_now : null;
+
+    if (trayNow === "254" || trayNow === "255") {
+      // External spool
+      if (vtTray && typeof vtTray.tray_type === "string" && vtTray.tray_type) {
+        status.filamentType = vtTray.tray_type;
+      }
+    } else if (trayNow !== null && trayNow !== "") {
+      // AMS tray
+      const trayIndex = parseInt(trayNow, 10);
+      if (!isNaN(trayIndex)) {
+        const amsUnitIndex = Math.floor(trayIndex / 4);
+        const traySlotIndex = trayIndex % 4;
+        const amsUnits = ams.ams as Record<string, unknown>[] | undefined;
+        if (Array.isArray(amsUnits) && amsUnits[amsUnitIndex]) {
+          const trays = amsUnits[amsUnitIndex].tray as Record<string, unknown>[] | undefined;
+          if (Array.isArray(trays) && trays[traySlotIndex]) {
+            const trayType = trays[traySlotIndex].tray_type;
+            if (typeof trayType === "string" && trayType) {
+              status.filamentType = trayType;
+            }
+          }
+        }
+      }
+    }
+  } else if (vtTray && typeof vtTray === "object") {
+    // No AMS data but virtual tray data available (external spool only)
+    if (typeof vtTray.tray_type === "string" && vtTray.tray_type) {
+      status.filamentType = vtTray.tray_type;
+    }
+  }
 }
 
 function cleanupMonitor(serialNumber: string): void {
@@ -445,6 +495,7 @@ function connectBambuMonitor(
     // to the local network where the printer resides.
     rejectUnauthorized: false,
     protocol: "mqtts",
+    protocolVersion: 4, // MQTT 3.1.1 — Bambu printers don't support MQTT 5.0
     connectTimeout: 10_000,
     reconnectPeriod: 5_000,
   });
