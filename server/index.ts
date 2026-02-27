@@ -11,6 +11,7 @@ import { logger } from "hono/logger";
 import { StreamableHTTPTransport } from '@hono/mcp'
 import { createMcpServer } from 'trpc-to-mcp';
 import { basicAuth } from 'hono/basic-auth'
+import { collectMetrics, initBambuMetricsCollector } from './metrics'
 
 
 
@@ -91,7 +92,7 @@ app.get('/api/webcam/:printerId', async (c) => {
         select: { webcamUrl: true, name: true },
     });
 
-    if (!printer || !printer.webcamUrl) {
+    if (!printer?.webcamUrl) {
         throw new HTTPException(404, { message: 'Printer or webcam URL not found' });
     }
 
@@ -194,6 +195,43 @@ app.all('/mcp', async (c) => {
         throw new HTTPException(500, { message: 'MCP processing failed' });
     }
 });
+
+// ─── Metrics endpoint ─────────────────────────────────────────────────────────
+// Prometheus-compatible metrics endpoint. Enable via METRICS_ENABLED=true.
+// Natively scrapes Prusa REST API, caches Bambu MQTT data, and queries Prisma.
+const metricsEnabled = process.env.METRICS_ENABLED === 'true';
+if (metricsEnabled) {
+    const metricsUsername = process.env.METRICS_USERNAME;
+    const metricsPassword = process.env.METRICS_PASSWORD;
+    if (!metricsUsername || !metricsPassword) {
+        throw new Error('METRICS_USERNAME and METRICS_PASSWORD are required when METRICS_ENABLED=true');
+    }
+    app.use('/metrics', basicAuth({
+        username: metricsUsername,
+        password: metricsPassword,
+        realm: 'Inventory System Metrics',
+        invalidUserMessage: 'Access denied: Invalid credentials',
+    }));
+    app.get('/metrics', async (c) => {
+        try {
+            const body = await collectMetrics();
+            return c.text(body, 200, {
+                'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
+            });
+        } catch (error) {
+            console.error('Metrics endpoint error:', error);
+            throw new HTTPException(500, { message: 'Failed to collect metrics' });
+        }
+    });
+}
+
+// ─── Initialize Bambu MQTT metrics collector on startup ──────────────────────
+if (metricsEnabled) {
+    initBambuMetricsCollector().catch((err) => {
+        console.error('Failed to initialize Bambu metrics collector:', err);
+    });
+}
+
 export default {
     port: process.env.PORT ?? 3000,
     fetch: app.fetch,
