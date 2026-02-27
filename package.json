@@ -92,6 +92,7 @@
         "react-router-dom": "^7.6.2",
         "recharts": "^3.0.2",
         "remark-breaks": "^4.0.0",
+        "remark-gfm": "^4.0.1",
         "simple-icons": "^15.7.0",
         "sonner": "^2.0.7",
         "superjson": "^2.2.2",

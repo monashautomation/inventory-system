@@ -2,14 +2,27 @@
 
 import remarkBreaks from "remark-breaks";
 import { useEffect, useRef, useState } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import Markdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Send, AlertCircle, RefreshCw } from "lucide-react";
+import { Send, AlertCircle, RefreshCw, ExternalLink } from "lucide-react";
 import { trpc } from "@/client/trpc";
+import remarkGfm from "remark-gfm";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Message interface
 interface Message {
@@ -271,36 +284,234 @@ function ChatComponentWithStaticId({ id, onUpdateConversationId }: ChatProps) {
                               : "bg-muted text-foreground mr-4",
                           )}
                         >
-                          <pre className="whitespace-pre-wrap font-sans text-base">
-                            <p>
-                              <Markdown
-                                remarkPlugins={[remarkBreaks]}
-                                components={{
-                                  br: () => (
-                                    <span
-                                      style={{ margin: "0.1em", padding: "0" }}
-                                    />
-                                  ),
-                                  li: ({ children }) => (
-                                    <li
-                                      style={{ margin: "0.1em", padding: "0" }}
+                          <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1">
+                            <Markdown
+                              remarkPlugins={[remarkBreaks, remarkGfm]}
+                              components={{
+                                table: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"table">) => (
+                                  <div className="my-2 rounded-md border overflow-x-auto">
+                                    <Table {...props}>{children}</Table>
+                                  </div>
+                                ),
+                                thead: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"thead">) => (
+                                  <TableHeader {...props}>
+                                    {children}
+                                  </TableHeader>
+                                ),
+                                tbody: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"tbody">) => (
+                                  <TableBody {...props}>{children}</TableBody>
+                                ),
+                                tr: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"tr">) => (
+                                  <TableRow {...props}>{children}</TableRow>
+                                ),
+                                th: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"th">) => (
+                                  <TableHead {...props}>{children}</TableHead>
+                                ),
+                                td: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"td">) => (
+                                  <TableCell {...props}>{children}</TableCell>
+                                ),
+                                pre: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"pre">) => (
+                                  <pre
+                                    className="overflow-x-auto rounded-md bg-muted p-3 text-sm"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </pre>
+                                ),
+                                code: ({
+                                  children,
+                                  className,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"code"> & {
+                                  className?: string;
+                                }) => {
+                                  const isInline = !className;
+                                  return isInline ? (
+                                    <code
+                                      className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono"
+                                      {...props}
                                     >
                                       {children}
-                                    </li>
-                                  ),
-                                  ul: ({ children }) => (
-                                    <ul
-                                      style={{ margin: "0.1em", padding: "0" }}
-                                    >
+                                    </code>
+                                  ) : (
+                                    <code className={className} {...props}>
                                       {children}
-                                    </ul>
-                                  ),
-                                }}
-                              >
-                                {message.content}
-                              </Markdown>
-                            </p>
-                          </pre>
+                                    </code>
+                                  );
+                                },
+                                br: () => (
+                                  <span
+                                    style={{ margin: "0.1em", padding: "0" }}
+                                  />
+                                ),
+                                li: ({ children }) => (
+                                  <li style={{ margin: "0.1em", padding: "0" }}>
+                                    {children}
+                                  </li>
+                                ),
+                                ul: ({ children }) => (
+                                  <ul className="list-disc pl-4">{children}</ul>
+                                ),
+                                ol: ({ children }) => (
+                                  <ol className="list-decimal pl-4">
+                                    {children}
+                                  </ol>
+                                ),
+                                blockquote: ({
+                                  children,
+                                }: ComponentPropsWithoutRef<"blockquote">) => (
+                                  <Alert className="my-2 border-l-4 border-primary/50 bg-muted/50">
+                                    <AlertDescription>
+                                      {children}
+                                    </AlertDescription>
+                                  </Alert>
+                                ),
+                                hr: () => <Separator className="my-4" />,
+                                a: ({
+                                  children,
+                                  href,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"a">) => (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-0.5 text-primary underline underline-offset-4 hover:text-primary/80 transition-colors"
+                                    {...props}
+                                  >
+                                    {children}
+                                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                  </a>
+                                ),
+                                img: ({
+                                  src,
+                                  alt,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"img">) => (
+                                  <img
+                                    src={src}
+                                    alt={alt ?? ""}
+                                    className="my-2 max-w-full rounded-md border"
+                                    loading="lazy"
+                                    {...props}
+                                  />
+                                ),
+                                input: ({
+                                  type,
+                                  checked,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"input">) => {
+                                  if (type === "checkbox") {
+                                    return (
+                                      <Checkbox
+                                        checked={!!checked}
+                                        disabled
+                                        className="mr-2 translate-y-[2px] pointer-events-none"
+                                      />
+                                    );
+                                  }
+                                  return <input type={type} {...props} />;
+                                },
+                                h1: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"h1">) => (
+                                  <h3
+                                    className="text-lg font-semibold mt-3 mb-1"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </h3>
+                                ),
+                                h2: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"h2">) => (
+                                  <h4
+                                    className="text-base font-semibold mt-3 mb-1"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </h4>
+                                ),
+                                h3: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"h3">) => (
+                                  <h5
+                                    className="text-sm font-semibold mt-2 mb-1"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </h5>
+                                ),
+                                h4: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"h4">) => (
+                                  <h6
+                                    className="text-sm font-medium mt-2 mb-1"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </h6>
+                                ),
+                                del: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"del">) => (
+                                  <del
+                                    className="text-muted-foreground line-through"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </del>
+                                ),
+                                strong: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"strong">) => (
+                                  <strong className="font-semibold" {...props}>
+                                    {children}
+                                  </strong>
+                                ),
+                                p: ({
+                                  children,
+                                  ...props
+                                }: ComponentPropsWithoutRef<"p">) => (
+                                  <p
+                                    className="my-1 leading-relaxed"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </p>
+                                ),
+                              }}
+                            >
+                              {message.content}
+                            </Markdown>
+                          </div>
                         </div>
                       </div>
                     ))}
