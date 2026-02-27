@@ -345,6 +345,86 @@ export async function dispatchToBambu(
   }
 }
 
+// ─── Print Control Commands (pause / resume / stop) ─────────────────────────
+
+export type BambuPrintCommand = "pause" | "resume" | "stop";
+
+export async function sendBambuCommand(
+  ipAddress: string,
+  accessCode: string,
+  serialNumber: string,
+  command: BambuPrintCommand,
+): Promise<BambuDispatchResult> {
+  validateBambuInputs({ ipAddress, accessCode, serialNumber });
+
+  if (!serialNumber) {
+    return { ok: false, details: "Serial number required for MQTT command." };
+  }
+
+  const requestTopic = `device/${serialNumber}/request`;
+  const payload = JSON.stringify({
+    print: { sequence_id: "0", command, param: "" },
+  });
+
+  // Reuse monitor connection when available (avoids connack contention)
+  const existing = monitorCache.get(serialNumber);
+  if (existing && !existing.connecting && existing.client.connected) {
+    resetIdleTimeout(serialNumber);
+    return new Promise((resolve) => {
+      existing.client.publish(requestTopic, payload, { qos: 1 }, (err) => {
+        if (err) {
+          resolve({
+            ok: false,
+            details: `MQTT publish failed: ${err.message}`,
+          });
+        } else {
+          resolve({ ok: true, details: `Command '${command}' sent.` });
+        }
+      });
+    });
+  }
+
+  // No monitor — open one-shot connection
+  return new Promise((resolve) => {
+    const clientId = `inventory-cmd-${serialNumber}-${Date.now()}`;
+    const client = mqtt.connect(`mqtts://${ipAddress}:${BAMBU_MQTT_PORT}`, {
+      username: BAMBU_MQTT_USER,
+      password: accessCode,
+      clientId,
+      rejectUnauthorized: false,
+      protocol: "mqtts",
+      protocolVersion: 4,
+      connectTimeout: 10_000,
+    });
+
+    const timeout = setTimeout(() => {
+      client.end(true);
+      resolve({ ok: false, details: "MQTT connection timed out." });
+    }, 15_000);
+
+    client.on("connect", () => {
+      client.publish(requestTopic, payload, { qos: 1 }, (err) => {
+        clearTimeout(timeout);
+        client.end();
+        if (err) {
+          resolve({
+            ok: false,
+            details: `MQTT publish failed: ${err.message}`,
+          });
+        } else {
+          resolve({ ok: true, details: `Command '${command}' sent.` });
+        }
+      });
+    });
+
+    client.on("error", (err) => {
+      clearTimeout(timeout);
+      client.end(true);
+      resolve({ ok: false, details: `MQTT error: ${err.message}` });
+    });
+  });
+}
+
 // ─── Status Monitoring via MQTT ──────────────────────────────────────────────
 
 export interface AmsTrayInfo {
