@@ -83,6 +83,8 @@ const dispatchToPrinter = async (params: {
   authToken?: string | null;
   serialNumber?: string | null;
   mode?: "upload_only" | "start_only" | "upload_and_start";
+  useAms?: boolean;
+  amsMapping?: number[];
 }) => {
   const {
     printerType,
@@ -92,6 +94,8 @@ const dispatchToPrinter = async (params: {
     authToken,
     serialNumber,
     mode = "upload_and_start",
+    useAms,
+    amsMapping,
   } = params;
 
   if (printerType === "PRUSA") {
@@ -417,6 +421,8 @@ const dispatchToPrinter = async (params: {
     serialNumber: serialNumber ?? "",
     fileName: originalFilename,
     fileBuffer,
+    useAms,
+    amsMapping,
   });
 
   if (!bambuResult.ok) {
@@ -475,6 +481,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: null,
             filamentType: null,
+            amsTrays: [] as { trayId: number; trayType: string; traySubBrands: string; trayColor: string; trayInfoIdx: string; remain: number; isEmpty: boolean }[],
           };
         }
 
@@ -499,6 +506,7 @@ export const printRouter = router({
               timePrinting: null,
               fileName: null,
               filamentType: null,
+              amsTrays: [],
             };
           }
 
@@ -554,6 +562,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: bambuStatus.fileName,
             filamentType: bambuStatus.filamentType ?? null,
+            amsTrays: bambuStatus.amsTrays,
           };
         } catch (error) {
           console.error(
@@ -573,6 +582,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: null,
             filamentType: null,
+            amsTrays: [],
           };
         }
       }
@@ -590,6 +600,7 @@ export const printRouter = router({
           timePrinting: null,
           fileName: null,
           filamentType: null,
+          amsTrays: [],
           chamberTemp: null,
         };
       }
@@ -619,6 +630,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: null,
             filamentType: null,
+            amsTrays: [],
             chamberTemp: null,
           };
         }
@@ -684,6 +696,7 @@ export const printRouter = router({
           timePrinting: status.job?.time_printing ?? job?.time_printing ?? null,
           fileName: job?.file?.display_name ?? job?.file?.name ?? null,
           filamentType: job?.file?.meta?.filament_type ?? job?.file?.meta?.material ?? null,
+          amsTrays: [],
           chamberTemp: null,
         };
       } catch (error) {
@@ -703,6 +716,7 @@ export const printRouter = router({
           timePrinting: null,
           fileName: null,
           filamentType: null,
+          amsTrays: [],
           chamberTemp: null,
         };
       }
@@ -1087,6 +1101,8 @@ export const printRouter = router({
         printerIpAddress: ipAddressSchema,
         fileName: z.string().min(1),
         fileContentBase64: z.string().min(1),
+        useAms: z.boolean().optional(),
+        amsMapping: z.array(z.number().int().min(-1).max(255)).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1155,6 +1171,8 @@ export const printRouter = router({
             originalFilename: safeName,
             authToken: printer.authToken,
             serialNumber: printer.serialNumber,
+            useAms: input.useAms,
+            amsMapping: input.amsMapping,
           });
 
           return await ctx.prisma.gcodePrintJob.update({
@@ -1217,6 +1235,8 @@ export const printRouter = router({
           originalFilename: safeName,
           authToken: printer.authToken,
           serialNumber: printer.serialNumber,
+          useAms: input.useAms,
+          amsMapping: input.amsMapping,
         });
 
         return await ctx.prisma.gcodePrintJob.update({

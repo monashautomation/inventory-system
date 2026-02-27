@@ -1,5 +1,6 @@
 import { type FormEvent, useState, useRef, useCallback } from "react";
 import { trpc } from "@/client/trpc";
+import { parse3mf, type ThreeMfFilamentInfo } from "@/lib/parse-3mf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export default function PrintGcode() {
       toast.success(
         result.dispatchResponse ?? "File uploaded and print started.",
       );
-      setSelectedFile(null);
+      void handleFileSelected(null);
       void jobsQuery.refetch();
     },
     onError: (error) => toast.error(error.message),
@@ -57,6 +58,37 @@ export default function PrintGcode() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [filamentInfo, setFilamentInfo] = useState<ThreeMfFilamentInfo | null>(null);
+  const [amsMapping, setAmsMapping] = useState<number[]>([0]);
+  const [useAms, setUseAms] = useState(true);
+
+  const handleFileSelected = useCallback(async (file: File | null) => {
+    setSelectedFile(file);
+    setFilamentInfo(null);
+    setAmsMapping([0]);
+    setUseAms(true);
+
+    if (!file?.name.toLowerCase().endsWith(".3mf")) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const info = parse3mf(buffer);
+      setFilamentInfo(info);
+
+      if (info.existingAmsMapping && info.existingAmsMapping.length >= info.filamentCount) {
+        setAmsMapping(info.existingAmsMapping.slice(0, info.filamentCount));
+      } else {
+        setAmsMapping(Array.from({ length: info.filamentCount }, (_, i) => i));
+      }
+
+      if (info.existingUseAms !== null) {
+        setUseAms(info.existingUseAms);
+      }
+    } catch {
+      // Parsing failed — continue with defaults, user can still print
+    }
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -77,7 +109,7 @@ export default function PrintGcode() {
 
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      setSelectedFile(files[0] ?? null);
+      void handleFileSelected(files[0] ?? null);
     }
   }, []);
 
@@ -103,6 +135,31 @@ export default function PrintGcode() {
     null;
   const isBambu = selectedPrinter?.type === "BAMBU";
 
+  // AMS tray data from live printer status (excludes external spool tray 254)
+  const amsTrays = (statusQuery.data?.amsTrays ?? []).filter(
+    (t) => t.trayId !== 254 && !t.isEmpty,
+  );
+  const hasLiveAmsData = amsTrays.length > 0;
+
+  /** Build a human-readable label for an AMS tray slot. */
+  const getTrayLabel = (trayId: number): string => {
+    const tray = amsTrays.find((t) => t.trayId === trayId);
+    if (tray) {
+      const name = tray.traySubBrands || tray.trayType;
+      if (name) return name;
+    }
+    // Fallback to generic label
+    const unit = Math.floor(trayId / 4);
+    const slot = (trayId % 4) + 1;
+    return unit === 0 ? `AMS Tray ${slot}` : `AMS ${unit + 1} Tray ${slot}`;
+  };
+
+  /** Parse tray_color (RRGGBBAA) to CSS hex color. */
+  const trayColorToHex = (color: string): string | null => {
+    if (!color || color.length < 6 || color === "00000000") return null;
+    return `#${color.slice(0, 6)}`;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !selectedPrinterIp) {
@@ -115,6 +172,7 @@ export default function PrintGcode() {
       printerIpAddress: selectedPrinterIp,
       fileName: selectedFile.name,
       fileContentBase64,
+      ...(isBambu && { useAms, amsMapping }),
     });
   };
 
@@ -215,7 +273,7 @@ export default function PrintGcode() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      setSelectedFile(file);
+                      void handleFileSelected(file);
                     }
                   }}
                 />
@@ -244,7 +302,7 @@ export default function PrintGcode() {
                         className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedFile(null);
+                          void handleFileSelected(null);
                           if (fileInputRef.current) {
                             fileInputRef.current.value = "";
                           }
@@ -276,6 +334,90 @@ export default function PrintGcode() {
                 )}
               </div>
             </div>
+            {isBambu && selectedFile && filamentInfo && filamentInfo.filamentCount > 0 && (
+              <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">AMS Filament Mapping</Label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useAms}
+                      onChange={(e) => setUseAms(e.target.checked)}
+                      className="rounded border-input"
+                    />
+                    Use AMS
+                  </label>
+                </div>
+                {!useAms && (
+                  <p className="text-xs text-muted-foreground">
+                    AMS disabled — printer will use the external spool.
+                  </p>
+                )}
+                {useAms && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      {filamentInfo.filamentCount === 1
+                        ? "This print uses 1 filament. Select which AMS tray to use."
+                        : `This print uses ${filamentInfo.filamentCount} filaments. Map each to an AMS tray.`}
+                    </p>
+                    <div className="grid gap-2">
+                      {Array.from({ length: filamentInfo.filamentCount }, (_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-sm text-muted-foreground w-24 shrink-0">
+                            Filament {i + 1}
+                          </span>
+                          <Select
+                            value={String(amsMapping[i] ?? i)}
+                            onValueChange={(val) => {
+                              setAmsMapping((prev) => {
+                                const next = [...prev];
+                                next[i] = parseInt(val, 10);
+                                return next;
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {hasLiveAmsData ? (
+                                amsTrays.map((tray) => {
+                                  const color = trayColorToHex(tray.trayColor);
+                                  return (
+                                    <SelectItem key={tray.trayId} value={String(tray.trayId)}>
+                                      <span className="flex items-center gap-2">
+                                        {color && (
+                                          <span
+                                            className="inline-block h-3 w-3 rounded-full border border-border/50 shrink-0"
+                                            style={{ backgroundColor: color }}
+                                          />
+                                        )}
+                                        {getTrayLabel(tray.trayId)}
+                                      </span>
+                                    </SelectItem>
+                                  );
+                                })
+                              ) : (
+                                <>
+                                  <SelectItem value="0">AMS Tray 1</SelectItem>
+                                  <SelectItem value="1">AMS Tray 2</SelectItem>
+                                  <SelectItem value="2">AMS Tray 3</SelectItem>
+                                  <SelectItem value="3">AMS Tray 4</SelectItem>
+                                  <SelectItem value="4">AMS 2 Tray 1</SelectItem>
+                                  <SelectItem value="5">AMS 2 Tray 2</SelectItem>
+                                  <SelectItem value="6">AMS 2 Tray 3</SelectItem>
+                                  <SelectItem value="7">AMS 2 Tray 4</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <Button
               type="submit"
               disabled={
