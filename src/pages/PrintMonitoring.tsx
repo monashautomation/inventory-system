@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type CameraMode = "stream" | "snapshot";
 
@@ -197,6 +198,30 @@ function PrinterDetail({
     { refetchInterval: 10_000 },
   );
 
+  const pauseMutation = trpc.print.pausePrint.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void statusQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const resumeMutation = trpc.print.resumePrint.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void statusQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const cancelMutation = trpc.print.cancelPrint.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void statusQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const [cameraMode, setCameraMode] = useState<CameraMode>("stream");
   const [snapshotTick, setSnapshotTick] = useState(0);
 
@@ -207,6 +232,16 @@ function PrinterDetail({
 
   const data = statusQuery.data;
   const hasCamera = Boolean(printer.webcamUrl);
+  const upperState = data?.state.toUpperCase() ?? "";
+  const isPrinting = upperState === "PRINTING";
+  const isPaused = upperState === "PAUSED";
+  const canPause = isPrinting;
+  const canResume = isPaused;
+  const canCancel = isPrinting || isPaused;
+  const anyCommandPending =
+    pauseMutation.isPending ||
+    resumeMutation.isPending ||
+    cancelMutation.isPending;
 
   return (
     <Dialog
@@ -350,6 +385,51 @@ function PrinterDetail({
           </div>
         ) : null}
 
+        {/* Print Controls */}
+        {canCancel ? (
+          <div className="flex items-center gap-2 border-t pt-4">
+            {canPause ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={anyCommandPending}
+                onClick={() =>
+                  pauseMutation.mutate({
+                    printerIpAddress: printer.ipAddress,
+                  })
+                }
+              >
+                {pauseMutation.isPending ? "Pausing…" : "Pause"}
+              </Button>
+            ) : null}
+            {canResume ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={anyCommandPending}
+                onClick={() =>
+                  resumeMutation.mutate({
+                    printerIpAddress: printer.ipAddress,
+                  })
+                }
+              >
+                {resumeMutation.isPending ? "Resuming…" : "Resume"}
+              </Button>
+            ) : null}
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={anyCommandPending}
+              onClick={() =>
+                cancelMutation.mutate({
+                  printerIpAddress: printer.ipAddress,
+                })
+              }
+            >
+              {cancelMutation.isPending ? "Cancelling…" : "Cancel Print"}
+            </Button>
+          </div>
+        ) : null}
         {/* Camera */}
         {hasCamera ? (
           <div className="space-y-3 border-t pt-4">
