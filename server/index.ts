@@ -11,7 +11,9 @@ import { logger } from "hono/logger";
 import { StreamableHTTPTransport } from '@hono/mcp'
 import { createMcpServer } from 'trpc-to-mcp';
 import { basicAuth } from 'hono/basic-auth'
-import { collectMetrics, initBambuMetricsCollector } from './metrics'
+import { collectMetrics, initBambuMetricsListener } from './metrics'
+import { initBambuMqttPool } from '@/server/lib/bambuMqtt'
+import { initBambuStatusListener } from '@/server/lib/bambu'
 
 
 
@@ -225,12 +227,19 @@ if (metricsEnabled) {
     });
 }
 
-// ─── Initialize Bambu MQTT metrics collector on startup ──────────────────────
-if (metricsEnabled) {
-    initBambuMetricsCollector().catch((err) => {
-        console.error('Failed to initialize Bambu metrics collector:', err);
-    });
-}
+// ─── Initialize shared Bambu MQTT pool + listeners on startup ────────────────
+// The pool owns all MQTT connections; bambu.ts (status) and bambuCollector.ts
+// (metrics) register message listeners on it.
+initBambuMqttPool().then(() => {
+    // Register status listener (for getBambuStatus in print routes)
+    initBambuStatusListener();
+    // Register metrics listener (for /metrics endpoint) when metrics enabled
+    if (metricsEnabled) {
+        initBambuMetricsListener();
+    }
+}).catch((err) => {
+    console.error('Failed to initialize Bambu MQTT pool:', err);
+});
 
 export default {
     port: process.env.PORT ?? 3000,

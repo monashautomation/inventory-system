@@ -1,16 +1,17 @@
 // ─── BambuLab Metrics Collector ──────────────────────────────────────────────
-// Maintains persistent MQTT connections to all BAMBU printers in the DB,
-// caches every reported field, and emits Prometheus text metrics on demand.
+// Registers a message listener on the shared MQTT pool (bambuMqtt.ts) to
+// cache every reported field, then emits Prometheus text metrics on demand.
 // Ported from the Go bambulab-exporter.
+//
+// NO own MQTT connections — everything goes through the shared pool so
+// Bambu's single-connection limit is respected.
 
-import mqtt from "mqtt";
-import { prisma } from "@/server/lib/prisma";
+import {
+  addMessageListener,
+  removeMessageListener,
+} from "@/server/lib/bambuMqtt";
+import type { BambuMessageListener } from "@/server/lib/bambuMqtt";
 import { formatGauge } from "./format";
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const BAMBU_MQTT_PORT = 8883;
-const BAMBU_MQTT_USER = "bblp";
 
 // ─── Per-printer metric store ───────────────────────────────────────────────
 
@@ -24,7 +25,6 @@ interface BambuPrinterStore {
 }
 
 interface BambuMetricsEntry {
-  client: mqtt.MqttClient;
   printerName: string;
   store: BambuPrinterStore;
 }
@@ -877,7 +877,7 @@ const AMS_TRAY_GAUGES: [string, string][] = [
   ["ams_tray_ctype", "AMS tray ctype"],
 ];
 
-// ─── MQTT connection management ─────────────────────────────────────────────
+// ─── Pool message listener ──────────────────────────────────────────────────
 
 function createEmptyStore(): BambuPrinterStore {
   return {
@@ -887,127 +887,43 @@ function createEmptyStore(): BambuPrinterStore {
   };
 }
 
-function connectForMetrics(printer: {
-  name: string;
-  ipAddress: string;
-  authToken: string;
-  serialNumber: string;
-}): void {
-  if (metricsCache.has(printer.serialNumber)) return;
+let registeredListener: BambuMessageListener | null = null;
 
-  const reportTopic = `device/${printer.serialNumber}/report`;
-  const requestTopic = `device/${printer.serialNumber}/request`;
-  const clientId = `inventory-metrics-${printer.serialNumber}-${Date.now()}`;
+/**
+ * Register the metrics listener on the shared MQTT pool.
+ * Call once at startup (after initBambuMqttPool).
+ */
+export function initBambuMetricsListener(): void {
+  if (registeredListener) return; // Already registered
 
-  const store = createEmptyStore();
-
-  const client = mqtt.connect(
-    `mqtts://${printer.ipAddress}:${BAMBU_MQTT_PORT}`,
-    {
-      username: BAMBU_MQTT_USER,
-      password: printer.authToken,
-      clientId,
-      rejectUnauthorized: false,
-      protocol: "mqtts",
-      protocolVersion: 4,
-      connectTimeout: 10_000,
-      reconnectPeriod: 5_000,
-    },
-  );
-
-  const entry: BambuMetricsEntry = {
-    client,
-    printerName: printer.name,
-    store,
+  registeredListener = (
+    serialNumber: string,
+    printerName: string,
+    msg: Record<string, unknown>,
+  ) => {
+    let entry = metricsCache.get(serialNumber);
+    if (!entry) {
+      entry = { printerName, store: createEmptyStore() };
+      metricsCache.set(serialNumber, entry);
+    }
+    // Update name in case it changed
+    entry.printerName = printerName;
+    processReport(entry.store, msg);
   };
 
-  metricsCache.set(printer.serialNumber, entry);
-
-  client.on("connect", () => {
-    console.log(
-      `[bambu-metrics] Connected to ${printer.name} (${printer.ipAddress})`,
-    );
-    client.subscribe(reportTopic, { qos: 0 }, (err) => {
-      if (err) {
-        console.error(
-          `[bambu-metrics] Subscribe failed for ${printer.name}:`,
-          err.message,
-        );
-        return;
-      }
-      // Request full status dump
-      const pushallPayload = JSON.stringify({
-        pushing: { sequence_id: "0", command: "pushall" },
-      });
-      client.publish(requestTopic, pushallPayload, { qos: 0 });
-    });
-  });
-
-  client.on("message", (_topic, payload) => {
-    try {
-      const msg = JSON.parse(payload.toString()) as Record<string, unknown>;
-      processReport(entry.store, msg);
-    } catch {
-      // Ignore malformed messages
-    }
-  });
-
-  client.on("error", (err) => {
-    console.error(
-      `[bambu-metrics] MQTT error for ${printer.name}:`,
-      err.message,
-    );
-  });
-
-  client.on("close", () => {
-    // Auto-reconnect will handle reconnection
-  });
-}
-
-// ─── Initialization (call at server startup) ────────────────────────────────
-
-export async function initBambuMetricsCollector(): Promise<void> {
-  const printers = await prisma.printer.findMany({
-    where: { type: "BAMBU" },
-    select: {
-      name: true,
-      ipAddress: true,
-      authToken: true,
-      serialNumber: true,
-    },
-  });
-
-  for (const printer of printers) {
-    if (!printer.authToken || !printer.serialNumber) {
-      console.warn(
-        `[bambu-metrics] Skipping ${printer.name}: missing authToken or serialNumber`,
-      );
-      continue;
-    }
-    connectForMetrics({
-      name: printer.name,
-      ipAddress: printer.ipAddress,
-      authToken: printer.authToken,
-      serialNumber: printer.serialNumber,
-    });
-  }
-
+  addMessageListener(registeredListener);
   console.log(
-    `[bambu-metrics] Initialized ${metricsCache.size} Bambu printer connection(s)`,
+    "[bambu-metrics] Registered metrics listener on shared MQTT pool",
   );
 }
 
-// ─── Cleanup (optional — for graceful shutdown) ─────────────────────────────
-
-export function shutdownBambuMetricsCollector(): void {
-  for (const [serial, entry] of metricsCache) {
-    try {
-      entry.client.end(true);
-    } catch {
-      // Ignore cleanup errors
-    }
-    metricsCache.delete(serial);
+/** Unregister the metrics listener and clear cached data. */
+export function shutdownBambuMetricsListener(): void {
+  if (registeredListener) {
+    removeMessageListener(registeredListener);
+    registeredListener = null;
   }
+  metricsCache.clear();
 }
 
 // ─── Collect formatted Prometheus text ──────────────────────────────────────

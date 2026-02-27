@@ -21,6 +21,7 @@ import {
   getBambuStatus,
   sendBambuCommand,
 } from "@/server/lib/bambu";
+import { syncBambuMqttPool } from "@/server/lib/bambuMqtt";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 const isBlockedIp = (ip: string): boolean => {
@@ -1061,7 +1062,7 @@ export const printRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await ctx.prisma.printer.create({
+        const result = await ctx.prisma.printer.create({
           data: {
             name: input.name,
             type: input.type,
@@ -1073,6 +1074,9 @@ export const printRouter = router({
             createdByUserId: ctx.user.id,
           },
         });
+        // Sync MQTT pool so the new printer gets a connection immediately
+        syncBambuMqttPool().catch(() => {});
+        return result;
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1117,6 +1121,8 @@ export const printRouter = router({
       await ctx.prisma.printer.delete({
         where: { id: input.printerId },
       });
+      // Sync MQTT pool so the removed printer's connection is closed
+      syncBambuMqttPool().catch(() => {});
 
       return { deleted: true };
     }),
@@ -1148,10 +1154,13 @@ export const printRouter = router({
       }
 
       try {
-        return await ctx.prisma.printer.update({
+        const result = await ctx.prisma.printer.update({
           where: { id: printerId },
           data,
         });
+        // Sync MQTT pool so changed IP/auth is picked up immediately
+        syncBambuMqttPool().catch(() => {});
+        return result;
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&

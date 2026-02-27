@@ -35,4 +35,4 @@ export async function collectMetrics(): Promise<string> {
   return output.join("\n\n") + "\n";
 }
 
-export { initBambuMetricsCollector } from "./metrics/bambuCollector";
+export { initBambuMetricsListener } from "./metrics/bambuCollector";
