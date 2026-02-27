@@ -16,7 +16,11 @@ import {
   presignDownload,
   buildPrintJobS3Key,
 } from "@/server/lib/s3";
-import { dispatchToBambu, getBambuStatus } from "@/server/lib/bambu";
+import {
+  dispatchToBambu,
+  getBambuStatus,
+  sendBambuCommand,
+} from "@/server/lib/bambu";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 const isBlockedIp = (ip: string): boolean => {
@@ -730,6 +734,222 @@ export const printRouter = router({
           chamberTemp: null,
         };
       }
+    }),
+
+  pausePrint: userProcedure
+    .input(z.object({ printerIpAddress: ipAddressSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const printer = await ctx.prisma.printer.findUnique({
+        where: { ipAddress: input.printerIpAddress },
+      });
+      if (!printer)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Printer not found.",
+        });
+
+      if (printer.type === "BAMBU") {
+        if (!printer.authToken || !printer.serialNumber) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Bambu printer missing access code or serial number.",
+          });
+        }
+        const result = await sendBambuCommand(
+          printer.ipAddress,
+          printer.authToken,
+          printer.serialNumber,
+          "pause",
+        );
+        if (!result.ok)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: result.details,
+          });
+        return { success: true, message: result.details };
+      }
+
+      // Prusa: PUT /api/v1/job/{id}/pause
+      if (!printer.authToken)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No auth token configured.",
+        });
+      const jobRes = await fetch(`http://${printer.ipAddress}/api/v1/job`, {
+        headers: { "X-Api-Key": printer.authToken },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (jobRes.status === 204 || !jobRes.ok) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job to pause.",
+        });
+      }
+      const job = (await jobRes.json()) as { id?: number };
+      if (!job.id)
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job.",
+        });
+      const res = await fetch(
+        `http://${printer.ipAddress}/api/v1/job/${job.id}/pause`,
+        {
+          method: "PUT",
+          headers: { "X-Api-Key": printer.authToken },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!res.ok && res.status !== 204) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Pause failed (HTTP ${res.status}).`,
+        });
+      }
+      return { success: true, message: "Print paused." };
+    }),
+
+  resumePrint: userProcedure
+    .input(z.object({ printerIpAddress: ipAddressSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const printer = await ctx.prisma.printer.findUnique({
+        where: { ipAddress: input.printerIpAddress },
+      });
+      if (!printer)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Printer not found.",
+        });
+
+      if (printer.type === "BAMBU") {
+        if (!printer.authToken || !printer.serialNumber) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Bambu printer missing access code or serial number.",
+          });
+        }
+        const result = await sendBambuCommand(
+          printer.ipAddress,
+          printer.authToken,
+          printer.serialNumber,
+          "resume",
+        );
+        if (!result.ok)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: result.details,
+          });
+        return { success: true, message: result.details };
+      }
+
+      // Prusa: PUT /api/v1/job/{id}/resume
+      if (!printer.authToken)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No auth token configured.",
+        });
+      const jobRes = await fetch(`http://${printer.ipAddress}/api/v1/job`, {
+        headers: { "X-Api-Key": printer.authToken },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (jobRes.status === 204 || !jobRes.ok) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job to resume.",
+        });
+      }
+      const job = (await jobRes.json()) as { id?: number };
+      if (!job.id)
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job.",
+        });
+      const res = await fetch(
+        `http://${printer.ipAddress}/api/v1/job/${job.id}/resume`,
+        {
+          method: "PUT",
+          headers: { "X-Api-Key": printer.authToken },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!res.ok && res.status !== 204) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Resume failed (HTTP ${res.status}).`,
+        });
+      }
+      return { success: true, message: "Print resumed." };
+    }),
+
+  cancelPrint: userProcedure
+    .input(z.object({ printerIpAddress: ipAddressSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const printer = await ctx.prisma.printer.findUnique({
+        where: { ipAddress: input.printerIpAddress },
+      });
+      if (!printer)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Printer not found.",
+        });
+
+      if (printer.type === "BAMBU") {
+        if (!printer.authToken || !printer.serialNumber) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Bambu printer missing access code or serial number.",
+          });
+        }
+        const result = await sendBambuCommand(
+          printer.ipAddress,
+          printer.authToken,
+          printer.serialNumber,
+          "stop",
+        );
+        if (!result.ok)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: result.details,
+          });
+        return { success: true, message: result.details };
+      }
+
+      // Prusa: DELETE /api/v1/job/{id}
+      if (!printer.authToken)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No auth token configured.",
+        });
+      const jobRes = await fetch(`http://${printer.ipAddress}/api/v1/job`, {
+        headers: { "X-Api-Key": printer.authToken },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (jobRes.status === 204 || !jobRes.ok) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job to cancel.",
+        });
+      }
+      const job = (await jobRes.json()) as { id?: number };
+      if (!job.id)
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No active print job.",
+        });
+      const res = await fetch(
+        `http://${printer.ipAddress}/api/v1/job/${job.id}`,
+        {
+          method: "DELETE",
+          headers: { "X-Api-Key": printer.authToken },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!res.ok && res.status !== 204) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Cancel failed (HTTP ${res.status}).`,
+        });
+      }
+      return { success: true, message: "Print cancelled." };
     }),
 
   getPrinterMonitoringOptions: userProcedure.query(async ({ ctx }) => {
