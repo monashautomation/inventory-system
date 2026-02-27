@@ -16,6 +16,14 @@ export const consumableRouter = router({
   }),
 
   get: userProcedure
+    .meta({
+      mcp: {
+        name: "consumable_get",
+        enabled: true,
+        description:
+          "Get details of a consumable item by its ID, including the associated item information",
+      },
+    })
     .input(
       z.object({
         id: z.uuid(),
@@ -53,11 +61,20 @@ export const consumableRouter = router({
       });
     }),
 
-  list: userProcedure.query(async () => {
-    return prisma.consumable.findMany({
-      include: { item: true },
-    });
-  }),
+  list: userProcedure
+    .meta({
+      mcp: {
+        name: "consumable_list",
+        enabled: true,
+        description:
+          "List all consumable items with their available and total quantities",
+      },
+    })
+    .query(async () => {
+      return prisma.consumable.findMany({
+        include: { item: true },
+      });
+    }),
 
   restock: adminProcedure
     .input(

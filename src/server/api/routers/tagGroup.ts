@@ -192,6 +192,14 @@ export const tagGroupRouter = router({
     }),
 
   listChildren: userProcedure
+    .meta({
+      mcp: {
+        name: "tagGroup_listChildren",
+        enabled: true,
+        description:
+          "List all descendant tag groups under a given parent tag group ID",
+      },
+    })
     .input(
       z.object({
         parentId: z.uuid(),

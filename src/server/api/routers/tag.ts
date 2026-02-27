@@ -11,6 +11,13 @@ export const tagRouter = router({
   }),
 
   get: userProcedure
+    .meta({
+      mcp: {
+        name: "tag_get",
+        enabled: true,
+        description: "Get a tag by its ID",
+      },
+    })
     .input(z.object({ id: z.uuid() }))
     .query(async ({ input }) => {
       return prisma.tag.findUnique({
@@ -40,7 +47,15 @@ export const tagRouter = router({
       });
     }),
 
-  list: userProcedure.query(async () => {
-    return prisma.tag.findMany({});
-  }),
+  list: userProcedure
+    .meta({
+      mcp: {
+        name: "tag_list",
+        enabled: true,
+        description: "List all tags in the system",
+      },
+    })
+    .query(async () => {
+      return prisma.tag.findMany({});
+    }),
 });

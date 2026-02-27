@@ -46,23 +46,39 @@ export const locationRouter = router({
       });
     }),
   // Get root locations.
-  getRoots: userProcedure.query(async () => {
-    return prisma.location.findMany({
-      where: {
-        parentId: null,
+  getRoots: userProcedure
+    .meta({
+      mcp: {
+        name: "location_getRoots",
+        enabled: true,
+        description:
+          "Get all root locations (top-level locations with no parent)",
       },
-      include: {
-        parent: true,
-        children: true,
-        items: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-  }),
+    })
+    .query(async () => {
+      return prisma.location.findMany({
+        where: {
+          parentId: null,
+        },
+        include: {
+          parent: true,
+          children: true,
+          items: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+    }),
 
   getChildren: userProcedure
+    .meta({
+      mcp: {
+        name: "location_getChildren",
+        enabled: true,
+        description: "Get all child locations under a given parent location ID",
+      },
+    })
     .input(z.object({ parentId: z.uuid() }))
     .query(async ({ input }) => {
       return prisma.location.findMany({
@@ -81,6 +97,14 @@ export const locationRouter = router({
     }),
 
   hasChildren: userProcedure
+    .meta({
+      mcp: {
+        name: "location_hasChildren",
+        enabled: true,
+        description:
+          "Check whether a location has any child locations. Returns true or false",
+      },
+    })
     .input(z.object({ locationId: z.uuid() }))
     .query(async ({ input }) => {
       const count = await prisma.location.count({

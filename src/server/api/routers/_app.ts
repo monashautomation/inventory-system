@@ -25,12 +25,24 @@ export const appRouter = router({
   hello: userProcedure.query(() => {
     return "hello world";
   }),
-  sayHello: userProcedure
-    .meta({ mcp: { enabled: true, description: "Greet the user" } })
-    .input(z.object({ name: z.string() }))
+  greeting: userProcedure
+    .meta({
+      mcp: {
+        enabled: true,
+        description:
+          "Greet the user by name. Use this when the user says hello, hi, hey, or any greeting.",
+      },
+    })
     .output(z.object({ greeting: z.string() }))
-    .query(({ input }) => {
-      return { greeting: `Hello ${input.name}!` };
+    .query(({ ctx }) => {
+      const hour = new Date().getHours();
+      let timeGreeting: string;
+      if (hour < 12) timeGreeting = "Good morning";
+      else if (hour < 17) timeGreeting = "Good afternoon";
+      else timeGreeting = "Good evening";
+      return {
+        greeting: `${timeGreeting}, ${ctx.user.name}! How can I help you with the inventory today?`,
+      };
     }),
   user: adminProcedure.query(async ({ ctx }) => {
     const user = await ctx.prisma.user.findFirst({
