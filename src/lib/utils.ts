@@ -16,11 +16,15 @@ export function cn(...inputs: ClassValue[]) {
 
 export const getBaseUrl = () => {
   // Check if we're in a browser environment
+  const g = globalThis as Record<string, unknown>;
   if (
-    typeof globalThis !== "undefined" &&
-    (globalThis as any).window?.location
+    typeof g.window === "object" &&
+    g.window !== null &&
+    typeof (g.window as Record<string, unknown>).location === "object"
   ) {
-    return (globalThis as any).window.location.origin;
+    return (
+      (g.window as Record<string, unknown>).location as { origin: string }
+    ).origin;
   }
   if (process.env.FRONTEND_URL) return `${process.env.FRONTEND_URL}`;
   return `http://localhost:${process.env.PORT ?? 3000}`;

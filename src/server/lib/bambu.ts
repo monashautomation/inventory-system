@@ -198,7 +198,13 @@ async function sendPrintCommand(
     }, 15_000);
 
     client.on("connect", () => {
-      const payload = buildPrintPayload(remotePath, plateNumber, useLeveling, useAms, amsMapping);
+      const payload = buildPrintPayload(
+        remotePath,
+        plateNumber,
+        useLeveling,
+        useAms,
+        amsMapping,
+      );
 
       client.publish(requestTopic, payload, { qos: 0 }, (err) => {
         clearTimeout(timeout);
@@ -236,6 +242,7 @@ function validateBambuInputs(params: {
   }
 
   // Validate access code is non-empty and doesn't contain control chars
+  // eslint-disable-next-line no-control-regex
   if (!params.accessCode || /[\x00-\x1f]/.test(params.accessCode)) {
     throw new Error("Invalid or missing Bambu access code.");
   }
@@ -328,6 +335,23 @@ export async function dispatchToBambu(
 
 // ─── Status Monitoring via MQTT ──────────────────────────────────────────────
 
+export interface AmsTrayInfo {
+  /** Global tray ID: (ams_unit * 4) + slot. 254 = external spool. */
+  trayId: number;
+  /** Base material type: "PLA", "ABS", "PETG", etc. Empty string if unknown. */
+  trayType: string;
+  /** Specific variant name: "PLA Matte", "PETG-CF", etc. Empty string if generic/third-party. */
+  traySubBrands: string;
+  /** Primary color as RRGGBBAA hex string (e.g. "FF0000FF"). Empty if unknown. */
+  trayColor: string;
+  /** Filament profile code (e.g. "GFA00"). Empty if unknown. */
+  trayInfoIdx: string;
+  /** Filament remaining 0–100%. -1 if unknown/unsupported. */
+  remain: number;
+  /** Whether this tray slot is empty (no spool loaded). */
+  isEmpty: boolean;
+}
+
 export interface BambuCachedStatus {
   gcodeState: string;
   nozzleTemp: number | null;
@@ -339,6 +363,7 @@ export interface BambuCachedStatus {
   remainingTimeMinutes: number | null;
   fileName: string | null;
   filamentType: string | null;
+  amsTrays: AmsTrayInfo[];
   layerNum: number | null;
   totalLayerNum: number | null;
   lastUpdated: number;
@@ -368,6 +393,7 @@ function createEmptyStatus(): BambuCachedStatus {
     remainingTimeMinutes: null,
     fileName: null,
     filamentType: null,
+    amsTrays: [],
     layerNum: null,
     totalLayerNum: null,
     lastUpdated: 0,
@@ -413,11 +439,69 @@ function mergeReportIntoStatus(
   }
   status.lastUpdated = Date.now();
 
-  // Extract active filament type from AMS or virtual tray data
+  // Extract AMS tray inventory and active filament type
   const ams = report.ams as Record<string, unknown> | undefined;
   const vtTray = report.vt_tray as Record<string, unknown> | undefined;
 
   if (ams && typeof ams === "object") {
+    // Parse all AMS tray slots into amsTrays[]
+    const amsUnits = ams.ams as Record<string, unknown>[] | undefined;
+    if (Array.isArray(amsUnits)) {
+      const trays: AmsTrayInfo[] = [];
+      for (const unit of amsUnits) {
+        const unitId = typeof unit.id === "string" ? parseInt(unit.id, 10) : -1;
+        if (isNaN(unitId) || unitId < 0) continue;
+        const unitTrays = unit.tray as Record<string, unknown>[] | undefined;
+        if (!Array.isArray(unitTrays)) continue;
+        for (const t of unitTrays) {
+          const slotId = typeof t.id === "string" ? parseInt(t.id, 10) : -1;
+          if (isNaN(slotId) || slotId < 0) continue;
+          const globalTrayId = unitId * 4 + slotId;
+          // A tray with only "id" (and optionally "state") keys is empty
+          const keys = Object.keys(t).filter(
+            (k) => k !== "id" && k !== "state",
+          );
+          const isEmpty = keys.length === 0;
+          trays.push({
+            trayId: globalTrayId,
+            trayType: typeof t.tray_type === "string" ? t.tray_type : "",
+            traySubBrands:
+              typeof t.tray_sub_brands === "string" ? t.tray_sub_brands : "",
+            trayColor: typeof t.tray_color === "string" ? t.tray_color : "",
+            trayInfoIdx:
+              typeof t.tray_info_idx === "string" ? t.tray_info_idx : "",
+            remain: typeof t.remain === "number" ? t.remain : -1,
+            isEmpty,
+          });
+        }
+      }
+      // Include external spool (vt_tray) as tray 254 if present
+      if (vtTray && typeof vtTray === "object") {
+        const vtKeys = Object.keys(vtTray).filter(
+          (k) => k !== "id" && k !== "state",
+        );
+        trays.push({
+          trayId: 254,
+          trayType:
+            typeof vtTray.tray_type === "string" ? vtTray.tray_type : "",
+          traySubBrands:
+            typeof vtTray.tray_sub_brands === "string"
+              ? vtTray.tray_sub_brands
+              : "",
+          trayColor:
+            typeof vtTray.tray_color === "string" ? vtTray.tray_color : "",
+          trayInfoIdx:
+            typeof vtTray.tray_info_idx === "string"
+              ? vtTray.tray_info_idx
+              : "",
+          remain: typeof vtTray.remain === "number" ? vtTray.remain : -1,
+          isEmpty: vtKeys.length === 0,
+        });
+      }
+      status.amsTrays = trays;
+    }
+
+    // Extract active filament type from tray_now
     const trayNow = typeof ams.tray_now === "string" ? ams.tray_now : null;
 
     if (trayNow === "254" || trayNow === "255") {
@@ -429,17 +513,9 @@ function mergeReportIntoStatus(
       // AMS tray
       const trayIndex = parseInt(trayNow, 10);
       if (!isNaN(trayIndex)) {
-        const amsUnitIndex = Math.floor(trayIndex / 4);
-        const traySlotIndex = trayIndex % 4;
-        const amsUnits = ams.ams as Record<string, unknown>[] | undefined;
-        if (Array.isArray(amsUnits) && amsUnits[amsUnitIndex]) {
-          const trays = amsUnits[amsUnitIndex].tray as Record<string, unknown>[] | undefined;
-          if (Array.isArray(trays) && trays[traySlotIndex]) {
-            const trayType = trays[traySlotIndex].tray_type;
-            if (typeof trayType === "string" && trayType) {
-              status.filamentType = trayType;
-            }
-          }
+        const activeTray = status.amsTrays.find((t) => t.trayId === trayIndex);
+        if (activeTray?.trayType) {
+          status.filamentType = activeTray.trayType;
         }
       }
     }
