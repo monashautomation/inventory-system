@@ -442,13 +442,29 @@ const dispatchToPrinter = async (params: {
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export const printRouter = router({
-  getPrinters: userProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.printer.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-  }),
+  getPrinters: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getPrinters",
+        enabled: true,
+        description: "List all configured 3D printers",
+      },
+    })
+    .query(async ({ ctx }) => {
+      return ctx.prisma.printer.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    }),
 
   getPrinterStatus: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getPrinterStatus",
+        enabled: true,
+        description:
+          "Get the current status of a printer by its IP address, including temperatures, print progress, and state",
+      },
+    })
     .input(
       z.object({
         printerIpAddress: ipAddressSchema,
@@ -732,22 +748,47 @@ export const printRouter = router({
       }
     }),
 
-  getPrinterMonitoringOptions: userProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.printer.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-  }),
+  getPrinterMonitoringOptions: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getPrinterMonitoringOptions",
+        enabled: true,
+        description: "List all printers available for monitoring",
+      },
+    })
+    .query(async ({ ctx }) => {
+      return ctx.prisma.printer.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    }),
 
-  listMyPrintJobs: userProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.gcodePrintJob.findMany({
-      where: { userId: ctx.user.id },
-      include: { printer: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-  }),
+  listMyPrintJobs: userProcedure
+    .meta({
+      mcp: {
+        name: "print_listMyPrintJobs",
+        enabled: true,
+        description:
+          "List the authenticated user's print jobs (up to 100 most recent), including printer info",
+      },
+    })
+    .query(async ({ ctx }) => {
+      return ctx.prisma.gcodePrintJob.findMany({
+        where: { userId: ctx.user.id },
+        include: { printer: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      });
+    }),
 
   getDownloadUrl: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getDownloadUrl",
+        enabled: true,
+        description:
+          "Get a pre-signed download URL for a print job's file by its print job ID",
+      },
+    })
     .input(
       z.object({
         printJobId: z.string().uuid(),

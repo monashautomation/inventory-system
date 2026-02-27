@@ -5,6 +5,14 @@ import { prisma } from "@/server/lib/prisma";
 
 export const dashboardRouter = router({
   getLoanHistory: userProcedure
+    .meta({
+      mcp: {
+        name: "dashboard_getLoanHistory",
+        enabled: true,
+        description:
+          "Get loan transaction history aggregated by date. Accepts a range parameter: 'week', 'month', or 'year'",
+      },
+    })
     .input(
       z.object({
         range: z.enum(["week", "month", "year"]),
@@ -43,22 +51,38 @@ export const dashboardRouter = router({
       }));
     }),
 
-  getInventoryByLocation: userProcedure.query(async () => {
-    const locations = await prisma.location.findMany({
-      include: {
-        items: {
-          where: { deleted: false },
-        },
+  getInventoryByLocation: userProcedure
+    .meta({
+      mcp: {
+        name: "dashboard_getInventoryByLocation",
+        enabled: true,
+        description: "Get the count of non-deleted items at each location",
       },
-    });
+    })
+    .query(async () => {
+      const locations = await prisma.location.findMany({
+        include: {
+          items: {
+            where: { deleted: false },
+          },
+        },
+      });
 
-    return locations.map((location) => ({
-      locationName: location.name,
-      itemCount: location.items.length,
-    }));
-  }),
+      return locations.map((location) => ({
+        locationName: location.name,
+        itemCount: location.items.length,
+      }));
+    }),
 
   getTopLoanedItems: userProcedure
+    .meta({
+      mcp: {
+        name: "dashboard_getTopLoanedItems",
+        enabled: true,
+        description:
+          "Get the most frequently loaned items, ranked by loan count. Accepts a limit parameter (1-20, default 5)",
+      },
+    })
     .input(
       z.object({
         limit: z.number().min(1).max(20).default(5),
@@ -85,23 +109,40 @@ export const dashboardRouter = router({
       }));
     }),
 
-  getItemStatusStats: userProcedure.query(async () => {
-    const [total, loaned, available] = await Promise.all([
-      prisma.item.count({ where: { deleted: false } }),
-      prisma.itemRecord.count({ where: { loaned: true } }),
-      prisma.consumable.aggregate({
-        _sum: { available: true },
-      }),
-    ]);
+  getItemStatusStats: userProcedure
+    .meta({
+      mcp: {
+        name: "dashboard_getItemStatusStats",
+        enabled: true,
+        description:
+          "Get overall inventory statistics: total items, currently loaned count, and total available consumable quantity",
+      },
+    })
+    .query(async () => {
+      const [total, loaned, available] = await Promise.all([
+        prisma.item.count({ where: { deleted: false } }),
+        prisma.itemRecord.count({ where: { loaned: true } }),
+        prisma.consumable.aggregate({
+          _sum: { available: true },
+        }),
+      ]);
 
-    return {
-      total,
-      loaned,
-      available: available._sum.available ?? 0,
-    };
-  }),
+      return {
+        total,
+        loaned,
+        available: available._sum.available ?? 0,
+      };
+    }),
 
   getTopTags: userProcedure
+    .meta({
+      mcp: {
+        name: "dashboard_getTopTags",
+        enabled: true,
+        description:
+          "Get the most used tags ranked by the number of items they are applied to. Accepts a limit parameter (1-20, default 5)",
+      },
+    })
     .input(
       z.object({
         limit: z.number().min(1).max(20).default(5),

@@ -5,6 +5,13 @@ import { getBaseUrl } from "@/lib/utils";
 
 export const qrRouter = router({
   generateUrl: userProcedure
+    .meta({
+      mcp: {
+        name: "qr_generateUrl",
+        enabled: true,
+        description: "Generate a QR code URL for an item by its ID",
+      },
+    })
     .input(z.object({ id: z.uuid() }))
     .query(async ({ input }) => {
       //TODO: Make this generate location qr codes
@@ -17,6 +24,13 @@ export const qrRouter = router({
         };
     }),
   translatePath: userProcedure
+    .meta({
+      mcp: {
+        name: "qr_translatePath",
+        enabled: true,
+        description: "Translate a QR code path segment into an item page URL",
+      },
+    })
     .input(z.object({ path: z.string() }))
     .query(({ input }) => {
       //TODO: Make this handle location qr codes
@@ -24,6 +38,14 @@ export const qrRouter = router({
     }),
 
   scan: userProcedure
+    .meta({
+      mcp: {
+        name: "qr_scan",
+        enabled: true,
+        description:
+          "Look up an item by its QR code URL. Returns full item details including location, tags, consumable info, and transaction records",
+      },
+    })
     .input(z.object({ url: z.string() }))
     .query(async ({ input }) => {
       const arr = input.url.split("/");

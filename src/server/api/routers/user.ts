@@ -11,6 +11,14 @@ export const userRouter = router({
   }),
 
   get: userProcedure
+    .meta({
+      mcp: {
+        name: "user_get",
+        enabled: true,
+        description:
+          "Get a user by their ID, including their group and transaction records",
+      },
+    })
     .input(z.object({ id: z.uuid() }))
     .query(async ({ input }) => {
       return prisma.user.findUnique({
@@ -39,12 +47,20 @@ export const userRouter = router({
       });
     }),
 
-  list: userProcedure.query(async () => {
-    return prisma.user.findMany({
-      include: {
-        group: true,
-        ItemRecords: true,
+  list: userProcedure
+    .meta({
+      mcp: {
+        name: "user_list",
+        enabled: true,
+        description: "List all users with their groups and transaction records",
       },
-    });
-  }),
+    })
+    .query(async () => {
+      return prisma.user.findMany({
+        include: {
+          group: true,
+          ItemRecords: true,
+        },
+      });
+    }),
 });
