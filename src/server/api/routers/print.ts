@@ -969,7 +969,6 @@ export const printRouter = router({
       return { success: true, message: "Print cancelled." };
     }),
 
-
   getPrinterMonitoringOptions: userProcedure
     .meta({
       mcp: {
@@ -1001,7 +1000,6 @@ export const printRouter = router({
         take: 100,
       });
     }),
-
 
   getDownloadUrl: userProcedure
     .meta({

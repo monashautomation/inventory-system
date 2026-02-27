@@ -7,12 +7,16 @@ export default defineConfig({
     preview: {
         allowedHosts: true,
         proxy: {
-            '/api': 'http://localhost:3000'
+            '/api': 'http://localhost:3000',
+            '/mcp': 'http://localhost:3000',
+            '/metrics': 'http://localhost:3000'
         },
     },
     server: {
         proxy: {
-            '/api': 'http://localhost:3000'
+            '/api': 'http://localhost:3000',
+            '/mcp': 'http://localhost:3000',
+            '/metrics': 'http://localhost:3000'
         },
     },
     plugins: [react(), tailwindcss(), tsconfigPaths()],
