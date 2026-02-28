@@ -32,12 +32,12 @@ process.on('unhandledRejection', (reason) => {
 process.on('SIGTERM', () => {
   console.log(`[process] SIGTERM received at ${new Date().toISOString()} — shutting down gracefully`);
   shutdownBambuMqttPool();
-  prisma.$disconnect().catch(() => {});
+  prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on('SIGINT', () => {
   console.log(`[process] SIGINT received at ${new Date().toISOString()} — shutting down gracefully`);
   shutdownBambuMqttPool();
-  prisma.$disconnect().catch(() => {});
+  prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on('exit', (code) => console.log(`[process] Exiting with code ${code} at ${new Date().toISOString()}`));
 
