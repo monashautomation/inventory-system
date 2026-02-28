@@ -168,7 +168,10 @@ function PrinterCard({
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
                 Printed by
               </span>
-              <p className="text-sm font-semibold truncate text-foreground" title={printedBy}>
+              <p
+                className="text-sm font-semibold truncate text-foreground"
+                title={printedBy}
+              >
                 {printedBy}
               </p>
             </div>
@@ -402,7 +405,10 @@ function PrinterDetail({
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Printed By
               </span>
-              <span className="font-semibold truncate" title={printedBy ?? undefined}>
+              <span
+                className="font-semibold truncate"
+                title={printedBy ?? undefined}
+              >
                 {printedBy ?? "—"}
               </span>
             </div>

@@ -297,8 +297,11 @@ You have access to tools for:
         formattedMessages as BaseLanguageModelInput,
       );
 
-      // Handle tool calls if present
-      if (result.tool_calls?.length) {
+      // Handle tool calls in a loop (LLM may need multiple rounds)
+      const MAX_TOOL_ROUNDS = 10;
+      let toolRound = 0;
+      while (result.tool_calls?.length && toolRound < MAX_TOOL_ROUNDS) {
+        toolRound++;
         for (const toolCall of result.tool_calls) {
           let toolResult;
           try {
