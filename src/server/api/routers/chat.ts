@@ -148,10 +148,11 @@ class OllamaMcpProvider implements AIProvider {
     this.llm = new ChatOllama({
       baseUrl: this.ollamaUrl,
       model: this.model,
-      temperature: 0.7,
+      temperature: 0.6, // NVIDIA recommended for tool-calling
       topK: 20,
-      topP: 0.8,
+      topP: 0.95, // NVIDIA recommended for tool-calling
       maxRetries: 2,
+      think: false,
       headers: this.authToken
         ? { Authorization: `Bearer ${this.authToken}` }
         : undefined,
