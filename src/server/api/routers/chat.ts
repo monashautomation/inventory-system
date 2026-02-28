@@ -136,6 +136,7 @@ class OllamaMcpProvider implements AIProvider {
         requestInit: {
           headers: {
             Authorization: authHeader,
+            "x-trpc-source": "mcp-server",
           },
         },
       },
