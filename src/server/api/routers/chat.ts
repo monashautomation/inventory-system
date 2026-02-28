@@ -168,7 +168,7 @@ You have access to tools for:
 - **Transactions**: View checkout/check-in history, audit trails, and currently loaned items
 - **Dashboard**: Get stats like loan history, top loaned items, inventory by location, and tag usage
 - **QR Codes**: Generate QR URLs and look up items by QR scan
-- **3D Printers**: Check printer status, list printers, and view print job history
+- **3D Printers**: Check printer status, list printers, view print job history, see all currently active prints with who started them, and browse all print jobs across all users
 
 ## Rules
 1. Always use tools to fetch data — never guess or make up inventory information.

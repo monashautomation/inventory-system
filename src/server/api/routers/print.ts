@@ -1664,4 +1664,161 @@ export const printRouter = router({
         });
       }
     }),
+
+  getActivePrints: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getActivePrints",
+        enabled: true,
+        description:
+          "Get all printers that are currently printing or paused, including what they are printing, progress, and who started the print job",
+      },
+    })
+    .query(async ({ ctx }) => {
+      const printers = await ctx.prisma.printer.findMany();
+
+      const activePrints: {
+        printerName: string;
+        printerType: string;
+        ipAddress: string;
+        state: string;
+        fileName: string | null;
+        progress: number | null;
+        timeRemaining: number | null;
+        startedBy: { name: string; email: string } | null;
+        jobStartedAt: Date | null;
+      }[] = [];
+
+      for (const printer of printers) {
+        let state = "UNKNOWN";
+        let fileName: string | null = null;
+        let progress: number | null = null;
+        let timeRemaining: number | null = null;
+
+        if (printer.type === "BAMBU") {
+          if (!printer.authToken || !printer.serialNumber) continue;
+          const bambuStatus = getBambuStatus(
+            printer.ipAddress,
+            printer.authToken,
+            printer.serialNumber,
+          );
+          if (!bambuStatus) continue;
+          const gcodeState = bambuStatus.gcodeState.toUpperCase();
+          if (gcodeState === "RUNNING") state = "PRINTING";
+          else if (gcodeState === "PAUSE") state = "PAUSED";
+          else if (gcodeState === "PREPARE") state = "PREPARING";
+          else continue;
+          fileName = bambuStatus.fileName;
+          progress = bambuStatus.progress;
+          timeRemaining =
+            bambuStatus.remainingTimeMinutes != null
+              ? bambuStatus.remainingTimeMinutes * 60
+              : null;
+        } else {
+          // Prusa
+          if (!printer.authToken) continue;
+          try {
+            const [statusRes, jobRes] = await Promise.all([
+              fetch(`http://${printer.ipAddress}/api/v1/status`, {
+                headers: { "X-Api-Key": printer.authToken },
+                signal: AbortSignal.timeout(5000),
+              }),
+              fetch(`http://${printer.ipAddress}/api/v1/job`, {
+                headers: { "X-Api-Key": printer.authToken },
+                signal: AbortSignal.timeout(5000),
+              }),
+            ]);
+            if (!statusRes.ok) continue;
+
+            interface PrusaActiveStatus {
+              printer?: { state?: string };
+              job?: { progress?: number; time_remaining?: number };
+            }
+            interface PrusaActiveJob {
+              file?: { name?: string; display_name?: string };
+              progress?: number;
+              time_remaining?: number;
+            }
+
+            const status = (await statusRes.json()) as PrusaActiveStatus;
+            const printerState =
+              status.printer?.state?.trim()?.toUpperCase() ?? "UNKNOWN";
+
+            if (printerState === "PRINTING") state = "PRINTING";
+            else if (printerState === "PAUSED") state = "PAUSED";
+            else continue;
+
+            const job =
+              jobRes.status === 204
+                ? null
+                : ((await jobRes.json()) as PrusaActiveJob);
+
+            fileName = job?.file?.display_name ?? job?.file?.name ?? null;
+            progress = status.job?.progress ?? job?.progress ?? null;
+            timeRemaining =
+              status.job?.time_remaining ?? job?.time_remaining ?? null;
+          } catch {
+            continue;
+          }
+        }
+
+        // Find who started this print — most recent DISPATCHED job for this printer
+        const recentJob = await ctx.prisma.gcodePrintJob.findFirst({
+          where: {
+            printerId: printer.id,
+            status: "DISPATCHED",
+          },
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: {
+              select: { name: true, email: true },
+            },
+          },
+        });
+
+        activePrints.push({
+          printerName: printer.name,
+          printerType: printer.type,
+          ipAddress: printer.ipAddress,
+          state,
+          fileName,
+          progress,
+          timeRemaining,
+          startedBy: recentJob
+            ? { name: recentJob.user.name, email: recentJob.user.email }
+            : null,
+          jobStartedAt: recentJob?.createdAt ?? null,
+        });
+      }
+
+      return activePrints;
+    }),
+
+  getAllPrintJobs: userProcedure
+    .meta({
+      mcp: {
+        name: "print_getAllPrintJobs",
+        enabled: true,
+        description:
+          "List all print jobs across all users with user attribution (who printed), printer info, and job status. Returns the most recent jobs. Use this to find out who printed what and when.",
+      },
+    })
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(500).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const take = input?.limit ?? 100;
+      return ctx.prisma.gcodePrintJob.findMany({
+        include: {
+          user: { select: { name: true, email: true } },
+          printer: { select: { name: true, type: true, ipAddress: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take,
+      });
+    }),
 });

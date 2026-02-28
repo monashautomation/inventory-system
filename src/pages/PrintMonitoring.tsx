@@ -67,9 +67,11 @@ const statusBadgeVariant = (
 function PrinterCard({
   printer,
   onClick,
+  printedBy,
 }: {
   printer: { id: string; name: string; type: string; ipAddress: string };
   onClick: () => void;
+  printedBy: string | null;
 }) {
   const statusQuery = trpc.print.getPrinterStatus.useQuery(
     { printerIpAddress: printer.ipAddress },
@@ -159,8 +161,18 @@ function PrinterCard({
           </div>
         </div>
 
-        {/* File name footer */}
-        <div className="mt-auto">
+        {/* Printed by + File name footer */}
+        <div className="mt-auto space-y-1.5">
+          {printedBy ? (
+            <div className="bg-primary/5 rounded-md px-2.5 py-1.5 border border-primary/20">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+                Printed by
+              </span>
+              <p className="text-sm font-semibold truncate text-foreground" title={printedBy}>
+                {printedBy}
+              </p>
+            </div>
+          ) : null}
           <div className="bg-secondary/30 rounded-md px-2.5 py-1.5 border border-border/50 transition-colors group-hover:bg-secondary/50">
             <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
               Current File
@@ -183,6 +195,7 @@ function PrinterCard({
 function PrinterDetail({
   printer,
   onClose,
+  printedBy,
 }: {
   printer: {
     id: string;
@@ -192,6 +205,7 @@ function PrinterDetail({
     webcamUrl: string | null;
   };
   onClose: () => void;
+  printedBy: string | null;
 }) {
   const statusQuery = trpc.print.getPrinterStatus.useQuery(
     { printerIpAddress: printer.ipAddress },
@@ -382,6 +396,16 @@ function PrinterDetail({
               </span>
               <span className="font-semibold">{data.filamentType ?? "—"}</span>
             </div>
+
+            {/* Printed By */}
+            <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Printed By
+              </span>
+              <span className="font-semibold truncate" title={printedBy ?? undefined}>
+                {printedBy ?? "—"}
+              </span>
+            </div>
           </div>
         ) : null}
 
@@ -485,6 +509,20 @@ function PrinterDetail({
 
 export default function PrintMonitoring() {
   const printersQuery = trpc.print.getPrinterMonitoringOptions.useQuery();
+  const activePrintsQuery = trpc.print.getActivePrints.useQuery(undefined, {
+    refetchInterval: 10_000,
+  });
+
+  // Build a lookup: ipAddress -> user name who started the print
+  const printedByMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ap of activePrintsQuery.data ?? []) {
+      if (ap.startedBy) {
+        map.set(ap.ipAddress, ap.startedBy.name);
+      }
+    }
+    return map;
+  }, [activePrintsQuery.data]);
 
   const [page, setPage] = useState(0);
   const [selectedPrinterIp, setSelectedPrinterIp] = useState<string | null>(
@@ -526,6 +564,7 @@ export default function PrintMonitoring() {
                 key={printer.id}
                 printer={printer}
                 onClick={() => setSelectedPrinterIp(printer.ipAddress)}
+                printedBy={printedByMap.get(printer.ipAddress) ?? null}
               />
             ))}
           </div>
@@ -562,6 +601,7 @@ export default function PrintMonitoring() {
         <PrinterDetail
           printer={selectedPrinter}
           onClose={() => setSelectedPrinterIp(null)}
+          printedBy={printedByMap.get(selectedPrinter.ipAddress) ?? null}
         />
       ) : null}
     </div>
