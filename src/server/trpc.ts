@@ -22,8 +22,15 @@ export const createContext = async (
     headers: headers,
   });
 
-  const source = headers.get("x-trpc-source") ?? "unknown";
-  console.log(">>> tRPC Request from", source);
+  const source = headers.get("x-trpc-source");
+  const username =
+    authSession?.user?.name ??
+    authSession?.user?.email ??
+    source ??
+    "anonymous";
+  console.log(
+    `[${new Date().toISOString()}] >>> tRPC Request from ${username}`,
+  );
 
   return {
     req: opts.req, // Use tRPC's req for compatibility
