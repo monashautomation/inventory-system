@@ -109,7 +109,6 @@ class OllamaMcpProvider implements AIProvider {
   private readonly ollamaUrl: string;
   private readonly model: string;
   private readonly mcpEndpoint: string;
-  private readonly authToken: string;
 
   constructor(
     ollamaUrl = process.env.OLLAMA_URL ?? "",
@@ -120,7 +119,6 @@ class OllamaMcpProvider implements AIProvider {
     this.ollamaUrl = ollamaUrl;
     this.model = model;
     this.mcpEndpoint = mcpEndpoint;
-    this.authToken = authToken;
     const username = "bot";
     const password = process.env.MCP_PASSWORD;
     if (!password) {
