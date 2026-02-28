@@ -12,13 +12,34 @@ import { StreamableHTTPTransport } from '@hono/mcp'
 import { createMcpServer } from 'trpc-to-mcp';
 import { basicAuth } from 'hono/basic-auth'
 import { collectMetrics, initBambuMetricsListener } from './metrics'
-import { initBambuMqttPool } from '@/server/lib/bambuMqtt'
+import { initBambuMqttPool, shutdownBambuMqttPool } from '@/server/lib/bambuMqtt'
 import { initBambuStatusListener } from '@/server/lib/bambu'
 
 
 
 // Load environment variables
 config();
+
+// ─── Process exit diagnostics ────────────────────────────────────────────────
+// Log WHY the process is dying so we can debug container restarts.
+process.on('uncaughtException', (err) => {
+  console.error(`[FATAL] Uncaught exception at ${new Date().toISOString()}:`, err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(`[FATAL] Unhandled rejection at ${new Date().toISOString()}:`, reason);
+});
+process.on('SIGTERM', () => {
+  console.log(`[process] SIGTERM received at ${new Date().toISOString()} — shutting down gracefully`);
+  shutdownBambuMqttPool();
+  prisma.$disconnect().catch(() => {});
+});
+process.on('SIGINT', () => {
+  console.log(`[process] SIGINT received at ${new Date().toISOString()} — shutting down gracefully`);
+  shutdownBambuMqttPool();
+  prisma.$disconnect().catch(() => {});
+});
+process.on('exit', (code) => console.log(`[process] Exiting with code ${code} at ${new Date().toISOString()}`));
 
 // Initialize Hono app
 const app = new Hono();

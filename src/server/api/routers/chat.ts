@@ -200,6 +200,7 @@ You have access to tools for:
     userContext?: { id: string; email?: string },
     authHeaders?: Headers,
   ): Promise<string> {
+    let perRequestClient: Client | null = null;
     try {
       // Create a new MCP client with both basic auth and forwarded user headers
       let mcpClient = this.mcpClient;
@@ -240,6 +241,7 @@ You have access to tools for:
         );
 
         await mcpClient.connect(transport);
+        perRequestClient = mcpClient;
       }
 
       // Fetch MCP tools
@@ -359,6 +361,15 @@ You have access to tools for:
       throw new Error(
         `Failed to generate response: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
+    } finally {
+      // Clean up per-request MCP client to prevent connection/memory leak
+      if (perRequestClient) {
+        try {
+          await perRequestClient.close();
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
     }
   }
 }

@@ -15,6 +15,8 @@ import { prisma } from "@/server/lib/prisma";
 const BAMBU_MQTT_PORT = 8883;
 const BAMBU_MQTT_USER = "bblp";
 const SYNC_INTERVAL_MS = 60_000; // Re-sync with DB every 60 s
+const WATCHDOG_CHECK_MS = 15_000; // Check for silent printers every 15 s
+const WATCHDOG_SILENCE_MS = 60_000; // Fire watchdog after 60 s of no data
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,7 @@ interface PoolEntry {
   ipAddress: string;
   authToken: string;
   connecting: boolean;
+  lastMessageAt: number;
 }
 
 // ─── Module-level state ─────────────────────────────────────────────────────
@@ -38,6 +41,7 @@ interface PoolEntry {
 const pool = new Map<string, PoolEntry>();
 const listeners = new Set<BambuMessageListener>();
 let syncIntervalHandle: ReturnType<typeof setInterval> | null = null;
+let watchdogHandle: ReturnType<typeof setInterval> | null = null;
 
 // ─── Listener management ────────────────────────────────────────────────────
 
@@ -87,6 +91,7 @@ function connectPrinter(printer: {
       protocolVersion: 4, // MQTT 3.1.1 — Bambu printers don't support 5.0
       connectTimeout: 10_000,
       reconnectPeriod: 5_000,
+      keepalive: 30, // Bambu printers silently drop connections; aggressive keepalive detects this
     },
   );
 
@@ -96,6 +101,7 @@ function connectPrinter(printer: {
     ipAddress: printer.ipAddress,
     authToken: printer.authToken,
     connecting: true,
+    lastMessageAt: Date.now(),
   };
 
   pool.set(printer.serialNumber, entry);
@@ -122,6 +128,7 @@ function connectPrinter(printer: {
   });
 
   client.on("message", (_topic, payload) => {
+    entry.lastMessageAt = Date.now();
     try {
       const msg = JSON.parse(payload.toString()) as Record<string, unknown>;
       for (const listener of listeners) {
@@ -223,6 +230,36 @@ export async function syncBambuMqttPool(): Promise<void> {
   }
 }
 
+// ─── Watchdog ─────────────────────────────────────────────────────────────────
+// Bambu printers silently stop publishing MQTT data when idle (delta-only mode)
+// or when another client connects (LAN single-client LIFO bug).  The watchdog
+// detects silence and sends `pushing.start` to kick the printer back awake.
+// This mirrors the ha-bambulab Home Assistant integration's approach.
+
+function runWatchdog(): void {
+  const now = Date.now();
+  for (const [serial, entry] of pool) {
+    if (entry.connecting || !entry.client.connected) continue;
+    const silenceMs = now - entry.lastMessageAt;
+    if (silenceMs > WATCHDOG_SILENCE_MS) {
+      console.log(
+        `[bambu-mqtt] Watchdog: No data from ${entry.printerName} for ${Math.floor(silenceMs / 1000)}s — sending pushing.start`,
+      );
+      const requestTopic = `device/${serial}/request`;
+      const startPush = JSON.stringify({
+        pushing: { sequence_id: "0", command: "start" },
+      });
+      try {
+        entry.client.publish(requestTopic, startPush, { qos: 0 });
+      } catch {
+        // Publish errors are non-fatal — auto-reconnect will handle it
+      }
+      // Reset so we don't spam every check cycle
+      entry.lastMessageAt = now;
+    }
+  }
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 /**
@@ -232,6 +269,7 @@ export async function syncBambuMqttPool(): Promise<void> {
 export async function initBambuMqttPool(): Promise<void> {
   await syncBambuMqttPool();
   syncIntervalHandle = setInterval(syncBambuMqttPool, SYNC_INTERVAL_MS);
+  watchdogHandle = setInterval(runWatchdog, WATCHDOG_CHECK_MS);
   console.log(`[bambu-mqtt] Pool initialized with ${pool.size} connection(s)`);
 }
 
@@ -240,6 +278,10 @@ export function shutdownBambuMqttPool(): void {
   if (syncIntervalHandle) {
     clearInterval(syncIntervalHandle);
     syncIntervalHandle = null;
+  }
+  if (watchdogHandle) {
+    clearInterval(watchdogHandle);
+    watchdogHandle = null;
   }
   for (const [serial] of pool) {
     disconnectPrinter(serial);

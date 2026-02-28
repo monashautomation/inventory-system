@@ -929,7 +929,10 @@ export function shutdownBambuMetricsListener(): void {
 // ─── Collect formatted Prometheus text ──────────────────────────────────────
 
 export function collectBambuMetrics(): string {
-  if (metricsCache.size === 0) return "";
+  if (metricsCache.size === 0) {
+    console.log('[bambu-metrics] Cache empty — no printers reporting yet');
+    return "";
+  }
 
   const lines: string[] = [];
 
