@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { Client } from "@modelcontextprotocol/sdk/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { ChatOllama } from "@langchain/ollama";
+import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import { router, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
@@ -102,7 +102,7 @@ function convertStringTypes(obj: ConvertibleValue): ConvertibleValue {
 
 // Ollama Provider with MCP tool integration
 class OllamaMcpProvider implements AIProvider {
-  private readonly llm: ChatOllama;
+  private readonly llm: ChatOpenAI;
   private readonly mcpClient: Client;
   private readonly transport: StreamableHTTPClientTransport;
   private readonly systemPrompt: string;
@@ -145,17 +145,25 @@ class OllamaMcpProvider implements AIProvider {
       { name: "inventory-client", version: "1.0.0" },
       { capabilities: { prompts: {}, resources: {}, tools: {}, logging: {} } },
     );
-    this.llm = new ChatOllama({
-      baseUrl: this.ollamaUrl,
+    this.llm = new ChatOpenAI({
+      configuration: {
+        baseURL: this.ollamaUrl,
+      },
+      apiKey: authToken,
       model: this.model,
-      temperature: 0.6, // NVIDIA recommended for tool-calling
-      topK: 20,
-      topP: 0.95, // NVIDIA recommended for tool-calling
+      temperature: 0.2,
+      topP: 0.95,
       maxRetries: 2,
-      think: false,
-      headers: this.authToken
-        ? { Authorization: `Bearer ${this.authToken}` }
-        : undefined,
+      frequencyPenalty: 0.1,
+      presencePenalty: 0.1,
+      stop: ["<|im_end|>", "<|endoftext|>"],
+      modelKwargs: {
+        extra_body: {
+          chat_template_kwargs: {
+            enable_thinking: false,
+          },
+        },
+      },
     });
     this.systemPrompt =
       `You are an inventory management assistant for Monash Automation. You help users look up and understand their inventory data using the tools available to you.
@@ -206,7 +214,6 @@ You have access to tools for:
   ): Promise<string> {
     let perRequestClient: Client | null = null;
     try {
-      // Create a new MCP client with both basic auth and forwarded user headers
       let mcpClient = this.mcpClient;
       if (authHeaders) {
         const forwardedHeaders: Record<string, string> = {};
@@ -214,7 +221,6 @@ You have access to tools for:
           forwardedHeaders[key] = value;
         });
 
-        // Add basic auth for MCP endpoint access
         const username = "bot";
         const password = process.env.MCP_PASSWORD;
         if (!password) {
@@ -248,12 +254,10 @@ You have access to tools for:
         perRequestClient = mcpClient;
       }
 
-      // Fetch MCP tools
       const mcpTools = await mcpClient.listTools();
       const langchainTools = mcpTools.tools.map((mcpTool) =>
         tool(
           async (args) => {
-            // Add user context to the arguments if available
             const argsWithUserContext = userContext
               ? {
                   ...(args as Record<string, unknown>),
@@ -285,69 +289,85 @@ You have access to tools for:
         ),
       );
 
-      // Bind tools to LLM
       const llmWithTools = this.llm.bindTools(langchainTools);
+
       const formattedMessages: FormattedMessage[] = [
         { role: "system", content: this.systemPrompt },
         ...messages.map((msg) => ({
           role: msg.role,
-          content: msg.content.concat(msg.role === "user" ? " /no_think" : ""),
+          content: msg.content,
         })),
       ];
-
-      // Initial LLM invocation
 
       let result = await llmWithTools.invoke(
         formattedMessages as BaseLanguageModelInput,
       );
 
-      // Handle tool calls in a loop (LLM may need multiple rounds)
       const MAX_TOOL_ROUNDS = 10;
       let toolRound = 0;
+
       while (result.tool_calls?.length && toolRound < MAX_TOOL_ROUNDS) {
         toolRound++;
-        for (const toolCall of result.tool_calls) {
-          let toolResult;
+
+        // 2. Format the tool calls strictly matching the API schema
+        const formattedToolCalls = result.tool_calls.map((toolCall) => ({
+          id:
+            toolCall.id ??
+            `call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          type: "function" as const,
+          function: {
+            name: toolCall.name,
+            arguments: toolCall.args ? JSON.stringify(toolCall.args) : "{}",
+          },
+        }));
+
+        // 3. Push a SINGLE assistant message containing all the requested tool calls
+        formattedMessages.push({
+          role: "assistant",
+          content: result.content,
+          tool_calls: formattedToolCalls,
+        } as any);
+
+        // 4. Execute all requested tools concurrently
+        const toolPromises = result.tool_calls.map(async (toolCall, index) => {
           try {
-            toolResult = await mcpClient.callTool({
+            const processedArgs = convertStringTypes(toolCall.args) as Record<
+              string,
+              unknown
+            >;
+            const toolResult = await mcpClient.callTool({
               name: toolCall.name,
-              arguments: convertStringTypes(toolCall.args) as Record<
-                string,
-                unknown
-              >,
+              arguments: processedArgs,
             });
+
+            return {
+              id: formattedToolCalls[index].id,
+              result: toolResult,
+            };
           } catch (error) {
-            console.error(`MCP tool call failed for ${toolCall.name}:`, error);
-            toolResult = {
-              error: `Tool call failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            console.error(`Execution failed for tool ${toolCall.name}:`, error);
+            return {
+              id: formattedToolCalls[index].id,
+              result: {
+                error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+              },
             };
           }
+        });
 
-          // Append the tool call as a message to maintain context
-          formattedMessages.push({
-            role: "assistant",
-            content: "",
-            tool_calls: [
-              {
-                id: toolCall.id ?? `call_${Date.now()}`,
-                name: toolCall.name,
-                arguments: convertStringTypes(toolCall.args) as Record<
-                  string,
-                  unknown
-                >,
-              },
-            ],
-          });
+        // Wait for all parallel network requests to finish
+        const completedTools = await Promise.all(toolPromises);
 
-          // Append the tool result as a 'tool' message
+        // 5. Push the results back into the history as 'tool' messages
+        for (const { id, result: toolResult } of completedTools) {
           formattedMessages.push({
             role: "tool",
             content: JSON.stringify(toolResult),
-            tool_call_id: toolCall.id ?? `call_${Date.now()}`,
-          });
+            tool_call_id: id,
+          } as any);
         }
 
-        // Re-invoke LLM with updated message history including tool results
+        // 6. Re-invoke the LLM with the updated context
         result = await llmWithTools.invoke(
           formattedMessages as BaseLanguageModelInput,
         );
@@ -357,19 +377,14 @@ You have access to tools for:
         throw new Error("LLM returned non-string response");
       }
 
-      const removeThinkTagsAtStartAndTopSpace = (text: string): string => {
-        // Remove <think> tags at the start and normalize leading space
-        const replaced = text.replace(/^<think>[\s\S]*?<\/think>\s*/, "");
-        return replaced;
-      };
-      return removeThinkTagsAtStartAndTopSpace(result.content);
+      // Final clean before sending back to the user
+      return result.content;
     } catch (error) {
       console.error("Error generating response:", error);
       throw new Error(
         `Failed to generate response: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     } finally {
-      // Clean up per-request MCP client to prevent connection/memory leak
       if (perRequestClient) {
         try {
           await perRequestClient.close();
