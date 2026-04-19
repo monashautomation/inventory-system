@@ -10,10 +10,15 @@ import { itemBulkDelete } from "../utils/item/item.delete";
 
 export const itemRouter = router({
   create: adminProcedure
-    .input(createItemInput.omit({ serial: true, stored: true, tags: true }))
+    .input(
+      createItemInput
+        .omit({ serial: true, stored: true, tags: true })
+        .extend({ id: z.uuid().optional() }),
+    )
     .mutation(async ({ input }) => {
       return prisma.item.createSerial({
         data: {
+          ...(input.id ? { id: input.id } : {}),
           name: input.name,
           locationId: input.locationId,
           cost: input.cost,
