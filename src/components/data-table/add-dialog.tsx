@@ -1,4 +1,4 @@
-import { Plus, QrCode, X } from "lucide-react";
+import { Plus, QrCode, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +27,9 @@ export function AddDialog() {
   const [isConsumable, setIsConsumable] = useState(false);
   const [overrideId, setOverrideId] = useState<string | null>(null);
   const [idInput, setIdInput] = useState("");
+  const [isCheckingId, setIsCheckingId] = useState(false);
+
+  const utils = trpc.useUtils();
 
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user.role === "admin";
@@ -47,19 +50,46 @@ export function AddDialog() {
     setIsOpen(false);
   };
 
-  const handleQrScan = (result: string) => {
+  const handleQrScan = async (result: string) => {
     const segments = result.split("/");
     const itemId = segments[segments.length - 1];
-    if (itemId) {
+    if (!itemId) return;
+    setIsCheckingId(true);
+    try {
+      const existing = await utils.item.get.fetch({ id: itemId });
+      if (existing) {
+        toast.error("Item ID already exists", {
+          description: `An item named "${existing.name}" already uses this ID.`,
+        });
+        return;
+      }
       setOverrideId(itemId);
       setIdInput(itemId);
+    } catch {
+      setOverrideId(itemId);
+      setIdInput(itemId);
+    } finally {
+      setIsCheckingId(false);
     }
   };
 
-  const applyManualId = () => {
+  const applyManualId = async () => {
     const trimmed = idInput.trim();
-    if (trimmed) {
+    if (!trimmed) return;
+    setIsCheckingId(true);
+    try {
+      const existing = await utils.item.get.fetch({ id: trimmed });
+      if (existing) {
+        toast.error("Item ID already exists", {
+          description: `An item named "${existing.name}" already uses this ID.`,
+        });
+        return;
+      }
       setOverrideId(trimmed);
+    } catch {
+      setOverrideId(trimmed);
+    } finally {
+      setIsCheckingId(false);
     }
   };
 
@@ -129,9 +159,13 @@ export function AddDialog() {
                   variant="outline"
                   size="sm"
                   onClick={applyManualId}
-                  disabled={!idInput.trim()}
+                  disabled={!idInput.trim() || isCheckingId}
                 >
-                  Apply
+                  {isCheckingId ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Apply"
+                  )}
                 </Button>
                 <QRScanner
                   onScan={handleQrScan}
