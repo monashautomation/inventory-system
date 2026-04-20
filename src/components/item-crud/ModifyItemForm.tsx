@@ -5,11 +5,11 @@ import type { inferProcedureOutput } from "@trpc/server";
 import { useForm } from "react-hook-form";
 import z from "zod";
 import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { CascadingLocation } from "./CascadingLocation";
@@ -17,9 +17,9 @@ import { useCallback, useEffect, useState } from "react";
 import { NumberInput } from "../inputs/numeric-input";
 import { Button } from "@/components/ui/button";
 import {
-    HoverCard,
-    HoverCardContent,
-    HoverCardTrigger,
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
 } from "../ui/hover-card";
 import { CircleQuestionMark, PlusIcon, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -31,360 +31,341 @@ import { Separator } from "../ui/separator";
 
 type GetItemOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
 interface GetTagOutput {
-    id: string;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-    type: string;
-    colour: string;
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+  type: string;
+  colour: string;
 }
 
 interface ModifyItemFormProps {
-    item: GetItemOutput;
-    onOpenChange: (open: boolean) => void;
-    onSuccess?: () => void;
+  item: GetItemOutput;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 interface Tag {
-    name: string;
-    type: string;
+  name: string;
+  type: string;
 }
 
 export default function ModifyItemForm({
-    item,
-    onOpenChange,
-    onSuccess,
+  item,
+  onOpenChange,
+  onSuccess,
 }: ModifyItemFormProps) {
-    const { data: session } = authClient.useSession();
-    const isAdmin = session?.user.role === "admin";
-    const [tags, setTags] = useState(item?.tags);
-    const [newTag, setNewTag] = useState<Tag>({ name: "", type: "" });
-    const [restockQty, setRestockQty] = useState(1);
-    const mut = trpc.item.update.useMutation({
-        onError: (error) => {
-            toast.error(error.message || "An error occurred", {
-                description: error.data?.code ?? "Unknown error",
-            });
-        },
-        onSuccess: () => {
-            toast.success("Item successfully modified!");
-            onSuccess?.();
-            onOpenChange(false);
-        },
-    });
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user.role === "admin";
+  const [tags, setTags] = useState(item?.tags);
+  const [newTag, setNewTag] = useState<Tag>({ name: "", type: "" });
+  const [restockQty, setRestockQty] = useState(1);
+  const mut = trpc.item.update.useMutation({
+    onError: (error) => {
+      toast.error(error.message || "An error occurred", {
+        description: error.data?.code ?? "Unknown error",
+      });
+    },
+    onSuccess: () => {
+      toast.success("Item successfully modified!");
+      onSuccess?.();
+      onOpenChange(false);
+    },
+  });
 
-    const restockMut = trpc.consumable.restock.useMutation({
-        onError: (error) => {
-            toast.error(error.message || "Restock failed", {
-                description: error.data?.code ?? "Unknown error",
-            });
-        },
-        onSuccess: () => {
-            toast.success(`Restocked ${restockQty} unit(s)`);
-            onSuccess?.();
-            setRestockQty(1);
-        },
-    });
+  const restockMut = trpc.consumable.restock.useMutation({
+    onError: (error) => {
+      toast.error(error.message || "Restock failed", {
+        description: error.data?.code ?? "Unknown error",
+      });
+    },
+    onSuccess: () => {
+      toast.success(`Restocked ${restockQty} unit(s)`);
+      onSuccess?.();
+      setRestockQty(1);
+    },
+  });
 
-    const form = useForm<z.infer<typeof updateItemInput>>({
-        resolver: zodResolver(updateItemInput),
-        defaultValues: {
-            id: item?.id,
-            serial: item?.serial,
-            name: item?.name,
-            tags: item?.tags.map((tag) => ({
-                id: tag.id,
-                name: tag.name,
-                type: tag.type,
-                colour: tag.colour,
-            })),
-            locationId: item?.locationId,
-            stored: item?.stored,
-            cost: item?.cost,
-        },
-    });
+  const form = useForm<z.infer<typeof updateItemInput>>({
+    resolver: zodResolver(updateItemInput),
+    defaultValues: {
+      id: item?.id,
+      serial: item?.serial,
+      name: item?.name,
+      tags: item?.tags.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        type: tag.type,
+        colour: tag.colour,
+      })),
+      locationId: item?.locationId,
+      stored: item?.stored,
+      cost: item?.cost,
+    },
+  });
 
-    const handleLocationSelect = useCallback(
-        (locationId: string | null) => {
-            if (locationId) {
-                form.setValue("locationId", locationId || "", {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                });
-            }
-        },
-        [form],
-    );
+  const handleLocationSelect = useCallback(
+    (locationId: string | null) => {
+      if (locationId) {
+        form.setValue("locationId", locationId || "", {
+          shouldValidate: true,
+          shouldDirty: true,
+        });
+      }
+    },
+    [form],
+  );
 
-    const handleAddTag = () => {
-        if (!tags || !newTag.name.trim() || !newTag.type.trim()) return;
+  const handleAddTag = () => {
+    if (!tags || !newTag.name.trim() || !newTag.type.trim()) return;
 
-        const newFormattedTag = {
-            id: "-1",
-            name: newTag.name,
-            type: newTag.type,
-            colour: "#000000",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        const updatedTags = [...tags, newFormattedTag];
-        setTags(updatedTags);
-        setNewTag({ name: "", type: "" });
+    const newFormattedTag = {
+      id: "-1",
+      name: newTag.name,
+      type: newTag.type,
+      colour: "#000000",
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    const onUpdateItemSubmit = (values: z.infer<typeof updateItemInput>) => {
-        mut.mutate(values);
-    };
+    const updatedTags = [...tags, newFormattedTag];
+    setTags(updatedTags);
+    setNewTag({ name: "", type: "" });
+  };
 
-    useEffect(() => {
-        if (!tags) return;
+  const onUpdateItemSubmit = (values: z.infer<typeof updateItemInput>) => {
+    mut.mutate(values);
+  };
 
-        const formTags = tags.map((t) => ({
-            id: t.id,
-            name: t.name,
-            type: t.type,
-            colour: t.colour ?? "#000000",
-        }));
-        form.setValue("tags", formTags);
-    }, [tags, form]);
+  useEffect(() => {
+    if (!tags) return;
 
-    const handleRemoveTag = (tagToRemove: GetTagOutput) => {
-        if (!tagToRemove) return;
+    const formTags = tags.map((t) => ({
+      id: t.id,
+      name: t.name,
+      type: t.type,
+      colour: t.colour ?? "#000000",
+    }));
+    form.setValue("tags", formTags);
+  }, [tags, form]);
 
-        setTags((prevTags) => prevTags?.filter((t) => t.id !== tagToRemove.id));
-    };
+  const handleRemoveTag = (tagToRemove: GetTagOutput) => {
+    if (!tagToRemove) return;
 
-    if (!item) {
-        // TODO: Changing loading form.
-        return <div>Loading...</div>;
-    }
+    setTags((prevTags) => prevTags?.filter((t) => t.id !== tagToRemove.id));
+  };
 
-    return (
-        <Form {...form}>
-            <form
-                onSubmit={form.handleSubmit(onUpdateItemSubmit)}
-                className="h-full flex flex-col justify-between overflow-y-auto"
-            >
-                <div className="flex flex-col gap-6 px-6 flex-1 overflow-y-auto">
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Name</FormLabel>
-                                <FormControl>
-                                    <Input {...field} />
-                                </FormControl>
-                            </FormItem>
-                        )}
+  if (!item) {
+    // TODO: Changing loading form.
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onUpdateItemSubmit)}
+        className="h-full flex flex-col justify-between overflow-y-auto"
+      >
+        <div className="flex flex-col gap-6 px-6 flex-1 overflow-y-auto">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <HoverCard>
+            <FormItem>
+              <FormLabel>
+                Serial
+                <HoverCardTrigger asChild>
+                  <sup>
+                    <CircleQuestionMark size={14} />
+                  </sup>
+                </HoverCardTrigger>
+                <HoverCardContent className="w-60">
+                  <p className="text-sm">
+                    For security reasons, you cannot modify the serial code
+                  </p>
+                </HoverCardContent>
+              </FormLabel>
+              <Input value={item?.serial} disabled={true} />
+            </FormItem>
+          </HoverCard>
+
+          <div className="flex flex-col gap-2">
+            {/* TODO: Show current location */}
+            <FormLabel>Location</FormLabel>
+            <CascadingLocation onLocationSelect={handleLocationSelect} />
+          </div>
+
+          <FormLabel>Tags</FormLabel>
+          <div className="flex flex-wrap gap-2">
+            {item &&
+              tags?.map((tag) => (
+                <Badge
+                  key={item.id + tag.id}
+                  style={
+                    {
+                      "--color": tag.colour,
+                    } as React.CSSProperties
+                  }
+                  className="!bg-[#000000] text-white"
+                >
+                  {`${tag.name} ${tag.type}`}
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    size="sm"
+                    className="h-4 w-4 p-0 ml-1"
+                    onClick={() => handleRemoveTag(tag)}
+                  >
+                    <X width={12} />
+                  </Button>
+                </Badge>
+              ))}
+          </div>
+
+          <FormLabel>New Tag</FormLabel>
+
+          {tags && (
+            <div className="flex gap-3 items-end">
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <Input
+                  value={newTag?.name}
+                  onChange={(e) =>
+                    setNewTag((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                    }))
+                  }
+                />
+              </FormItem>
+
+              <FormItem>
+                <FormLabel>Type</FormLabel>
+                <Input
+                  value={newTag?.type}
+                  onChange={(e) =>
+                    setNewTag((prev) => ({
+                      ...prev,
+                      type: e.target.value,
+                    }))
+                  }
+                />
+              </FormItem>
+
+              <Button type="button" onClick={handleAddTag} variant="secondary">
+                <PlusIcon />
+              </Button>
+            </div>
+          )}
+
+          <FormField
+            control={form.control}
+            name="cost"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Cost</FormLabel>
+                <FormControl>
+                  <NumberInput
+                    min={1}
+                    value={item?.cost}
+                    onValueChange={field.onChange}
+                    thousandSeparator=","
+                    className=""
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {item.consumable && isAdmin && (
+            <>
+              <Separator />
+              <div className="flex flex-col gap-3">
+                <FormLabel>Restock</FormLabel>
+                <p className="text-sm text-muted-foreground">
+                  Available: {item.consumable.available}
+                </p>
+                <div className="flex gap-3 items-end">
+                  <FormItem className="flex-1">
+                    <FormLabel>Quantity to Add</FormLabel>
+                    <NumberInput
+                      min={1}
+                      value={restockQty}
+                      onValueChange={(val) => setRestockQty(val ?? 1)}
+                      className=""
                     />
-
-                    <HoverCard>
-                        <FormItem>
-                            <FormLabel>
-                                Serial
-                                <HoverCardTrigger asChild>
-                                    <sup>
-                                        <CircleQuestionMark size={14} />
-                                    </sup>
-                                </HoverCardTrigger>
-                                <HoverCardContent className="w-60">
-                                    <p className="text-sm">
-                                        For security reasons, you cannot modify
-                                        the serial code
-                                    </p>
-                                </HoverCardContent>
-                            </FormLabel>
-                            <Input value={item?.serial} disabled={true} />
-                        </FormItem>
-                    </HoverCard>
-
-                    <div className="flex flex-col gap-2">
-                        {/* TODO: Show current location */}
-                        <FormLabel>Location</FormLabel>
-                        <CascadingLocation
-                            onLocationSelect={handleLocationSelect}
-                        />
-                    </div>
-
-                    <FormLabel>Tags</FormLabel>
-                    <div className="flex flex-wrap gap-2">
-                        {item &&
-                            tags?.map((tag) => (
-                                <Badge
-                                    key={item.id + tag.id}
-                                    style={
-                                        {
-                                            "--color": tag.colour,
-                                        } as React.CSSProperties
-                                    }
-                                    className="!bg-[#000000] text-white"
-                                >
-                                    {`${tag.name} ${tag.type}`}
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        size="sm"
-                                        className="h-4 w-4 p-0 ml-1"
-                                        onClick={() => handleRemoveTag(tag)}
-                                    >
-                                        <X width={12} />
-                                    </Button>
-                                </Badge>
-                            ))}
-                    </div>
-
-                    <FormLabel>New Tag</FormLabel>
-
-                    {tags && (
-                        <div className="flex gap-3 items-end">
-                            <FormItem>
-                                <FormLabel>Name</FormLabel>
-                                <Input
-                                    value={newTag?.name}
-                                    onChange={(e) =>
-                                        setNewTag((prev) => ({
-                                            ...prev,
-                                            name: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </FormItem>
-
-                            <FormItem>
-                                <FormLabel>Type</FormLabel>
-                                <Input
-                                    value={newTag?.type}
-                                    onChange={(e) =>
-                                        setNewTag((prev) => ({
-                                            ...prev,
-                                            type: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </FormItem>
-
-                            <Button
-                                type="button"
-                                onClick={handleAddTag}
-                                variant="secondary"
-                            >
-                                <PlusIcon />
-                            </Button>
-                        </div>
-                    )}
-
-                    <FormField
-                        control={form.control}
-                        name="cost"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Cost</FormLabel>
-                                <FormControl>
-                                    <NumberInput
-                                        min={1}
-                                        value={item?.cost}
-                                        onValueChange={field.onChange}
-                                        thousandSeparator=","
-                                        className=""
-                                    />
-                                </FormControl>
-                            </FormItem>
-                        )}
-                    />
-
-                    {item.consumable && isAdmin && (
-                        <>
-                            <Separator />
-                            <div className="flex flex-col gap-3">
-                                <FormLabel>Restock</FormLabel>
-                                <p className="text-sm text-muted-foreground">
-                                    Available: {item.consumable.available}
-                                </p>
-                                <div className="flex gap-3 items-end">
-                                    <FormItem className="flex-1">
-                                        <FormLabel>Quantity to Add</FormLabel>
-                                        <NumberInput
-                                            min={1}
-                                            value={restockQty}
-                                            onValueChange={(val) =>
-                                                setRestockQty(val ?? 1)
-                                            }
-                                            className=""
-                                        />
-                                    </FormItem>
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        disabled={
-                                            restockMut.isPending ||
-                                            restockQty < 1
-                                        }
-                                        onClick={() =>
-                                            restockMut.mutate([
-                                                {
-                                                    itemId: item.id,
-                                                    quantity: restockQty,
-                                                },
-                                            ])
-                                        }
-                                    >
-                                        {restockMut.isPending
-                                            ? "Restocking..."
-                                            : "Restock"}
-                                    </Button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    {isAdmin && !item.consumable && (
-                        <>
-                            <Separator />
-                            <FormField
-                                control={form.control}
-                                name="stored"
-                                render={({ field }) => {
-                                    const isLabUse = !(field.value ?? true);
-                                    return (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
-                                            <FormLabel
-                                                htmlFor="lab-use"
-                                                className="mb-0"
-                                            >
-                                                Lab Use
-                                            </FormLabel>
-                                            <Switch
-                                                id="lab-use"
-                                                checked={isLabUse}
-                                                onCheckedChange={(
-                                                    checked: boolean,
-                                                ) => {
-                                                    field.onChange(!checked);
-                                                }}
-                                            />
-                                        </FormItem>
-                                    );
-                                }}
-                            />
-                        </>
-                    )}
+                  </FormItem>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={restockMut.isPending || restockQty < 1}
+                    onClick={() =>
+                      restockMut.mutate([
+                        {
+                          itemId: item.id,
+                          quantity: restockQty,
+                        },
+                      ])
+                    }
+                  >
+                    {restockMut.isPending ? "Restocking..." : "Restock"}
+                  </Button>
                 </div>
+              </div>
+            </>
+          )}
 
-                <div className="w-full flex justify-end gap-3 p-6">
-                    <Button
-                        variant="ghost"
-                        type="button"
-                        onClick={() => onOpenChange(false)}
-                    >
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={mut.isPending}>
-                        {mut.isPending ? "Saving..." : "Save Changes"}
-                    </Button>
-                </div>
-            </form>
-        </Form>
-    );
+          {isAdmin && !item.consumable && (
+            <>
+              <Separator />
+              <FormField
+                control={form.control}
+                name="stored"
+                render={({ field }) => {
+                  const isLabUse = !(field.value ?? true);
+                  return (
+                    <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                      <FormLabel htmlFor="lab-use" className="mb-0">
+                        Lab Use
+                      </FormLabel>
+                      <Switch
+                        id="lab-use"
+                        checked={isLabUse}
+                        onCheckedChange={(checked: boolean) => {
+                          field.onChange(!checked);
+                        }}
+                      />
+                    </FormItem>
+                  );
+                }}
+              />
+            </>
+          )}
+        </div>
+
+        <div className="w-full flex justify-end gap-3 p-6">
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={mut.isPending}>
+            {mut.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
 }
