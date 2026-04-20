@@ -13,7 +13,6 @@ import {
   Monitor,
   Wrench,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 import {
   Sidebar,
@@ -27,6 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/sidebar/theme-toggle";
 import { useCart } from "@/contexts/cart-context";
+import { cn } from "@/lib/utils";
 
 // Menu items.
 const items = [
@@ -111,19 +111,26 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild>
                   <a
                     onClick={() => void navigate("/cart")}
-                    className="flex items-center gap-2"
+                    className={cn(
+                      "flex items-center gap-2 rounded-md transition-all",
+                      itemCount > 0 &&
+                        "bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/40 shadow-sm hover:bg-amber-500/20",
+                    )}
                   >
                     <div className="flex items-center gap-2">
-                      <ShoppingCartIcon />
+                      <ShoppingCartIcon
+                        className={cn(
+                          itemCount > 0 && "text-amber-600 dark:text-amber-300",
+                        )}
+                      />
                       <span>Cart</span>
                     </div>
                     {itemCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="h-5 min-w-5 rounded-full px-1 font-mono tabular-nums ml-auto"
-                      >
-                        {itemCount}
-                      </Badge>
+                      <span className="relative ml-auto h-6 min-w-6 rounded-full border border-amber-500/50 bg-amber-500/20 px-1.5 text-amber-800 dark:text-amber-200">
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold leading-none tabular-nums">
+                          {itemCount}
+                        </span>
+                      </span>
                     )}
                   </a>
                 </SidebarMenuButton>
