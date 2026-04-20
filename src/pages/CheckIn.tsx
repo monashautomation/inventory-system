@@ -57,8 +57,13 @@ export default function CheckIn() {
   };
 
   const handleQRScan = (qrData: string) => {
-    // Extract item ID from QR code (assuming QR contains item ID)
-    const itemId = qrData.trim();
+    const url = qrData.trim();
+    const segments = url.split("/");
+    const qrIndex = segments.indexOf("qr");
+    const itemId =
+      qrIndex !== -1
+        ? (segments[qrIndex + 1] ?? "")
+        : (segments[segments.length - 1] ?? "");
 
     // Check if this item is in the loaned items list
     const loanedItem = safeLoanedItems.find((item) => item.itemId === itemId);
@@ -130,7 +135,6 @@ export default function CheckIn() {
                   </span>
                 </h2>
                 <QRScanner
-                  disabled={true}
                   onScan={handleQRScan}
                   title="Scan Item QR Code"
                   description="Scan a QR code to quickly add an item to your check-in list"
