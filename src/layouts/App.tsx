@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useLocation, Link, Outlet } from "react-router-dom";
+import { useParams, Link, Outlet } from "react-router-dom";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -53,8 +53,6 @@ async function loadBreadcrumbTrail(id: string): Promise<Location[]> {
 
 export default function Layout() {
   const { locationId } = useParams();
-  const { pathname } = useLocation();
-  const hideSidebarTrigger = pathname === "/print-cam";
   const [breadcrumbTrail, setBreadcrumbTrail] = useState<Location[] | null>(
     null,
   );
@@ -75,7 +73,7 @@ export default function Layout() {
       <AppSidebar />
       <main className="m-4 w-full">
         <div className="flex flex-row items-center gap-2">
-          {!hideSidebarTrigger && <SidebarTrigger />}
+          <SidebarTrigger />
           <Breadcrumb>
             <BreadcrumbList>
               {breadcrumbTrail?.map((loc, idx) => (

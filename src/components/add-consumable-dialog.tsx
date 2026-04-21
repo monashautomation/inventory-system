@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getCartItemMaxQuantity, useCart } from "@/contexts/cart-context";
-import { useEffect, useState } from "react";
+import { useCart } from "@/contexts/cart-context";
+import { useState } from "react";
 import { NumberInput } from "./inputs/numeric-input";
 import { toast } from "sonner";
 
@@ -26,16 +26,8 @@ export function AddConsumableDialog({
   onClose,
 }: AddConsumableDialogProps) {
   const { addItem, getItem } = useCart();
-  const currentQuantity = getItem(item.id)?.quantity ?? 0;
-  const availableToAdd = Math.max(
-    getCartItemMaxQuantity(item) - currentQuantity,
-    0,
-  );
-  const [itemQty, setItemQty] = useState(1);
-
-  useEffect(() => {
-    setItemQty(availableToAdd > 0 ? 1 : 0);
-  }, [availableToAdd, item.id]);
+  const defaultqty = item && getItem(item.id)?.quantity;
+  const [itemQty, setItemQty] = useState(defaultqty ?? 1);
 
   if (!item) {
     return;
@@ -50,30 +42,25 @@ export function AddConsumableDialog({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const added = addItem({ ...item, quantity: itemQty });
-          if (added) {
-            toast.success("Updated cart");
-            onClose();
-          }
+          addItem({ ...item, quantity: itemQty });
+          toast.success("Updated cart");
+          onClose();
         }}
       >
         <NumberInput
           min={1}
-          max={availableToAdd > 0 ? availableToAdd : 1}
+          max={item.consumable?.available}
           value={itemQty}
           onValueChange={(number) => number && setItemQty(number)}
           placeholder="Qty"
           thousandSeparator=","
           className=""
-          disabled={availableToAdd <= 0}
         />
         <DialogFooter className="mt-6">
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button type="submit" disabled={availableToAdd <= 0}>
-            Add to Cart
-          </Button>
+          <Button type="submit">Add/Update Cart</Button>
         </DialogFooter>
       </form>
     </DialogContent>

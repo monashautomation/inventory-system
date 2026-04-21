@@ -9,15 +9,11 @@ import { trpc } from "@/client/trpc";
 import type { inferProcedureOutput } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 import { TableActions } from "@/components/data-table/table-actions";
-import { ManageLocationsDialog } from "@/components/data-table/manage-locations-dialog";
 import ErrorPage from "./Error";
 import { Route, Routes, useParams } from "react-router-dom";
 import LocationBreadcrumb from "@/components/Location";
 import ModifyItemSheet from "@/components/item-crud/ModifyItemSheet";
 import { keepPreviousData } from "@tanstack/react-query";
-import { authClient } from "@/auth/client";
-import { Button } from "@/components/ui/button";
-import { MapPin } from "lucide-react";
 
 type GetItemsOutput = inferProcedureOutput<
   AppRouter["item"]["list"]
@@ -27,10 +23,6 @@ const Assets = () => {
   const { addItem, itemInCart, removeItem } = useCart();
   const { "*": locationPath } = useParams();
   const locationId = locationPath?.split("/").pop();
-
-  const { data: session } = authClient.useSession();
-  const isAdmin = session?.user.role === "admin";
-  const [locationsDialogOpen, setLocationsDialogOpen] = useState(false);
 
   // Manage pagination state
   const [pageIndex, setPageIndex] = useState(0);
@@ -83,27 +75,8 @@ const Assets = () => {
   const handleAddToCart = useCallback(
     (item: GetItemsOutput) => {
       if (item) {
-        if (!item.consumable) {
-          if (item.stored === false) {
-            toast.error(
-              `${item.name} is marked as Lab Use and cannot be checked out.`,
-            );
-            return;
-          }
-
-          const latest = item.ItemRecords?.slice().sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-          )[0];
-          if (latest?.loaned) {
-            toast.error(`${item.name} is currently on loan.`);
-            return;
-          }
-        }
-        const added = addItem({ ...item, quantity: 1 });
-        if (added) {
-          toast.success("Item added to cart.");
-        }
+        addItem({ ...item, quantity: 1 });
+        toast.success("Item added to cart.");
       }
     },
     [addItem],
@@ -196,23 +169,9 @@ const Assets = () => {
   return (
     <div className="container py-3 p-6 md:p-8">
       {/* Header Section */}
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-left">Assets</h1>
-          <p className="text-muted-foreground">
-            Manage your inventory of assets
-          </p>
-        </div>
-        {isAdmin ? (
-          <Button
-            variant="outline"
-            className="shrink-0"
-            onClick={() => setLocationsDialogOpen(true)}
-          >
-            <MapPin className="mr-2 h-4 w-4" />
-            Manage Locations
-          </Button>
-        ) : null}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-left">Assets</h1>
+        <p className="text-muted-foreground">Manage your inventory of assets</p>
       </div>
 
       <Routes>
@@ -243,11 +202,6 @@ const Assets = () => {
           onSuccess={refetch}
         />
       )}
-
-      <ManageLocationsDialog
-        open={locationsDialogOpen}
-        onOpenChange={setLocationsDialogOpen}
-      />
     </div>
   );
 };

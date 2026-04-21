@@ -17,11 +17,6 @@ interface CartObject {
   available: number;
 }
 
-interface FailedValidation {
-  ok: false;
-  failure: string;
-}
-
 export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
   try {
     const validCart = await validateCart(cart);
@@ -43,11 +38,7 @@ export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
           response.data!.ItemRecords != null,
       )
       .map((response) =>
-        assetCanBeCheckedOut(
-          response.data!.ItemRecords,
-          response.data!.id,
-          response.data!.stored,
-        ),
+        assetIsAvailable(response.data!.ItemRecords, response.data!.id),
       );
 
     filterErrors([...consumables, ...assets]);
@@ -56,8 +47,7 @@ export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
       const consumableUpdates = consumables as CartObject[];
       const assetUpdates = assets as CartObject[];
       await consumableDecrementQuantity(tx, consumableUpdates);
-      await createItemRecord(ctx, tx, consumableUpdates, false);
-      await createItemRecord(ctx, tx, assetUpdates, true);
+      await createItemRecord(ctx, tx, [...consumableUpdates, ...assetUpdates]);
     });
 
     return {
@@ -80,16 +70,16 @@ const createItemRecord = async (
   ctx: string,
   tx: ExtendedTransactionClient,
   items: CartObject[],
-  loaned: boolean,
 ) => {
-  if (items.length === 0) return;
+  const itemRecordData = items.map((item) => ({
+    loaned: true,
+    actionByUserId: ctx,
+    itemId: item.uuid,
+    quantity: item.requestedQuantity,
+  }));
+
   await tx.itemRecord.createMany({
-    data: items.map((item) => ({
-      loaned,
-      actionByUserId: ctx,
-      itemId: item.uuid,
-      quantity: item.requestedQuantity,
-    })),
+    data: itemRecordData,
   });
 };
 
@@ -113,18 +103,7 @@ const consumableDecrementQuantity = async (
   );
 };
 
-const assetCanBeCheckedOut = (
-  itemRecord: ItemRecord[],
-  uuid: string,
-  stored: boolean,
-): CartObject | FailedValidation => {
-  if (!stored) {
-    return {
-      ok: false,
-      failure: `Item ${uuid} is marked for Lab Use and cannot be checked out`,
-    };
-  }
-
+const assetIsAvailable = (itemRecord: ItemRecord[], uuid: string) => {
   if (itemRecord.length == 0) {
     return {
       ok: true,

@@ -19,22 +19,26 @@ export const itemCheckin = async (ctx: string, cart: CartItem[]) => {
     const validCart = await validateCart(cart);
     filterErrors(validCart);
 
-    const consumableIds = validCart.filter((r) => r.data!.consumable != null);
-    if (consumableIds.length > 0) {
-      return {
-        ok: false as const,
-        failures: "Consumables are consumed on checkout and cannot be returned",
-      };
-    }
+    const consumables = validCart
+      .filter((response) => response.data!.consumable != null)
+      .map((response) => ({
+        ok: true as const,
+        uuid: response.data!.id,
+        available: response.data!.consumable!.available,
+        checkedQuantity: response.quantity,
+      }));
 
-    const assets = validCart.map((response) =>
-      handleLoaned(response.data!.ItemRecords, response.data!.id),
-    );
+    const assets = validCart
+      .filter((response) => response.data!.consumable == null)
+      .map((response) =>
+        handleLoaned(response.data!.ItemRecords, response.data!.id),
+      );
 
     filterErrors(assets);
 
     await prisma.$transaction(async (tx) => {
-      const items = assets as CartObject[];
+      await consumableIncrementQuantity(tx, consumables);
+      const items = [...assets, ...consumables] as CartObject[];
       await createItemRecords(tx, ctx, items);
     });
 
@@ -80,6 +84,28 @@ const handleLoaned = (itemRecord: ItemRecord[], uuid: string) => {
     available: 1,
     checkedQuantity: 1,
   };
+};
+
+const consumableIncrementQuantity = async (
+  tx: ExtendedTransactionClient,
+  consumables: CartObject[],
+) => {
+  await Promise.all(
+    consumables.map(async (consumable) => {
+      await tx.item.update({
+        where: { id: consumable.uuid },
+        data: {
+          consumable: {
+            update: {
+              available: consumable.available + consumable.checkedQuantity,
+            },
+          },
+        },
+      });
+    }),
+  );
+
+  return consumables;
 };
 
 const createItemRecords = async (

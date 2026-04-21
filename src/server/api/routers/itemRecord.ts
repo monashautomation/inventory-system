@@ -27,10 +27,7 @@ export const itemRecordRouter = router({
     .query(async ({ input }) => {
       return prisma.itemRecord.findUnique({
         where: { id: input.id },
-        include: {
-          actionBy: true,
-          item: { include: { location: true, consumable: true } },
-        },
+        include: { actionBy: true, item: { include: { location: true } } },
       });
     }),
 
@@ -79,10 +76,7 @@ export const itemRecordRouter = router({
       const [transactions, totalCount] = await Promise.all([
         prisma.itemRecord.findMany({
           // where,
-          include: {
-            actionBy: true,
-            item: { include: { location: true, consumable: true } },
-          },
+          include: { actionBy: true, item: { include: { location: true } } },
           orderBy: { createdAt: "desc" },
           skip: page * pageSize, // Pagination: skip records
           take: pageSize, // Pagination: limit records
@@ -133,7 +127,6 @@ export const itemRecordRouter = router({
         where: {
           actionByUserId: ctx.user.id,
           loaned: true,
-          item: { consumable: { is: null } },
         },
         select: {
           itemId: true,

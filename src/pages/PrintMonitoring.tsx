@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video } from "lucide-react";
 
 type CameraMode = "stream" | "snapshot";
 
@@ -305,8 +303,7 @@ function PrinterDetail({
                 Nozzle
               </span>
               <span className="font-semibold text-lg">
-                {data.nozzleTemp != null ? data.nozzleTemp.toFixed(1) : "—"}
-                °C /{" "}
+                {data.nozzleTemp != null ? data.nozzleTemp.toFixed(1) : "—"}°C /{" "}
                 {data.targetNozzleTemp != null
                   ? data.targetNozzleTemp.toFixed(1)
                   : "—"}
@@ -320,8 +317,7 @@ function PrinterDetail({
                 Bed
               </span>
               <span className="font-semibold text-lg">
-                {data.bedTemp != null ? data.bedTemp.toFixed(1) : "—"}
-                °C /{" "}
+                {data.bedTemp != null ? data.bedTemp.toFixed(1) : "—"}°C /{" "}
                 {data.targetBedTemp != null
                   ? data.targetBedTemp.toFixed(1)
                   : "—"}
@@ -350,9 +346,7 @@ function PrinterDetail({
                 <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className="h-full bg-primary transition-all duration-500"
-                    style={{
-                      width: `${data.progress ?? 0}%`,
-                    }}
+                    style={{ width: `${data.progress ?? 0}%` }}
                   />
                 </div>
                 <span className="font-semibold text-sm">
@@ -520,7 +514,6 @@ function PrinterDetail({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PrintMonitoring() {
-  const navigate = useNavigate();
   const printersQuery = trpc.print.getPrinterMonitoringOptions.useQuery();
   const activePrintsQuery = trpc.print.getActivePrints.useQuery(undefined, {
     refetchInterval: 10_000,
@@ -554,24 +547,12 @@ export default function PrintMonitoring() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Printer Monitoring</h1>
-          <p className="text-muted-foreground">
-            Overview of all printers. Click a printer for full telemetry and
-            camera feed.
-          </p>
-        </div>
-        {printers.some((p) => p.webcamUrl) ? (
-          <Button
-            variant="outline"
-            className="shrink-0"
-            onClick={() => navigate("/print-cam")}
-          >
-            <Video className="mr-2 h-4 w-4" />
-            View All Webcams
-          </Button>
-        ) : null}
+      <div>
+        <h1 className="text-3xl font-bold">Printer Monitoring</h1>
+        <p className="text-muted-foreground">
+          Overview of all printers. Click a printer for full telemetry and
+          camera feed.
+        </p>
       </div>
 
       {printersQuery.isLoading ? (
