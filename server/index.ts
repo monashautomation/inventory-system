@@ -126,9 +126,14 @@ app.get('/api/webcam/:printerId', async (c) => {
         upstreamUrl = upstreamUrl.replace('action=stream', 'action=snapshot');
     }
 
-    // Abort upstream fetch when client disconnects
+    // Abort upstream fetch on client disconnect or after 8 s timeout
     const upstream = new AbortController();
-    c.req.raw.signal.addEventListener('abort', () => upstream.abort());
+    let clientDisconnected = false;
+    c.req.raw.signal.addEventListener('abort', () => {
+        clientDisconnected = true;
+        upstream.abort();
+    });
+    const fetchTimeout = setTimeout(() => upstream.abort(), 8_000);
 
     let upstreamRes: Response;
     try {
@@ -137,12 +142,15 @@ app.get('/api/webcam/:printerId', async (c) => {
             headers: { Accept: '*/*' },
         });
     } catch (error) {
+        clearTimeout(fetchTimeout);
         if (error instanceof Error && error.name === 'AbortError') {
-            return c.body(null, 499 as any);
+            if (clientDisconnected) return c.body(null, 499 as any);
+            throw new HTTPException(502, { message: 'Printer webcam timed out' });
         }
         console.error(`Webcam proxy failed for ${printer.name}:`, error);
         throw new HTTPException(502, { message: 'Failed to connect to printer webcam' });
     }
+    clearTimeout(fetchTimeout);
 
     if (!upstreamRes.ok) {
         throw new HTTPException(502, {

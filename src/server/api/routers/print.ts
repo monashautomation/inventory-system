@@ -17,8 +17,10 @@ import {
   buildPrintJobS3Key,
 } from "@/server/lib/s3";
 import {
+  consumeUserCancelled,
   dispatchToBambu,
   getBambuStatus,
+  markUserCancelled,
   sendBambuCommand,
 } from "@/server/lib/bambu";
 import { syncBambuMqttPool } from "@/server/lib/bambuMqtt";
@@ -563,7 +565,9 @@ export const printRouter = router({
               break;
             case "FAILED":
               state = "IDLE";
-              stateMessage = "Last print failed";
+              stateMessage = consumeUserCancelled(printer.serialNumber)
+                ? "Cancelled"
+                : "Last print failed";
               break;
             case "PREPARE":
               state = "BUSY";
@@ -927,6 +931,7 @@ export const printRouter = router({
             code: "INTERNAL_SERVER_ERROR",
             message: result.details,
           });
+        markUserCancelled(printer.serialNumber);
         return { success: true, message: result.details };
       }
 
