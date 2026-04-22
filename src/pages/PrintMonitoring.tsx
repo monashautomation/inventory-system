@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -528,7 +527,6 @@ function PrinterDetail({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PrintMonitoring() {
-  const navigate = useNavigate();
   const printersQuery = trpc.print.getPrinterMonitoringOptions.useQuery();
   const activePrintsQuery = trpc.print.getActivePrints.useQuery(undefined, {
     refetchInterval: 10_000,
@@ -573,7 +571,13 @@ export default function PrintMonitoring() {
           </p>
         </div>
         {printers.some((p) => p.webcamUrl) ? (
-          <Button variant="secondary" size="sm" onClick={() => { window.location.href = "/print-cam"; }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              window.location.href = "/print-cam";
+            }}
+          >
             <Video className="mr-2 h-4 w-4" />
             View All Webcams
           </Button>

@@ -393,7 +393,13 @@ export default function PrintCam() {
           >
             Refresh All
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => { window.location.href = "/print-monitor"; }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              window.location.href = "/print-monitor";
+            }}
+          >
             ← Back
           </Button>
         </div>
