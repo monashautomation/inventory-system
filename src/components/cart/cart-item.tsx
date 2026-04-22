@@ -8,15 +8,17 @@ import type { CartForm } from "@/components/cart/cart-dialog";
 import { ImageZoom } from "../ui/image-zoom";
 import React, { useCallback, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
+import { Badge } from "../ui/badge";
 
 interface CartDialogItemProps {
   item: CartItem;
   form: UseFormReturn<CartForm>;
-  index: number; // Prefer 'index' instead of 'key'
+  index: number;
+  invalidReason: string | null;
 }
 
 export const CartDialogItem = React.memo(
-  ({ item, form, index }: CartDialogItemProps) => {
+  ({ item, form, index, invalidReason }: CartDialogItemProps) => {
     const { updateQty, removeItem } = useCart();
     const [imageSrc, setImageSrc] = useState(item.image ?? "");
     const [isImgLoading, setIsImgLoading] = useState(true);
@@ -35,7 +37,9 @@ export const CartDialogItem = React.memo(
     );
 
     return (
-      <div className="flex w-full min-h-10 items-center rounded-md justify-between gap-3 p-2 hover:bg-muted transition-colors">
+      <div
+        className={`flex w-full min-h-10 items-center rounded-md justify-between gap-3 p-2 hover:bg-muted transition-colors ${invalidReason ? "border border-destructive/50 bg-destructive/5" : ""}`}
+      >
         {/* Left Section - Image + Name */}
         <div className="flex gap-3 items-center flex-shrink-0">
           <div className="aspect-square h-12 border rounded-lg overflow-hidden">
@@ -63,6 +67,11 @@ export const CartDialogItem = React.memo(
           <div className="flex flex-col text-left truncate">
             <span className="text-sm font-medium truncate">{item.name}</span>
             <span className="text-xs text-muted-foreground">{item.serial}</span>
+            {invalidReason && (
+              <Badge variant="destructive" className="mt-1 w-fit text-xs">
+                {invalidReason}
+              </Badge>
+            )}
           </div>
         </div>
 

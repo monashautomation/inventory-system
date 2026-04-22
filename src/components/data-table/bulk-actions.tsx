@@ -44,15 +44,28 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
   }
 
   const handleBulkAddToCart = () => {
+    let addedCount = 0;
+
     selectedData.forEach((item: TData) => {
-      if (item && !itemInCart(item.id)) {
-        const cartItem: CartItem = { ...item, quantity: 1 };
-        addItem(cartItem);
+      if (!item) {
+        return;
+      }
+
+      if (!item.consumable && itemInCart(item.id)) {
+        return;
+      }
+
+      const cartItem: CartItem = { ...item, quantity: 1 };
+      if (addItem(cartItem)) {
+        addedCount += 1;
       }
     });
-    toast.success(
-      `${selectedCount} item${selectedCount > 1 ? "s" : ""} added to cart.`,
-    );
+
+    if (addedCount > 0) {
+      toast.success(
+        `${addedCount} item${addedCount > 1 ? "s" : ""} added to cart.`,
+      );
+    }
     table.resetRowSelection();
   };
 
@@ -75,9 +88,6 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
     }
   };
 
-  // Check if all selected items are in cart
-  const allInCart = selectedData.every((item: TData) => itemInCart(item.id));
-
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-muted-foreground">
@@ -91,23 +101,13 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {allInCart ? (
-            <DropdownMenuItem
-              onClick={handleBulkRemoveFromCart}
-              className="text-orange-600 hover:!text-orange-600 hover:!bg-orange-100"
-            >
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Remove from Cart
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem
-              onClick={handleBulkAddToCart}
-              className="text-green-600 hover:!text-green-600 hover:!bg-green-100"
-            >
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Add to Cart
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem
+            onClick={handleBulkAddToCart}
+            className="text-green-600 hover:!text-green-600 hover:!bg-green-100"
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            Add to Cart
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={handleBulkDelete}
@@ -116,6 +116,14 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
           >
             <Trash2 className="h-4 w-4 mr-2" />
             {bulkDeleteMut.isPending ? "Deleting..." : "Delete Selected"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={handleBulkRemoveFromCart}
+            className="text-orange-600 hover:!text-orange-600 hover:!bg-orange-100"
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            Remove from Cart
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

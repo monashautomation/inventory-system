@@ -17,6 +17,11 @@ interface CartObject {
   available: number;
 }
 
+interface FailedValidation {
+  ok: false;
+  failure: string;
+}
+
 export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
   try {
     const validCart = await validateCart(cart);
@@ -38,7 +43,11 @@ export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
           response.data!.ItemRecords != null,
       )
       .map((response) =>
-        assetIsAvailable(response.data!.ItemRecords, response.data!.id),
+        assetCanBeCheckedOut(
+          response.data!.ItemRecords,
+          response.data!.id,
+          response.data!.stored,
+        ),
       );
 
     filterErrors([...consumables, ...assets]);
@@ -47,7 +56,8 @@ export const itemCheckout = async (ctx: string, cart: CartItem[]) => {
       const consumableUpdates = consumables as CartObject[];
       const assetUpdates = assets as CartObject[];
       await consumableDecrementQuantity(tx, consumableUpdates);
-      await createItemRecord(ctx, tx, [...consumableUpdates, ...assetUpdates]);
+      await createItemRecord(ctx, tx, consumableUpdates, false);
+      await createItemRecord(ctx, tx, assetUpdates, true);
     });
 
     return {
@@ -70,16 +80,16 @@ const createItemRecord = async (
   ctx: string,
   tx: ExtendedTransactionClient,
   items: CartObject[],
+  loaned: boolean,
 ) => {
-  const itemRecordData = items.map((item) => ({
-    loaned: true,
-    actionByUserId: ctx,
-    itemId: item.uuid,
-    quantity: item.requestedQuantity,
-  }));
-
+  if (items.length === 0) return;
   await tx.itemRecord.createMany({
-    data: itemRecordData,
+    data: items.map((item) => ({
+      loaned,
+      actionByUserId: ctx,
+      itemId: item.uuid,
+      quantity: item.requestedQuantity,
+    })),
   });
 };
 
@@ -103,7 +113,18 @@ const consumableDecrementQuantity = async (
   );
 };
 
-const assetIsAvailable = (itemRecord: ItemRecord[], uuid: string) => {
+const assetCanBeCheckedOut = (
+  itemRecord: ItemRecord[],
+  uuid: string,
+  stored: boolean,
+): CartObject | FailedValidation => {
+  if (!stored) {
+    return {
+      ok: false,
+      failure: `Item ${uuid} is marked for Lab Use and cannot be checked out`,
+    };
+  }
+
   if (itemRecord.length == 0) {
     return {
       ok: true,

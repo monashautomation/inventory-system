@@ -225,6 +225,29 @@ describe("Item checkout testings", () => {
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
     });
 
+    it("Should reject asset marked as lab use", async () => {
+      const labUseAsset = createAvailableAsset({ stored: false });
+
+      const cartItem: CartItem = {
+        itemId: labUseAsset.id,
+        quantity: 1,
+      };
+
+      const validateCartResponse = createOkValidationResponse({
+        quantity: cartItem.quantity,
+        data: labUseAsset,
+      });
+
+      validateCartMock([validateCartResponse]);
+
+      const response = await itemCheckout(testUser.id, [cartItem]);
+
+      expect(response.ok).toBe(false);
+      expect(response.failures).toBeDefined();
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
     it("Should handle validation errors from validateCart", async () => {
       const cartItem: CartItem = {
         itemId: faker.string.uuid(),

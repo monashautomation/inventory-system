@@ -68,7 +68,7 @@ export function CascadingLocation({
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="flex flex-col gap-3">
         {levelsToShow.map((level: number) => {
           const parentId =
             level === 0 ? null : (selectedPath[level - 1]?.id ?? null);

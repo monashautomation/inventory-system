@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Video } from "lucide-react";
 
 type CameraMode = "stream" | "snapshot";
 
@@ -95,34 +96,42 @@ function PrinterCard({
 
       <CardContent className="px-4 py-2 flex flex-col h-full gap-3 relative z-10 pt-2.5">
         {/* Header: Name, Type, Status */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-col min-w-0 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col min-w-0 flex-1 space-y-1">
             <h3 className="font-bold text-base tracking-tight truncate group-hover:text-primary transition-colors">
               {printer.name}
             </h3>
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span className="uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-secondary/60 border border-border/50">
+              <span className="uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-secondary/60 border border-border/50 shrink-0">
                 {printer.type}
               </span>
-              <span className="font-mono text-[10px] opacity-70">
+              <span className="font-mono text-[10px] opacity-70 truncate">
                 {printer.ipAddress}
               </span>
             </div>
+            {data ? (
+              <p
+                className="text-[11px] text-muted-foreground truncate"
+                title={data.stateMessage}
+              >
+                {data.stateMessage}
+              </p>
+            ) : null}
           </div>
           {isLoading ? (
-            <Badge variant="outline" className="animate-pulse shrink-0">
-              Loading…
+            <Badge variant="outline" className="animate-pulse shrink-0 mt-0.5">
+              …
             </Badge>
           ) : data ? (
             <Badge
               variant={statusBadgeVariant(data.state)}
-              className="shrink-0 pl-2 pr-3 py-1 shadow-sm transition-colors border-border/20"
+              className="shrink-0 mt-0.5 pl-2 pr-2.5 py-1 shadow-sm transition-colors border-border/20"
             >
               <span
-                className={`h-2 w-2 rounded-full mr-2 shadow-[0_0_8px_currentColor] ${statusColor(data.state)} ${["PRINTING", "BUSY"].includes(data.state.toUpperCase()) ? "animate-pulse" : ""}`}
+                className={`h-2 w-2 rounded-full mr-1.5 ${statusColor(data.state)} ${["PRINTING", "BUSY"].includes(data.state.toUpperCase()) ? "animate-pulse" : ""}`}
               />
-              <span className="uppercase text-[10px] tracking-wider font-bold">
-                {data.stateMessage}
+              <span className="uppercase text-[10px] tracking-wider font-bold whitespace-nowrap">
+                {data.state}
               </span>
             </Badge>
           ) : null}
@@ -130,20 +139,20 @@ function PrinterCard({
 
         {/* Main Metric & Progress */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-end justify-between">
-            <div className="flex flex-col">
+          <div className="flex items-end justify-between gap-2 min-w-0">
+            <div className="flex flex-col min-w-0">
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-0.5">
                 Progress
               </span>
-              <span className="text-3xl font-black tracking-tighter tabular-nums leading-none">
+              <span className="text-2xl font-black tracking-tighter tabular-nums leading-none">
                 {data?.progress != null ? `${data.progress.toFixed(1)}%` : "—"}
               </span>
             </div>
-            <div className="flex flex-col text-right">
+            <div className="flex flex-col text-right shrink-0">
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-0.5">
                 Remaining
               </span>
-              <span className="text-lg font-bold tabular-nums leading-none text-foreground/80">
+              <span className="text-base font-bold tabular-nums leading-none text-foreground/80">
                 {data?.timeRemaining != null
                   ? formatDuration(data.timeRemaining)
                   : "—"}
@@ -303,7 +312,8 @@ function PrinterDetail({
                 Nozzle
               </span>
               <span className="font-semibold text-lg">
-                {data.nozzleTemp != null ? data.nozzleTemp.toFixed(1) : "—"}°C /{" "}
+                {data.nozzleTemp != null ? data.nozzleTemp.toFixed(1) : "—"}
+                °C /{" "}
                 {data.targetNozzleTemp != null
                   ? data.targetNozzleTemp.toFixed(1)
                   : "—"}
@@ -317,7 +327,8 @@ function PrinterDetail({
                 Bed
               </span>
               <span className="font-semibold text-lg">
-                {data.bedTemp != null ? data.bedTemp.toFixed(1) : "—"}°C /{" "}
+                {data.bedTemp != null ? data.bedTemp.toFixed(1) : "—"}
+                °C /{" "}
                 {data.targetBedTemp != null
                   ? data.targetBedTemp.toFixed(1)
                   : "—"}
@@ -346,7 +357,9 @@ function PrinterDetail({
                 <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${data.progress ?? 0}%` }}
+                    style={{
+                      width: `${data.progress ?? 0}%`,
+                    }}
                   />
                 </div>
                 <span className="font-semibold text-sm">
@@ -535,7 +548,9 @@ export default function PrintMonitoring() {
     null,
   );
 
-  const printers = printersQuery.data ?? [];
+  const printers = (printersQuery.data ?? []).sort(
+    (a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name),
+  );
   const totalPages = Math.max(1, Math.ceil(printers.length / PAGE_SIZE));
   const pagedPrinters = printers.slice(
     page * PAGE_SIZE,
@@ -547,12 +562,26 @@ export default function PrintMonitoring() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Printer Monitoring</h1>
-        <p className="text-muted-foreground">
-          Overview of all printers. Click a printer for full telemetry and
-          camera feed.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Printer Monitoring</h1>
+          <p className="text-muted-foreground">
+            Overview of all printers. Click a printer for full telemetry and
+            camera feed.
+          </p>
+        </div>
+        {printers.some((p) => p.webcamUrl) ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              window.location.href = "/print-cam";
+            }}
+          >
+            <Video className="mr-2 h-4 w-4" />
+            View All Webcams
+          </Button>
+        ) : null}
       </div>
 
       {printersQuery.isLoading ? (

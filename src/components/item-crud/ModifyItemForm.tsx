@@ -26,6 +26,8 @@ import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/client/trpc";
 import { toast } from "sonner";
 import { Badge } from "../ui/badge";
+import { authClient } from "@/auth/client";
+import { Separator } from "../ui/separator";
 
 type GetItemOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
 interface GetTagOutput {
@@ -53,9 +55,11 @@ export default function ModifyItemForm({
   onOpenChange,
   onSuccess,
 }: ModifyItemFormProps) {
-  const [isStored, setIsStored] = useState(item?.stored);
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user.role === "admin";
   const [tags, setTags] = useState(item?.tags);
   const [newTag, setNewTag] = useState<Tag>({ name: "", type: "" });
+  const [restockQty, setRestockQty] = useState(1);
   const mut = trpc.item.update.useMutation({
     onError: (error) => {
       toast.error(error.message || "An error occurred", {
@@ -66,6 +70,19 @@ export default function ModifyItemForm({
       toast.success("Item successfully modified!");
       onSuccess?.();
       onOpenChange(false);
+    },
+  });
+
+  const restockMut = trpc.consumable.restock.useMutation({
+    onError: (error) => {
+      toast.error(error.message || "Restock failed", {
+        description: error.data?.code ?? "Unknown error",
+      });
+    },
+    onSuccess: () => {
+      toast.success(`Restocked ${restockQty} unit(s)`);
+      onSuccess?.();
+      setRestockQty(1);
     },
   });
 
@@ -117,7 +134,6 @@ export default function ModifyItemForm({
   };
 
   const onUpdateItemSubmit = (values: z.infer<typeof updateItemInput>) => {
-    console.log(values);
     mut.mutate(values);
   };
 
@@ -183,24 +199,6 @@ export default function ModifyItemForm({
             </FormItem>
           </HoverCard>
 
-          <FormField
-            control={form.control}
-            name="stored"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="stored">Stored?</FormLabel>
-                <Switch
-                  id="stored"
-                  checked={isStored}
-                  onCheckedChange={(checked: boolean) => {
-                    field.onChange(checked);
-                    setIsStored(checked);
-                  }}
-                />
-              </FormItem>
-            )}
-          />
-
           <div className="flex flex-col gap-2">
             {/* TODO: Show current location */}
             <FormLabel>Location</FormLabel>
@@ -213,7 +211,11 @@ export default function ModifyItemForm({
               tags?.map((tag) => (
                 <Badge
                   key={item.id + tag.id}
-                  style={{ "--color": tag.colour } as React.CSSProperties}
+                  style={
+                    {
+                      "--color": tag.colour,
+                    } as React.CSSProperties
+                  }
                   className="!bg-[#000000] text-white"
                 >
                   {`${tag.name} ${tag.type}`}
@@ -239,7 +241,10 @@ export default function ModifyItemForm({
                 <Input
                   value={newTag?.name}
                   onChange={(e) =>
-                    setNewTag((prev) => ({ ...prev, name: e.target.value }))
+                    setNewTag((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                    }))
                   }
                 />
               </FormItem>
@@ -249,7 +254,10 @@ export default function ModifyItemForm({
                 <Input
                   value={newTag?.type}
                   onChange={(e) =>
-                    setNewTag((prev) => ({ ...prev, type: e.target.value }))
+                    setNewTag((prev) => ({
+                      ...prev,
+                      type: e.target.value,
+                    }))
                   }
                 />
               </FormItem>
@@ -278,6 +286,71 @@ export default function ModifyItemForm({
               </FormItem>
             )}
           />
+
+          {item.consumable && isAdmin && (
+            <>
+              <Separator />
+              <div className="flex flex-col gap-3">
+                <FormLabel>Restock</FormLabel>
+                <p className="text-sm text-muted-foreground">
+                  Available: {item.consumable.available}
+                </p>
+                <div className="flex gap-3 items-end">
+                  <FormItem className="flex-1">
+                    <FormLabel>Quantity to Add</FormLabel>
+                    <NumberInput
+                      min={1}
+                      value={restockQty}
+                      onValueChange={(val) => setRestockQty(val ?? 1)}
+                      className=""
+                    />
+                  </FormItem>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={restockMut.isPending || restockQty < 1}
+                    onClick={() =>
+                      restockMut.mutate([
+                        {
+                          itemId: item.id,
+                          quantity: restockQty,
+                        },
+                      ])
+                    }
+                  >
+                    {restockMut.isPending ? "Restocking..." : "Restock"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isAdmin && !item.consumable && (
+            <>
+              <Separator />
+              <FormField
+                control={form.control}
+                name="stored"
+                render={({ field }) => {
+                  const isLabUse = !(field.value ?? true);
+                  return (
+                    <FormItem className="flex flex-row items-center justify-between rounded-md border p-3">
+                      <FormLabel htmlFor="lab-use" className="mb-0">
+                        Lab Use
+                      </FormLabel>
+                      <Switch
+                        id="lab-use"
+                        checked={isLabUse}
+                        onCheckedChange={(checked: boolean) => {
+                          field.onChange(!checked);
+                        }}
+                      />
+                    </FormItem>
+                  );
+                }}
+              />
+            </>
+          )}
         </div>
 
         <div className="w-full flex justify-end gap-3 p-6">

@@ -340,6 +340,7 @@ export class DatabaseMockFactory {
     return {
       id: faker.string.uuid(),
       loaned: faker.datatype.boolean(),
+      consumed: faker.datatype.boolean(),
       actionByUserId,
       itemId,
       notes: faker.helpers.maybe(() => faker.lorem.sentence()) ?? null,

@@ -8,7 +8,7 @@ import type { AppRouter } from "@/server/api/routers/_app";
 import Loading from "@/components/misc/loading";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
-import { MoveUpLeft, MoveUpRight } from "lucide-react";
+import { MoveUpLeft, MoveUpRight, Flame } from "lucide-react";
 import TransactionDetailsSheet from "@/components/transaction/sheet";
 import ErrorPage from "./Error";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -87,21 +87,27 @@ export default function Transactions() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Status" />
       ),
-      cell: ({ row }) => (
-        <span
-          onClick={() => handleRowClick(row.original)}
-          className={`flex flex-row gap-2 ${
-            row.original?.loaned ? "text-red-500" : "text-green-400"
-          } cursor-pointer  hover:underline transition p-2 rounded`}
-        >
-          {row.original?.loaned ? (
-            <MoveUpLeft size={18} />
-          ) : (
-            <MoveUpRight size={18} />
-          )}
-          {row.original?.loaned ? "Loaned" : "Returned"}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const { loaned } = row.original ?? {};
+        const isConsumable = row.original?.item?.consumable != null;
+        const isConsumed = !loaned && isConsumable;
+        const label = loaned ? "Loaned" : isConsumed ? "Consumed" : "Returned";
+        const color = loaned
+          ? "text-red-500"
+          : isConsumed
+            ? "text-orange-400"
+            : "text-green-400";
+        const Icon = loaned ? MoveUpLeft : isConsumed ? Flame : MoveUpRight;
+        return (
+          <span
+            onClick={() => handleRowClick(row.original)}
+            className={`flex flex-row gap-2 ${color} cursor-pointer hover:underline transition p-2 rounded`}
+          >
+            <Icon size={18} />
+            {label}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "item",

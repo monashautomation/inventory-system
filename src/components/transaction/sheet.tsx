@@ -9,7 +9,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { MoveUpLeft, MoveUpRight } from "lucide-react";
+import { MoveUpLeft, MoveUpRight, Flame } from "lucide-react";
 import type { AppRouter } from "@/server/api/routers/_app";
 import type { inferProcedureOutput } from "@trpc/server";
 
@@ -52,6 +52,7 @@ export default function TransactionDetailsSheet({
 }: Props) {
   if (!selectedRow) return null;
   const isLoaned = !!selectedRow.loaned;
+  const isConsumed = !isLoaned && selectedRow.item?.consumable != null;
 
   return (
     <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
@@ -87,15 +88,21 @@ export default function TransactionDetailsSheet({
                             Status
                           </p>
                           <div
-                            className={`flex items-center gap-2 ${isLoaned ? "text-red-500" : "text-green-400"}`}
+                            className={`flex items-center gap-2 ${isLoaned ? "text-red-500" : isConsumed ? "text-orange-400" : "text-green-400"}`}
                           >
                             {isLoaned ? (
                               <MoveUpLeft size={18} />
+                            ) : isConsumed ? (
+                              <Flame size={18} />
                             ) : (
                               <MoveUpRight size={18} />
                             )}
                             <span className="font-medium">
-                              {isLoaned ? "Loaned" : "Returned"}
+                              {isLoaned
+                                ? "Loaned"
+                                : isConsumed
+                                  ? "Consumed"
+                                  : "Returned"}
                             </span>
                           </div>
                         </div>

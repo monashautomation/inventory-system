@@ -69,6 +69,13 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
     );
   }
 
+  const latestRecord = data.ItemRecords?.slice().sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
+  const isLabUse = data.stored === false;
+  const isInUse = latestRecord?.loaned ?? false;
+  const statusLabel = isLabUse ? "Lab Use" : isInUse ? "On Loan" : "In Storage";
+
   return (
     <div className="p-2 max-w-6xl mx-auto space-y-2">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -116,8 +123,21 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                 <InfoRow
                   label="Status"
                   value={
-                    <Badge variant={data?.stored ? "default" : "secondary"}>
-                      {data?.stored ? "Stored" : "Not Stored"}
+                    <Badge
+                      variant={
+                        isLabUse
+                          ? "default"
+                          : isInUse
+                            ? "destructive"
+                            : "secondary"
+                      }
+                      className={
+                        isLabUse
+                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                          : ""
+                      }
+                    >
+                      {statusLabel}
                     </Badge>
                   }
                 />

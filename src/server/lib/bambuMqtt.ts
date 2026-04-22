@@ -16,7 +16,7 @@ const BAMBU_MQTT_PORT = 8883;
 const BAMBU_MQTT_USER = "bblp";
 const SYNC_INTERVAL_MS = 60_000; // Re-sync with DB every 60 s
 const WATCHDOG_CHECK_MS = 15_000; // Check for silent printers every 15 s
-const WATCHDOG_SILENCE_MS = 60_000; // Fire watchdog after 60 s of no data
+const WATCHDOG_SILENCE_MS = 30_000; // Fire watchdog after 30 s of no data
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -89,9 +89,9 @@ function connectPrinter(printer: {
       rejectUnauthorized: false,
       protocol: "mqtts",
       protocolVersion: 4, // MQTT 3.1.1 — Bambu printers don't support 5.0
-      connectTimeout: 10_000,
-      reconnectPeriod: 5_000,
-      keepalive: 30, // Bambu printers silently drop connections; aggressive keepalive detects this
+      connectTimeout: 8_000,
+      reconnectPeriod: 2_000,
+      keepalive: 20,
     },
   );
 
@@ -108,6 +108,7 @@ function connectPrinter(printer: {
 
   client.on("connect", () => {
     entry.connecting = false;
+    entry.lastMessageAt = Date.now();
     console.log(
       `[bambu-mqtt] Connected to ${printer.name} (${printer.ipAddress})`,
     );

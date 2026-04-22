@@ -468,6 +468,18 @@ export interface BambuCachedStatus {
 
 const statusCache = new Map<string, BambuCachedStatus>();
 
+// Tracks serial numbers where a user explicitly cancelled the print, so a
+// subsequent FAILED state is displayed as "Cancelled" rather than a failure.
+const userCancelledPrinters = new Set<string>();
+
+export function markUserCancelled(serialNumber: string): void {
+  userCancelledPrinters.add(serialNumber);
+}
+
+export function consumeUserCancelled(serialNumber: string): boolean {
+  return userCancelledPrinters.delete(serialNumber);
+}
+
 function createEmptyStatus(): BambuCachedStatus {
   return {
     gcodeState: "UNKNOWN",

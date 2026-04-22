@@ -1,5 +1,6 @@
 import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   locationGetInput,
@@ -7,6 +8,19 @@ import {
   locationUpdateInput,
 } from "@/server/schema/location.schema";
 import type { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+
+async function collectDescendantIds(rootId: string): Promise<string[]> {
+  const ids: string[] = [rootId];
+  const children = await prisma.location.findMany({
+    where: { parentId: rootId },
+    select: { id: true },
+  });
+  for (const child of children) {
+    ids.push(...(await collectDescendantIds(child.id)));
+  }
+  return ids;
+}
 
 export const locationRouter = router({
   create: adminProcedure.input(locationInput).mutation(async ({ input }) => {
@@ -125,11 +139,105 @@ export const locationRouter = router({
     }),
 
   delete: adminProcedure
-    .input(z.object({ id: z.uuid() }))
+    .input(
+      z.object({
+        id: z.uuid(),
+        forceDeleteArchivedItems: z.boolean().optional().default(false),
+      }),
+    )
     .mutation(async ({ input }) => {
-      return prisma.location.delete({
-        where: { id: input.id },
-      });
+      const allIds = await collectDescendantIds(input.id);
+
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const [activeItemCount, archivedItemCount] = await Promise.all([
+            tx.item.count({
+              where: {
+                locationId: { in: allIds },
+                deleted: false,
+              },
+            }),
+            tx.item.count({
+              where: {
+                locationId: { in: allIds },
+                deleted: true,
+              },
+            }),
+          ]);
+
+          if (activeItemCount > 0) {
+            const noun = activeItemCount > 1 ? "items" : "item";
+            const verb = activeItemCount > 1 ? "are" : "is";
+
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `Cannot delete: ${activeItemCount} active ${noun} ${verb} still assigned to this location or its children. Move them first.`,
+            });
+          }
+
+          if (archivedItemCount > 0 && !input.forceDeleteArchivedItems) {
+            const noun = archivedItemCount > 1 ? "items" : "item";
+
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `ARCHIVED_DELETE_CONFIRMATION_REQUIRED:${archivedItemCount}:${noun}`,
+            });
+          }
+
+          if (archivedItemCount > 0 && input.forceDeleteArchivedItems) {
+            const archivedItems = await tx.item.findMany({
+              where: {
+                locationId: { in: allIds },
+                deleted: true,
+              },
+              select: { id: true },
+            });
+
+            const archivedItemIds = archivedItems.map((item) => item.id);
+
+            if (archivedItemIds.length > 0) {
+              await tx.itemRecord.deleteMany({
+                where: {
+                  itemId: { in: archivedItemIds },
+                },
+              });
+
+              await tx.consumable.deleteMany({
+                where: {
+                  itemId: { in: archivedItemIds },
+                },
+              });
+
+              await tx.item.deleteMany({
+                where: {
+                  id: { in: archivedItemIds },
+                  deleted: true,
+                },
+              });
+            }
+          }
+
+          await tx.location.updateMany({
+            where: { id: { in: allIds } },
+            data: { parentId: null },
+          });
+          await tx.location.deleteMany({
+            where: { id: { in: allIds } },
+          });
+        });
+      } catch (error) {
+        const prismaError = error as PrismaClientKnownRequestError;
+
+        if (prismaError.code === "P2003") {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Cannot delete location: one or more items were assigned during deletion. Refresh and try again.",
+          });
+        }
+
+        throw error;
+      }
     }),
 
   list: userProcedure

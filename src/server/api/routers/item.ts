@@ -10,23 +10,33 @@ import { itemBulkDelete } from "../utils/item/item.delete";
 
 export const itemRouter = router({
   create: adminProcedure
-    .input(createItemInput.omit({ serial: true, stored: true, tags: true }))
+    .input(
+      createItemInput
+        .omit({ stored: true, tags: true })
+        .extend({ id: z.uuid().optional() }),
+    )
     .mutation(async ({ input }) => {
-      return prisma.item.createSerial({
-        data: {
-          name: input.name,
-          locationId: input.locationId,
-          cost: input.cost,
-          consumable: input.consumable
-            ? {
-                create: {
-                  available: input.consumable.available,
-                  total: input.consumable.total,
-                },
-              }
-            : undefined,
-        },
-      });
+      const baseData = {
+        ...(input.id ? { id: input.id } : {}),
+        name: input.name,
+        locationId: input.locationId,
+        cost: input.cost,
+        consumable: input.consumable
+          ? {
+              create: {
+                available: input.consumable.available,
+                total: input.consumable.total,
+              },
+            }
+          : undefined,
+      };
+
+      if (input.serial) {
+        return prisma.item.create({
+          data: { ...baseData, serial: input.serial },
+        });
+      }
+      return prisma.item.createSerial({ data: baseData });
     }),
 
   get: userProcedure
@@ -55,52 +65,99 @@ export const itemRouter = router({
       });
     }),
 
-  update: userProcedure.input(updateItemInput).mutation(async ({ input }) => {
-    const { id, locationId, consumable, tags, ...rest } = input;
-    return await prisma.$transaction(async (tx) => {
-      const upsertTags = await Promise.all(
-        tags.map(async (tag) => {
-          const upsertTag = await tx.tag.upsert({
-            where: {
-              name_type_colour: {
-                name: tag.name,
-                type: tag.type,
-                colour: tag.colour ?? "#000000",
-              },
+  getBySerial: userProcedure
+    .input(z.object({ serial: z.string() }))
+    .query(async ({ input }) => {
+      return prisma.item.findUnique({
+        where: { serial: input.serial, deleted: false },
+        select: { id: true, name: true },
+      });
+    }),
+
+  update: userProcedure
+    .input(updateItemInput)
+    .mutation(async ({ input, ctx }) => {
+      const { id, locationId, consumable, tags, ...rest } = input;
+      const itemData = { ...rest };
+
+      // Only admins can modify the storage/lab-use state.
+      if (ctx.user.role !== "admin") {
+        delete itemData.stored;
+      }
+
+      return await prisma.$transaction(async (tx) => {
+        const existingItem = await tx.item.findUnique({
+          where: { id },
+          select: {
+            consumable: { select: { id: true } },
+            ItemRecords: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
             },
-            update: {},
-            create: {
-              name: tag.name,
-              type: tag.type,
-              colour: tag.colour,
+          },
+        });
+
+        const latestRecord = existingItem?.ItemRecords[0];
+        const shouldAutoCheckin =
+          ctx.user.role === "admin" &&
+          itemData.stored === false &&
+          existingItem?.consumable == null &&
+          latestRecord?.loaned === true;
+
+        if (shouldAutoCheckin) {
+          await tx.itemRecord.create({
+            data: {
+              loaned: false,
+              actionByUserId: ctx.user.id,
+              itemId: id,
+              quantity: 1,
             },
           });
+        }
 
-          return upsertTag;
-        }),
-      );
-
-      await tx.item.update({
-        where: { id: id },
-        data: {
-          ...rest,
-          location: locationId ? { connect: { id: locationId } } : undefined,
-          consumable: consumable
-            ? {
-                update: {
-                  available: consumable.available,
-                  total: consumable.total,
+        const upsertTags = await Promise.all(
+          tags.map(async (tag) => {
+            const upsertTag = await tx.tag.upsert({
+              where: {
+                name_type_colour: {
+                  name: tag.name,
+                  type: tag.type,
+                  colour: tag.colour ?? "#000000",
                 },
-              }
-            : undefined,
+              },
+              update: {},
+              create: {
+                name: tag.name,
+                type: tag.type,
+                colour: tag.colour,
+              },
+            });
 
-          tags: {
-            set: upsertTags.map((tag) => ({ id: tag.id })),
+            return upsertTag;
+          }),
+        );
+
+        await tx.item.update({
+          where: { id: id },
+          data: {
+            ...itemData,
+            location: locationId ? { connect: { id: locationId } } : undefined,
+            consumable: consumable
+              ? {
+                  update: {
+                    available: consumable.available,
+                    total: consumable.total,
+                  },
+                }
+              : undefined,
+
+            tags: {
+              set: upsertTags.map((tag) => ({ id: tag.id })),
+            },
           },
-        },
+        });
       });
-    });
-  }),
+    }),
 
   recover: adminProcedure
     .input(z.object({ id: z.uuid() }))
@@ -282,10 +339,13 @@ export const itemRouter = router({
       z.object({
         itemId: z.uuid(),
         quantity: z.number().positive(),
+        labelType: z
+          .union([z.literal(0), z.literal(1), z.literal(2)])
+          .default(0),
       }),
     )
     .mutation(async ({ input }) => {
-      const { itemId, quantity } = input;
+      const { itemId, quantity, labelType } = input;
       try {
         // Verify that the itemId is valid
         const item = await prisma.item.findUniqueOrThrow({
@@ -315,12 +375,12 @@ export const itemRouter = router({
                 serial: serial,
                 quantity: quantity,
                 itemId: itemId,
+                labelType: labelType,
               }),
               // Add 5 second time out to prevent over-printing
               signal: AbortSignal.timeout(5000),
             },
           );
-          console.log(response);
         } catch (e) {
           console.log(e);
           return {
@@ -330,6 +390,8 @@ export const itemRouter = router({
         }
         // Check HTTP status
         if (!response.ok) {
+          const body = await response.text();
+          console.log(`Printer server ${response.status} body:`, body);
           return {
             ok: false as const,
             error: `Printer server error: ${response.status}`,

@@ -84,6 +84,7 @@ model Location {
 model ItemRecord {
     id             String   @id @default(uuid())
     loaned         Boolean
+    consumed       Boolean  @default(false)
     actionBy       User     @relation("UserToItemRecord", fields: [actionByUserId], references: [id])
     actionByUserId String
     item           Item     @relation("ItemToItemRecord", fields: [itemId], references: [id])

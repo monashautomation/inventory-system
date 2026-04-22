@@ -22,6 +22,8 @@ const checkinFormSchema = z.object({
 });
 
 export default function CheckIn() {
+  const utils = trpc.useUtils();
+
   const {
     data: loanedItems,
     isLoading,
@@ -29,9 +31,11 @@ export default function CheckIn() {
   } = trpc.itemRecord.getUserLoanedItems.useQuery();
 
   const checkinMut = trpc.item.checkinCart.useMutation({
-    onSuccess: (data) => {
-      toast.success("Items checked out successfully");
-      console.log("Success response:", data);
+    onSuccess: () => {
+      toast.success("Items checked in successfully");
+      form.reset({ items: [] });
+      void utils.itemRecord.getUserLoanedItems.invalidate();
+      void utils.item.list.invalidate();
     },
     onError: (error) => {
       toast.error(`Failed to check in items: ${error.message}`);
@@ -53,8 +57,13 @@ export default function CheckIn() {
   };
 
   const handleQRScan = (qrData: string) => {
-    // Extract item ID from QR code (assuming QR contains item ID)
-    const itemId = qrData.trim();
+    const url = qrData.trim();
+    const segments = url.split("/");
+    const qrIndex = segments.indexOf("qr");
+    const itemId =
+      qrIndex !== -1
+        ? (segments[qrIndex + 1] ?? "")
+        : (segments[segments.length - 1] ?? "");
 
     // Check if this item is in the loaned items list
     const loanedItem = safeLoanedItems.find((item) => item.itemId === itemId);
@@ -126,7 +135,6 @@ export default function CheckIn() {
                   </span>
                 </h2>
                 <QRScanner
-                  disabled={true}
                   onScan={handleQRScan}
                   title="Scan Item QR Code"
                   description="Scan a QR code to quickly add an item to your check-in list"

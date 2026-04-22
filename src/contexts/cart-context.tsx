@@ -19,6 +19,46 @@ export const cartItemSchema = z.object({
 type GetItemsOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
 export type CartItem = GetItemsOutput & { quantity: number };
 
+export function getCartItemMaxQuantity(item: Pick<CartItem, "consumable">) {
+  return item.consumable?.available ?? 1;
+}
+
+export function getNextCartQuantity(
+  currentQuantity: number,
+  requestedQuantity: number,
+  maxQuantity: number,
+) {
+  const nextQuantity = currentQuantity + requestedQuantity;
+
+  if (requestedQuantity < 1 || maxQuantity < 1 || nextQuantity > maxQuantity) {
+    return null;
+  }
+
+  return nextQuantity;
+}
+
+export function resolveCartItemAddition(
+  existingItem: CartItem | undefined,
+  incomingItem: CartItem,
+) {
+  const currentQuantity = existingItem?.quantity ?? 0;
+  const maxQuantity = getCartItemMaxQuantity(existingItem ?? incomingItem);
+  const nextQuantity = getNextCartQuantity(
+    currentQuantity,
+    incomingItem.quantity,
+    maxQuantity,
+  );
+
+  if (nextQuantity === null) {
+    return null;
+  }
+
+  return {
+    ...(existingItem ?? incomingItem),
+    quantity: nextQuantity,
+  };
+}
+
 const CartActions = {
   ADD_ITEM: "ADD_ITEM",
   REMOVE_ITEM: "REMOVE_ITEM",
@@ -49,14 +89,10 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       const itemIdx = state.items.findIndex(
         (item) => item.id === action.payload.id,
       );
+      const existingItem = itemIdx === -1 ? undefined : state.items[itemIdx];
 
-      // New entry to the cart, append item to cart
-      if (itemIdx === -1) {
-        const maxQty = action.payload.consumable?.available ?? 1;
-        const newQty = Math.min(action.payload.quantity, maxQty);
-
-        action.payload.quantity = newQty;
-
+      // New entry to the cart, append item to cart.
+      if (!existingItem) {
         return {
           ...state,
           lastAction: action,
@@ -68,16 +104,9 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         };
       }
 
-      // Item already exists, updating its quantity in the cart.
+      // Item already exists, replace it with the merged cart quantity.
       const updatedItems = [...state.items];
-      const existingItems = updatedItems[itemIdx];
-      const maxQty = existingItems.consumable?.available ?? 1;
-      const newQty = Math.min(action.payload.quantity, maxQty);
-
-      updatedItems[itemIdx] = {
-        ...existingItems,
-        quantity: newQty,
-      };
+      updatedItems[itemIdx] = action.payload;
 
       return {
         ...state,
@@ -133,7 +162,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
 export interface CartContextType {
   items: CartItem[];
-  addItem: (item: CartItem) => void;
+  addItem: (item: CartItem) => boolean;
   removeItem: (itemId: string | number) => void;
   updateQty: (itemId: string | number, quantity: number) => void;
   clearCart: () => void;
@@ -165,11 +194,13 @@ export function CartProvider({
   const [state, dispatch] = useReducer(cartReducer, initialState);
   const isInitialMount = useRef(true);
 
+  const utils = trpc.useUtils();
+
   const checkoutMut = trpc.item.checkoutCart.useMutation({
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success("Items checked out successfully");
       clearCart();
-      console.log("checkout response:", data);
+      void utils.item.list.invalidate();
     },
     onError: (error) => {
       toast.error(`Failed to check out items: ${error.message}`);
@@ -188,7 +219,10 @@ export function CartProvider({
       if (savedCart) {
         const cartData: CartItem[] = JSON.parse(savedCart) as CartItem[];
         if (Array.isArray(cartData)) {
-          dispatch({ type: CartActions.LOAD_CART, payload: cartData });
+          dispatch({
+            type: CartActions.LOAD_CART,
+            payload: cartData,
+          });
         }
       }
     } catch (err) {
@@ -223,7 +257,45 @@ export function CartProvider({
 
   // Cart actions
   const addItem = (cartItem: CartItem) => {
-    dispatch({ type: CartActions.ADD_ITEM, payload: cartItem });
+    if (!cartItem.consumable) {
+      if (cartItem.stored === false) {
+        toast.error(
+          `${cartItem.name} is marked as Lab Use and cannot be checked out.`,
+        );
+        return false;
+      }
+
+      const latest = cartItem.ItemRecords?.slice().sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+      if (latest?.loaned) {
+        toast.error(`${cartItem.name} is currently on loan.`);
+        return false;
+      }
+    }
+
+    const existingItem = state.items.find((item) => item.id === cartItem.id);
+    const nextItem = resolveCartItemAddition(existingItem, cartItem);
+
+    if (nextItem === null) {
+      const currentQuantity = existingItem?.quantity ?? 0;
+      const maxQuantity = getCartItemMaxQuantity(existingItem ?? cartItem);
+      const availableQuantity = Math.max(maxQuantity - currentQuantity, 0);
+      toast.error(
+        availableQuantity > 0
+          ? `Only ${availableQuantity} more available`
+          : "No additional items are available",
+      );
+      return false;
+    }
+
+    dispatch({
+      type: CartActions.ADD_ITEM,
+      payload: nextItem,
+    });
+
+    return true;
   };
 
   const removeItem = (itemId: string | number) => {

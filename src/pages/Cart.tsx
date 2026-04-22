@@ -22,6 +22,27 @@ import { Form } from "@/components/ui/form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/client/trpc";
+function getItemInvalidReason(
+  item: ReturnType<typeof useCart>["items"][number],
+): string | null {
+  if (item.consumable) {
+    if (item.quantity > (item.consumable.available ?? 0)) {
+      return `Only ${item.consumable.available} available`;
+    }
+
+    return null;
+  }
+
+  if (item.stored === false) {
+    return "Marked as Lab Use";
+  }
+
+  const latest = item.ItemRecords?.slice().sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
+
+  return latest?.loaned ? "Currently in use" : null;
+}
 
 export default function Cart() {
   const { items, clearCart, checkout, addItem, itemInCart } = useCart();
@@ -88,7 +109,29 @@ export default function Cart() {
       return;
     }
 
-    if (itemInCart(data.id)) {
+    if (!data.consumable && data.stored === false) {
+      toast.error(
+        `${data.name} is marked as Lab Use and cannot be checked out.`,
+      );
+      setQrCode("");
+      return;
+    }
+
+    if (!data.consumable) {
+      const latest = data.ItemRecords?.slice().sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+      if (latest?.loaned) {
+        toast.error(
+          `${data.name} is currently on loan and cannot be checked out.`,
+        );
+        setQrCode("");
+        return;
+      }
+    }
+
+    if (!data.consumable && itemInCart(data.id)) {
       toast.info("Item is already in your cart");
       setQrCode("");
       return;
@@ -96,14 +139,26 @@ export default function Cart() {
 
     // Add item to cart
 
-    addItem({ ...data, quantity: 1 });
-    toast.success("Item added to cart");
+    const added = addItem({ ...data, quantity: 1 });
+    if (added) {
+      toast.success("Item added to cart");
+    }
     setQrCode("");
   }, [data, isLoading, error, itemInCart, addItem, qrCode]);
 
   const getFormIndex = (itemId: string) => {
     return items.findIndex((item) => item.id === itemId);
   };
+
+  const invalidReasons = new Map<string, string>(
+    items
+      .map(
+        (item) =>
+          [item.id, getItemInvalidReason(item)] as [string, string | null],
+      )
+      .filter((entry): entry is [string, string] => entry[1] !== null),
+  );
+  const hasInvalidItems = invalidReasons.size > 0;
 
   // Calculate total items
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -193,6 +248,7 @@ export default function Cart() {
                           item={item}
                           index={getFormIndex(item.id)}
                           form={form}
+                          invalidReason={invalidReasons.get(item.id) ?? null}
                         />
                         {index < items.length - 1 && (
                           <Separator className="my-5" />
@@ -203,9 +259,19 @@ export default function Cart() {
                 </div>
 
                 <div className="pt-6">
-                  <Button className="w-full md:w-auto" size="lg" type="submit">
+                  <Button
+                    className="w-full md:w-auto"
+                    size="lg"
+                    type="submit"
+                    disabled={hasInvalidItems}
+                  >
                     Proceed to Checkout
                   </Button>
+                  {hasInvalidItems && (
+                    <p className="mt-2 text-xs text-destructive">
+                      Remove or fix invalid items before checking out.
+                    </p>
+                  )}
                 </div>
               </div>
             </form>

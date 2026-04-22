@@ -42,6 +42,8 @@ const trpcClient = trpc.createClient({
       headers: () => ({
         "x-trpc-source": "react",
       }),
+      fetch: (url, options) =>
+        fetch(url, { ...options, credentials: "include" }),
     }),
   ],
 });

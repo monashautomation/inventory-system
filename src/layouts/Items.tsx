@@ -138,7 +138,11 @@ function Items({
                 tag && (
                   <Badge
                     key={row.original?.id + tag.id}
-                    style={{ "--color": tag.colour } as React.CSSProperties}
+                    style={
+                      {
+                        "--color": tag.colour,
+                      } as React.CSSProperties
+                    }
                     className="!bg-[#000000] text-white"
                   >
                     {`${tag.name} ${tag.type}`}
@@ -192,19 +196,35 @@ function Items({
           },
         }
       : {
-          accessorKey: "stored",
-          header: () => "Stored",
+          id: "status",
+          header: () => "Status",
           cell: ({ row }) => {
-            const signedOut = row.getValue("stored") ? true : false;
+            const records = row.original.ItemRecords;
+            const latest = records
+              ?.slice()
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(a.createdAt).getTime(),
+              )[0];
+            const isLabUse = row.original.stored === false;
+            const isInUse = latest?.loaned ?? false;
+            const label = isLabUse
+              ? "Lab Use"
+              : isInUse
+                ? "On Loan"
+                : "In Storage";
             return (
-              <HoverCard>
-                <HoverCardTrigger>
-                  <div className="items-center flex justify-items-center">
-                    <Checkbox checked={signedOut} />
-                  </div>
-                </HoverCardTrigger>
-                <HoverCardContent>{"Not Signed Out"}</HoverCardContent>
-              </HoverCard>
+              <Badge
+                variant={
+                  isLabUse ? "default" : isInUse ? "destructive" : "secondary"
+                }
+                className={
+                  isLabUse ? "bg-blue-600 text-white hover:bg-blue-700" : ""
+                }
+              >
+                {label}
+              </Badge>
             );
           },
         },

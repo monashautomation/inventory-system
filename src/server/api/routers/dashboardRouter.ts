@@ -3,6 +3,33 @@ import { z } from "zod";
 import { userProcedure, router } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 
+type ConsumptionRange = "1d" | "1w" | "1m" | "3m" | "6m" | "1yr";
+
+const getRangeStart = (range: ConsumptionRange): Date => {
+  const d = new Date();
+  switch (range) {
+    case "1d":
+      d.setDate(d.getDate() - 1);
+      break;
+    case "1w":
+      d.setDate(d.getDate() - 7);
+      break;
+    case "1m":
+      d.setMonth(d.getMonth() - 1);
+      break;
+    case "3m":
+      d.setMonth(d.getMonth() - 3);
+      break;
+    case "6m":
+      d.setMonth(d.getMonth() - 6);
+      break;
+    case "1yr":
+      d.setFullYear(d.getFullYear() - 1);
+      break;
+  }
+  return d;
+};
+
 export const dashboardRouter = router({
   getLoanHistory: userProcedure
     .meta({
@@ -91,6 +118,16 @@ export const dashboardRouter = router({
     .query(async ({ input }) => {
       const items = await prisma.item.findMany({
         take: input.limit,
+        where: {
+          consumable: {
+            is: null,
+          },
+          ItemRecords: {
+            some: {
+              loaned: true,
+            },
+          },
+        },
         include: {
           ItemRecords: {
             where: { loaned: true },
@@ -132,6 +169,58 @@ export const dashboardRouter = router({
         loaned,
         available: available._sum.available ?? 0,
       };
+    }),
+
+  getConsumptionStats: userProcedure
+    .input(z.object({ range: z.enum(["1d", "1w", "1m", "3m", "6m", "1yr"]) }))
+    .query(async ({ input }) => {
+      const startDate = getRangeStart(input.range);
+      const records = await prisma.itemRecord.findMany({
+        where: {
+          loaned: false,
+          createdAt: { gte: startDate },
+          item: { consumable: { isNot: null } },
+        },
+        include: { item: { select: { cost: true } } },
+      });
+      const totalConsumed = records.reduce((sum, r) => sum + r.quantity, 0);
+      const totalCost = records.reduce(
+        (sum, r) => sum + r.quantity * r.item.cost,
+        0,
+      );
+      return { totalConsumed, totalCost };
+    }),
+
+  getTopConsumedConsumables: userProcedure
+    .input(
+      z.object({
+        range: z.enum(["1d", "1w", "1m", "3m", "6m", "1yr"]),
+        limit: z.number().min(1).max(20).default(10),
+      }),
+    )
+    .query(async ({ input }) => {
+      const startDate = getRangeStart(input.range);
+      const records = await prisma.itemRecord.groupBy({
+        by: ["itemId"],
+        where: {
+          loaned: false,
+          createdAt: { gte: startDate },
+          item: { consumable: { isNot: null } },
+        },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: input.limit,
+      });
+      const items = await prisma.item.findMany({
+        where: { id: { in: records.map((r) => r.itemId) } },
+        select: { id: true, name: true, serial: true },
+      });
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      return records.map((r) => ({
+        name: itemMap.get(r.itemId)?.name ?? "Unknown",
+        serial: itemMap.get(r.itemId)?.serial ?? "-",
+        consumed: r._sum.quantity ?? 0,
+      }));
     }),
 
   getTopTags: userProcedure

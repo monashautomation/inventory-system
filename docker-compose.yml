@@ -39,7 +39,7 @@ services:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password123 # Change this!
     volumes:
-      - ./minio_data:/data
+      - minio_data:/data
     command: server /data --console-address ":9001"
     restart: unless-stopped
 
@@ -60,5 +60,6 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
 
 

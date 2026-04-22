@@ -32,8 +32,28 @@ export const formSchema = z.object({
 
 export type CartForm = z.infer<typeof formSchema>;
 
+function getItemInvalidReason(
+  item: ReturnType<typeof useCart>["items"][number],
+): string | null {
+  if (item.consumable) {
+    if (item.quantity > (item.consumable.available ?? 0)) {
+      return `Only ${item.consumable.available} available`;
+    }
+    return null;
+  }
+
+  if (item.stored === false) {
+    return "Marked as Lab Use";
+  }
+
+  const latest = item.ItemRecords?.slice().sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
+  return latest?.loaned ? "Currently on loan" : null;
+}
+
 export default function CartDialog() {
-  const { items, itemCount } = useCart();
+  const { items, itemCount, checkout } = useCart();
 
   const form = useForm<CartForm>({
     resolver: zodResolver(formSchema),
@@ -42,9 +62,19 @@ export default function CartDialog() {
     },
   });
 
-  const onSubmit = (data: CartForm) => {
-    console.log("IMPLEMENT CHECKOUT SUBMISSION");
-    console.log("Cart Payload", data);
+  const invalidReasons = new Map<string, string>(
+    items
+      .map(
+        (item) =>
+          [item.id, getItemInvalidReason(item)] as [string, string | null],
+      )
+      .filter((entry): entry is [string, string] => entry[1] !== null),
+  );
+  const hasInvalidItems = invalidReasons.size > 0;
+
+  const onSubmit = () => {
+    if (hasInvalidItems) return;
+    checkout();
   };
 
   const getFormIndex = (itemId: string) => {
@@ -89,9 +119,11 @@ export default function CartDialog() {
                     const formIndex = getFormIndex(item.id);
                     return (
                       <CartDialogItem
+                        key={item.id}
                         index={formIndex}
                         form={form}
                         item={item}
+                        invalidReason={invalidReasons.get(item.id) ?? null}
                       />
                     );
                   })}
@@ -105,13 +137,24 @@ export default function CartDialog() {
                 </div>
               )}
 
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="ghost">Cancel</Button>
-                </DialogClose>
-                <Button type="submit" form="checkout-form">
-                  Checkout
-                </Button>
+              <DialogFooter className="flex-col items-end gap-2">
+                {hasInvalidItems && (
+                  <p className="text-xs text-destructive w-full text-right">
+                    Remove or fix invalid items before checking out.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <DialogClose asChild>
+                    <Button variant="ghost">Cancel</Button>
+                  </DialogClose>
+                  <Button
+                    type="submit"
+                    form="checkout-form"
+                    disabled={hasInvalidItems || items.length === 0}
+                  >
+                    Checkout
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </form>
