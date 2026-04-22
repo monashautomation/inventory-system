@@ -1688,7 +1688,7 @@ export const printRouter = router({
         time_remaining?: number;
       }
 
-      type ActivePrintEntry = {
+      interface ActivePrintEntry {
         printerName: string;
         printerType: string;
         ipAddress: string;
@@ -1698,7 +1698,7 @@ export const printRouter = router({
         timeRemaining: number | null;
         startedBy: { name: string; email: string } | null;
         jobStartedAt: Date | null;
-      };
+      }
 
       const activePrints: ActivePrintEntry[] = [];
 
