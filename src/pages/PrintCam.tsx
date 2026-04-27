@@ -3,6 +3,7 @@ import { trpc } from "@/client/trpc";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { VideoOff } from "lucide-react";
+import logoHorizontal from "@/assets/Logo_Text_Horizontal.png";
 
 interface PrinterCamData {
   printerId: string;
@@ -444,10 +445,14 @@ export default function PrintCam() {
       style={{ height: "calc(100vh - 2rem)" }}
     >
       <div className="flex items-center justify-between gap-4 mb-3 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold">All Webcams</h1>
-          <p className="text-sm text-muted-foreground">
-            Live snapshot view · click any tile to refresh it
+        <div className="flex flex-col justify-center" style={{ minHeight: 0 }}>
+          <img
+            src={logoHorizontal}
+            alt="Monash Automation"
+            className="h-8 w-auto object-contain object-left"
+          />
+          <p className="text-xs text-muted-foreground mt-0.5">
+            3D printer monitoring · live snapshots
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
