@@ -17,6 +17,11 @@ import {
     shutdownBambuMqttPool,
 } from "@/server/lib/bambuMqtt";
 import { initBambuStatusListener } from "@/server/lib/bambu";
+import {
+    initPrintCamPoller,
+    getCachedSnapshot,
+    getCachedWebcamUrl,
+} from "@/server/lib/printCamPoller";
 
 // Load environment variables
 config();
@@ -115,6 +120,11 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 // ─── Webcam proxy ────────────────────────────────────────────────────────────
 // Streams printer webcam feeds through the server so clients outside the local
 // network can view them. Requires an authenticated session.
+//
+// mode=cached_snapshot: serve the server-side polled snapshot from memory.
+//   - If cache is populated with bytes → return immediately (no upstream fetch).
+//   - If cache says "mjpeg" (null entry) → fall through to live proxy.
+//   - If cache is cold (undefined) → fall through to live proxy.
 app.get("/api/webcam/:printerId", async (c) => {
     const session = await auth.api.getSession({
         headers: c.req.raw.headers,
@@ -124,20 +134,58 @@ app.get("/api/webcam/:printerId", async (c) => {
     }
 
     const printerId = c.req.param("printerId");
-    const printer = await prisma.printer.findUnique({
-        where: { id: printerId },
-        select: { webcamUrl: true, name: true },
-    });
+    const mode = c.req.query("mode");
 
-    if (!printer?.webcamUrl) {
-        throw new HTTPException(404, {
-            message: "Printer or webcam URL not found",
-        });
+    // cached_snapshot: serve ONLY from in-memory snapshot cache.
+    // Never fall through to a live upstream fetch — that would hold a connection
+    // open for up to 8 s per printer and starve tRPC requests under Vite's proxy.
+    // null  → MJPEG stream (can't snapshot server-side; client shows placeholder)
+    // undefined → poller hasn't run yet; client will retry on next tick
+    if (mode === "cached_snapshot") {
+        const cached = getCachedSnapshot(printerId);
+        if (cached) {
+            const headers = new Headers({
+                "Content-Type": cached.contentType,
+                "Content-Length": String(cached.data.length),
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "X-Cache": "HIT",
+            });
+            return new Response(cached.data, { status: 200, headers });
+        }
+        // Cache miss or MJPEG — return 204 so the browser frees the connection
+        // immediately.  The client img onError handler will show a placeholder.
+        return new Response(null, { status: 204 });
     }
 
-    // Convert stream URL to snapshot URL when requested
-    let upstreamUrl = printer.webcamUrl;
-    const mode = c.req.query("mode");
+    let webcamUrl: string;
+    let printerLabel: string;
+    try {
+        const printer = await prisma.printer.findUnique({
+            where: { id: printerId },
+            select: { webcamUrl: true, name: true },
+        });
+        if (!printer?.webcamUrl) {
+            throw new HTTPException(404, {
+                message: "Printer or webcam URL not found",
+            });
+        }
+        webcamUrl = printer.webcamUrl;
+        printerLabel = printer.name;
+    } catch (err) {
+        if (err instanceof HTTPException) throw err;
+        throw new HTTPException(502, { message: "Failed to look up printer" });
+    }
+
+    return proxyWebcam(c, webcamUrl, printerLabel, mode);
+});
+
+async function proxyWebcam(
+    c: Parameters<Parameters<typeof app.get>[1]>[0],
+    rawUrl: string,
+    label: string,
+    mode: string | undefined,
+) {
+    let upstreamUrl = rawUrl;
     if (mode === "snapshot" && upstreamUrl.includes("action=stream")) {
         upstreamUrl = upstreamUrl.replace("action=stream", "action=snapshot");
     }
@@ -165,7 +213,7 @@ app.get("/api/webcam/:printerId", async (c) => {
                 message: "Printer webcam timed out",
             });
         }
-        console.error(`Webcam proxy failed for ${printer.name}:`, error);
+        console.error(`Webcam proxy failed for ${label}:`, error);
         throw new HTTPException(502, {
             message: "Failed to connect to printer webcam",
         });
@@ -194,7 +242,7 @@ app.get("/api/webcam/:printerId", async (c) => {
     headers.set("X-Accel-Buffering", "no");
 
     return new Response(upstreamRes.body, { status: 200, headers });
-});
+}
 
 // MCP route
 const mcpPassword = process.env.MCP_PASSWORD;
@@ -301,6 +349,8 @@ initBambuMqttPool()
         if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
             initBambuMetricsListener();
         }
+        // Start server-side printer status + snapshot polling for PrintCam dashboard
+        initPrintCamPoller();
     })
     .catch((err) => {
         console.error("Failed to initialize Bambu MQTT pool:", err);
