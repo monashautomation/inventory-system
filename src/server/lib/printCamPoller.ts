@@ -163,7 +163,10 @@ async function fetchPrusaStatus(printer: {
     };
   }
 
-  const headers = { "X-Api-Key": printer.authToken };
+  // Connection: close forces a fresh TCP connection each poll — Prusa's
+  // embedded HTTP server silently drops keep-alive sockets after idle periods,
+  // causing subsequent reused connections to fail with ECONNRESET/ENOTCONN.
+  const headers = { "X-Api-Key": printer.authToken, Connection: "close" };
 
   try {
     const [statusRes, jobRes] = await Promise.all([
@@ -345,9 +348,11 @@ function fetchBambuStatus(printer: {
       break;
     case "FAILED":
       state = "IDLE";
-      stateMessage = consumeUserCancelled(printer.serialNumber)
-        ? "Cancelled"
-        : "Last print failed";
+      stateMessage =
+        consumeUserCancelled(printer.serialNumber) ||
+        statusCache.get(printer.id)?.stateMessage === "Cancelled"
+          ? "Cancelled"
+          : "Last print failed";
       break;
     case "PREPARE":
       state = "BUSY";

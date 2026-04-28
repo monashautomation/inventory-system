@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video } from "lucide-react";
+import { Video, Loader2 } from "lucide-react";
 import type { CachedPrinterStatus } from "@/server/lib/printCamPoller";
 
 type CameraMode = "stream" | "snapshot";
@@ -356,39 +356,83 @@ function PrinterDetail({
         {canCancel ? (
           <div className="flex items-center gap-2 border-t pt-4">
             {canPause ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={anyCommandPending}
-                onClick={() =>
-                  pauseMutation.mutate({ printerIpAddress: status.ipAddress })
-                }
-              >
-                {pauseMutation.isPending ? "Pausing…" : "Pause"}
-              </Button>
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={anyCommandPending}
+                  onClick={() =>
+                    pauseMutation.mutate({ printerIpAddress: status.ipAddress })
+                  }
+                >
+                  {pauseMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Pausing...
+                    </>
+                  ) : (
+                    "Pause"
+                  )}
+                </Button>
+                {pauseMutation.isPending && (
+                  <p className="text-xs text-muted-foreground">
+                    This can take up to 60 seconds.
+                  </p>
+                )}
+              </div>
             ) : null}
             {canResume ? (
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={anyCommandPending}
+                  onClick={() =>
+                    resumeMutation.mutate({
+                      printerIpAddress: status.ipAddress,
+                    })
+                  }
+                >
+                  {resumeMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Resuming...
+                    </>
+                  ) : (
+                    "Resume"
+                  )}
+                </Button>
+                {resumeMutation.isPending && (
+                  <p className="text-xs text-muted-foreground">
+                    This can take up to 60 seconds.
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-1">
               <Button
-                variant="outline"
+                variant="destructive"
                 size="sm"
                 disabled={anyCommandPending}
                 onClick={() =>
-                  resumeMutation.mutate({ printerIpAddress: status.ipAddress })
+                  cancelMutation.mutate({ printerIpAddress: status.ipAddress })
                 }
               >
-                {resumeMutation.isPending ? "Resuming…" : "Resume"}
+                {cancelMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  "Cancel Print"
+                )}
               </Button>
-            ) : null}
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={anyCommandPending}
-              onClick={() =>
-                cancelMutation.mutate({ printerIpAddress: status.ipAddress })
-              }
-            >
-              {cancelMutation.isPending ? "Cancelling…" : "Cancel Print"}
-            </Button>
+              {cancelMutation.isPending && (
+                <p className="text-xs text-muted-foreground">
+                  This can take up to 60 seconds.
+                </p>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -501,7 +545,7 @@ export default function PrintMonitoring() {
       </div>
 
       {dashboardQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading printers…</p>
+        <p className="text-sm text-muted-foreground">Loading printers...</p>
       ) : printers.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No printers configured. Add printers via the Printer Management page.

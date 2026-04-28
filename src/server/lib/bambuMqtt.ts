@@ -17,6 +17,9 @@ const BAMBU_MQTT_USER = "bblp";
 const SYNC_INTERVAL_MS = 60_000; // Re-sync with DB every 60 s
 const WATCHDOG_CHECK_MS = 15_000; // Check for silent printers every 15 s
 const WATCHDOG_SILENCE_MS = 30_000; // Fire watchdog after 30 s of no data
+// Bambu MQTT TCP connections silently die after ~hours on most networks.
+// Force a full reconnect cycle well before any NAT/firewall timeout window.
+const FORCE_RECONNECT_MS = 5 * 60_000; // 4 minutes
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ const pool = new Map<string, PoolEntry>();
 const listeners = new Set<BambuMessageListener>();
 let syncIntervalHandle: ReturnType<typeof setInterval> | null = null;
 let watchdogHandle: ReturnType<typeof setInterval> | null = null;
+let reconnectHandle: ReturnType<typeof setInterval> | null = null;
 
 // ─── Listener management ────────────────────────────────────────────────────
 
@@ -146,6 +150,25 @@ function connectPrinter(printer: {
 
   client.on("error", (err) => {
     console.error(`[bambu-mqtt] MQTT error for ${printer.name}:`, err.message);
+    if (err.message.includes("connack timeout")) {
+      // Guard: only act if this client is still the active pool entry.
+      // Without this check, stale error events from an already-replaced client
+      // would remove the new client from the pool and orphan it.
+      const current = pool.get(printer.serialNumber);
+      if (!current || current.client !== client) return;
+
+      console.log(
+        `[bambu-mqtt] connack timeout for ${printer.name} — forcing reconnect`,
+      );
+      // Defer out of the error callback so mqtt.js finishes its own error
+      // handling before we tear down and replace the client.
+      setTimeout(() => {
+        const stillCurrent = pool.get(printer.serialNumber);
+        if (!stillCurrent || stillCurrent.client !== client) return;
+        disconnectPrinter(printer.serialNumber);
+        connectPrinter(printer);
+      }, 0);
+    }
   });
 
   client.on("close", () => {
@@ -231,6 +254,29 @@ export async function syncBambuMqttPool(): Promise<void> {
   }
 }
 
+// ─── Periodic force-reconnect ────────────────────────────────────────────────
+// mqtt.js auto-reconnects on close events, but TCP connections can silently
+// become half-open (keepalive PINGREQ unanswered on some Bambu firmware).
+// Force-cycling every 4 minutes ensures a fresh TLS session before any
+// NAT/firewall idle-timeout window (~5–10 min on most home networks).
+
+function reconnectAllPrinters(): void {
+  const entries = Array.from(pool.entries());
+  for (const [serial, entry] of entries) {
+    console.log(
+      `[bambu-mqtt] Periodic reconnect: ${entry.printerName} (${entry.ipAddress})`,
+    );
+    const { printerName, ipAddress, authToken } = entry;
+    disconnectPrinter(serial);
+    connectPrinter({
+      name: printerName,
+      ipAddress,
+      authToken,
+      serialNumber: serial,
+    });
+  }
+}
+
 // ─── Watchdog ─────────────────────────────────────────────────────────────────
 // Bambu printers silently stop publishing MQTT data when idle (delta-only mode)
 // or when another client connects (LAN single-client LIFO bug).  The watchdog
@@ -271,6 +317,7 @@ export async function initBambuMqttPool(): Promise<void> {
   await syncBambuMqttPool();
   syncIntervalHandle = setInterval(syncBambuMqttPool, SYNC_INTERVAL_MS);
   watchdogHandle = setInterval(runWatchdog, WATCHDOG_CHECK_MS);
+  reconnectHandle = setInterval(reconnectAllPrinters, FORCE_RECONNECT_MS);
   console.log(`[bambu-mqtt] Pool initialized with ${pool.size} connection(s)`);
 }
 
@@ -283,6 +330,10 @@ export function shutdownBambuMqttPool(): void {
   if (watchdogHandle) {
     clearInterval(watchdogHandle);
     watchdogHandle = null;
+  }
+  if (reconnectHandle) {
+    clearInterval(reconnectHandle);
+    reconnectHandle = null;
   }
   for (const [serial] of pool) {
     disconnectPrinter(serial);

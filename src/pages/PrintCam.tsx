@@ -71,6 +71,7 @@ function statusLabel(state: string, stateMessage: string): string {
   const s = state.toUpperCase();
   if (s === "CONNECTING") return "Connecting…";
   if (s === "UNKNOWN") return "Unknown";
+  if (s === "PRINTING") return "Printing";
   return stateMessage;
 }
 
@@ -377,7 +378,7 @@ export default function PrintCam() {
         setWebcamPaused(false);
         setGlobalTick((n) => n + 1);
       }
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(interval);
   }, []);
 

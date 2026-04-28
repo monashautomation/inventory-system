@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Upload, X, File as FileIcon } from "lucide-react";
+import { Upload, X, File as FileIcon, Loader2 } from "lucide-react";
 
 const readFileAsBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -58,6 +58,7 @@ export default function PrintGcode() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isBambuRef = useRef(false);
 
   const [filamentInfo, setFilamentInfo] = useState<ThreeMfFilamentInfo | null>(
     null,
@@ -66,12 +67,21 @@ export default function PrintGcode() {
   const [useAms, setUseAms] = useState(true);
 
   const handleFileSelected = useCallback(async (file: File | null) => {
+    if (
+      file &&
+      isBambuRef.current &&
+      !file.name.toLowerCase().endsWith(".gcode.3mf")
+    ) {
+      toast.error("Bambu printers require a .gcode.3mf file.");
+      return;
+    }
+
     setSelectedFile(file);
     setFilamentInfo(null);
     setAmsMapping([0]);
     setUseAms(true);
 
-    if (!file?.name.toLowerCase().endsWith(".3mf")) return;
+    if (!file?.name.toLowerCase().endsWith(".gcode.3mf")) return;
 
     try {
       const buffer = await file.arrayBuffer();
@@ -139,6 +149,7 @@ export default function PrintGcode() {
     printerOptions.find((printer) => printer.ipAddress === selectedPrinterIp) ??
     null;
   const isBambu = selectedPrinter?.type === "BAMBU";
+  isBambuRef.current = isBambu;
 
   // AMS tray data from live printer status (excludes external spool tray 254)
   const amsTrays = (statusQuery.data?.amsTrays ?? []).filter(
@@ -252,7 +263,7 @@ export default function PrintGcode() {
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label>{isBambu ? "3MF file" : "G-code file"}</Label>
+              <Label>{isBambu ? "G-code 3MF file" : "G-code file"}</Label>
               <div
                 className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer
                   ${
@@ -332,7 +343,7 @@ export default function PrintGcode() {
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Supports{" "}
-                        {isBambu ? ".3mf" : ".gcode, .gc, .gco, .bgcode"}
+                        {isBambu ? ".gcode.3mf" : ".gcode, .gc, .gco, .bgcode"}
                       </div>
                     </div>
                   </div>
@@ -454,26 +465,39 @@ export default function PrintGcode() {
                   )}
                 </div>
               )}
-            <Button
-              type="submit"
-              disabled={
-                uploadAndPrintMutation.isPending ||
-                printersQuery.isLoading ||
-                printerOptions.length === 0 ||
-                !selectedFile ||
-                !selectedPrinterIp ||
-                (!!selectedPrinterIp && statusQuery.isLoading) ||
-                printerBusy
-              }
-            >
-              {uploadAndPrintMutation.isPending
-                ? "Printing..."
-                : statusQuery.isLoading && selectedPrinterIp
-                  ? "Checking printer\u2026"
-                  : printerBusy
-                    ? "Printer busy"
-                    : "Upload and Print"}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                type="submit"
+                disabled={
+                  uploadAndPrintMutation.isPending ||
+                  printersQuery.isLoading ||
+                  printerOptions.length === 0 ||
+                  !selectedFile ||
+                  !selectedPrinterIp ||
+                  (!!selectedPrinterIp && statusQuery.isLoading) ||
+                  printerBusy
+                }
+              >
+                {uploadAndPrintMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending to printer...
+                  </>
+                ) : statusQuery.isLoading && selectedPrinterIp ? (
+                  "Checking printer..."
+                ) : printerBusy ? (
+                  "Printer busy"
+                ) : (
+                  "Upload and Print"
+                )}
+              </Button>
+              {uploadAndPrintMutation.isPending && (
+                <p className="text-xs text-muted-foreground">
+                  Uploading file and starting print - this can take up to 60
+                  seconds.
+                </p>
+              )}
+            </div>
           </form>
 
           {jobsQuery.data && jobsQuery.data.length > 0 ? (
@@ -494,28 +518,41 @@ export default function PrintGcode() {
                         {job.status}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        !selectedPrinterIp ||
-                        printerBusy ||
-                        (!!selectedPrinterIp && statusQuery.isLoading) ||
-                        reprintMutation.isPending
-                      }
-                      onClick={() =>
-                        reprintMutation.mutate({
-                          printJobId: job.id,
-                          printerIpAddress: selectedPrinterIp,
-                        })
-                      }
-                    >
+                    <div className="flex flex-col items-end gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          !selectedPrinterIp ||
+                          printerBusy ||
+                          (!!selectedPrinterIp && statusQuery.isLoading) ||
+                          reprintMutation.isPending
+                        }
+                        onClick={() =>
+                          reprintMutation.mutate({
+                            printJobId: job.id,
+                            printerIpAddress: selectedPrinterIp,
+                          })
+                        }
+                      >
+                        {reprintMutation.isPending &&
+                        reprintMutation.variables?.printJobId === job.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Reprinting...
+                          </>
+                        ) : (
+                          "Reprint"
+                        )}
+                      </Button>
                       {reprintMutation.isPending &&
-                      reprintMutation.variables?.printJobId === job.id
-                        ? "Reprinting\u2026"
-                        : "Reprint"}
-                    </Button>
+                        reprintMutation.variables?.printJobId === job.id && (
+                          <p className="text-xs text-muted-foreground">
+                            This can take up to 60 seconds.
+                          </p>
+                        )}
+                    </div>
                   </div>
                 ))}
               </div>
