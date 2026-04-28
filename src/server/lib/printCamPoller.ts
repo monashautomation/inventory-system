@@ -1,3 +1,4 @@
+import * as http from "node:http";
 import { getBambuStatus, consumeUserCancelled } from "@/server/lib/bambu";
 import { prisma } from "@/server/lib/prisma";
 
@@ -52,22 +53,53 @@ export function getCachedWebcamUrl(printerId: string): string | null {
   return statusCache.get(printerId)?.webcamUrl ?? null;
 }
 
-// ─── Timeout-safe fetch ───────────────────────────────────────────────────────
-// AbortSignal.timeout() only covers connection time in some runtimes — it may
-// not fire once the response body starts streaming.  This wrapper uses a manual
-// AbortController so the signal fires at the wall-clock deadline regardless of
-// which phase the fetch is in.
+// ─── Prusa HTTP helper (no connection pooling) ────────────────────────────────
+// Bun's fetch maintains a persistent connection pool per origin. After long
+// server uptime these pooled connections silently die (NAT/firewall timeout),
+// and Bun may keep retrying them, causing every Prusa poll to fail.
+// Using node:http with agent:false forces a fresh TCP socket per request,
+// mirroring the periodic force-reconnect used for Bambu MQTT connections.
 
-function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
+interface PrusaHttpResult {
+  ok: boolean;
+  status: number;
+  body: string;
+}
+
+function prusaHttpGet(
+  ipAddress: string,
+  path: string,
+  authToken: string,
   timeoutMs: number,
-): Promise<Response> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  return fetch(url, { ...options, signal: ac.signal }).finally(() =>
-    clearTimeout(timer),
-  );
+): Promise<PrusaHttpResult> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: ipAddress,
+        port: 80,
+        path,
+        method: "GET",
+        headers: { "X-Api-Key": authToken, Connection: "close" },
+        agent: false, // No connection pooling — fresh TCP socket every request
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        res.on("end", () => {
+          const status = res.statusCode ?? 0;
+          resolve({ ok: status >= 200 && status < 300, status, body });
+        });
+        res.on("error", reject);
+      },
+    );
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error("Prusa request timed out"));
+    });
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 // ─── State message helpers ───────────────────────────────────────────────────
@@ -163,26 +195,23 @@ async function fetchPrusaStatus(printer: {
     };
   }
 
-  // Connection: close forces a fresh TCP connection each poll — Prusa's
-  // embedded HTTP server silently drops keep-alive sockets after idle periods,
-  // causing subsequent reused connections to fail with ECONNRESET/ENOTCONN.
-  const headers = { "X-Api-Key": printer.authToken, Connection: "close" };
-
   try {
-    const [statusRes, jobRes] = await Promise.all([
-      fetchWithTimeout(
-        `http://${printer.ipAddress}/api/v1/status`,
-        { headers },
+    const [statusResult, jobResult] = await Promise.all([
+      prusaHttpGet(
+        printer.ipAddress,
+        "/api/v1/status",
+        printer.authToken,
         PRUSA_TIMEOUT_MS,
       ),
-      fetchWithTimeout(
-        `http://${printer.ipAddress}/api/v1/job`,
-        { headers },
+      prusaHttpGet(
+        printer.ipAddress,
+        "/api/v1/job",
+        printer.authToken,
         PRUSA_TIMEOUT_MS,
       ),
     ]);
 
-    if (!statusRes.ok) {
+    if (!statusResult.ok) {
       statusCache.set(printer.id, {
         printerId: printer.id,
         printerName: printer.name,
@@ -190,7 +219,7 @@ async function fetchPrusaStatus(printer: {
         ipAddress: printer.ipAddress,
         webcamUrl: printer.webcamUrl,
         state: "UNREACHABLE",
-        stateMessage: `Status check failed (HTTP ${statusRes.status}).`,
+        stateMessage: `Status check failed (HTTP ${statusResult.status}).`,
         nozzleTemp: null,
         targetNozzleTemp: null,
         bedTemp: null,
@@ -206,11 +235,11 @@ async function fetchPrusaStatus(printer: {
       return;
     }
 
-    const status = (await statusRes.json()) as PrusaStatusResponse;
+    const status = JSON.parse(statusResult.body) as PrusaStatusResponse;
     const job =
-      jobRes.status === 204
+      jobResult.status === 204
         ? null
-        : ((await jobRes.json()) as PrusaJobResponse);
+        : (JSON.parse(jobResult.body) as PrusaJobResponse);
 
     const state = status.printer?.state?.trim() ?? "UNKNOWN";
     const progressValue = status.job?.progress ?? job?.progress ?? null;
@@ -238,7 +267,11 @@ async function fetchPrusaStatus(printer: {
       ...preservedAttribution(printer.id),
       updatedAt: Date.now(),
     });
-  } catch {
+  } catch (err) {
+    console.error(
+      `[printCam] Prusa poll failed for ${printer.name} (${printer.ipAddress}):`,
+      err instanceof Error ? err.message : err,
+    );
     statusCache.set(printer.id, {
       printerId: printer.id,
       printerName: printer.name,
@@ -392,16 +425,52 @@ function fetchBambuStatus(printer: {
 
 // ─── Status polling ───────────────────────────────────────────────────────────
 
+const PRINTER_LIST_TTL_MS = 60_000;
+const STATUS_POLL_STUCK_MS = 30_000;
+
+let printerListCache: Awaited<ReturnType<typeof prisma.printer.findMany>> = [];
+let printerListFetchedAt = 0;
 let statusPollRunning = false;
+let statusPollStartedAt = 0;
+
+async function refreshPrinterListCache(): Promise<void> {
+  const fresh = await Promise.race([
+    prisma.printer.findMany(),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("[printCam] printer list query timeout")),
+        15_000,
+      ),
+    ),
+  ]);
+  printerListCache = fresh;
+  printerListFetchedAt = Date.now();
+}
 
 async function pollAllStatuses(): Promise<void> {
-  if (statusPollRunning) return;
+  // Safety: reset a poll cycle that has been stuck longer than expected
+  if (statusPollRunning) {
+    if (Date.now() - statusPollStartedAt < STATUS_POLL_STUCK_MS) return;
+    console.warn("[printCam] Poll cycle stuck — forcing reset");
+    statusPollRunning = false;
+  }
   statusPollRunning = true;
+  statusPollStartedAt = Date.now();
   try {
-    const printers = await prisma.printer.findMany();
+    // Refresh printer list on a slower cadence to avoid hammering the DB
+    if (
+      printerListCache.length === 0 ||
+      Date.now() - printerListFetchedAt > PRINTER_LIST_TTL_MS
+    ) {
+      await refreshPrinterListCache().catch((err) => {
+        console.error("[printCam] Printer list refresh failed:", err);
+      });
+    }
+    if (printerListCache.length === 0) return;
+
     // Bambu: synchronous read from MQTT cache. Prusa: HTTP with explicit timeout.
     await Promise.allSettled(
-      printers.map((p) =>
+      printerListCache.map((p) =>
         p.type === "BAMBU"
           ? Promise.resolve(fetchBambuStatus(p))
           : fetchPrusaStatus(p),
