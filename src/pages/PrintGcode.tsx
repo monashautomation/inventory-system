@@ -58,6 +58,7 @@ export default function PrintGcode() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isBambuRef = useRef(false);
 
   const [filamentInfo, setFilamentInfo] = useState<ThreeMfFilamentInfo | null>(
     null,
@@ -66,12 +67,21 @@ export default function PrintGcode() {
   const [useAms, setUseAms] = useState(true);
 
   const handleFileSelected = useCallback(async (file: File | null) => {
+    if (
+      file &&
+      isBambuRef.current &&
+      !file.name.toLowerCase().endsWith(".gcode.3mf")
+    ) {
+      toast.error("Bambu printers require a .gcode.3mf file.");
+      return;
+    }
+
     setSelectedFile(file);
     setFilamentInfo(null);
     setAmsMapping([0]);
     setUseAms(true);
 
-    if (!file?.name.toLowerCase().endsWith(".3mf")) return;
+    if (!file?.name.toLowerCase().endsWith(".gcode.3mf")) return;
 
     try {
       const buffer = await file.arrayBuffer();
@@ -139,6 +149,7 @@ export default function PrintGcode() {
     printerOptions.find((printer) => printer.ipAddress === selectedPrinterIp) ??
     null;
   const isBambu = selectedPrinter?.type === "BAMBU";
+  isBambuRef.current = isBambu;
 
   // AMS tray data from live printer status (excludes external spool tray 254)
   const amsTrays = (statusQuery.data?.amsTrays ?? []).filter(
@@ -252,7 +263,7 @@ export default function PrintGcode() {
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label>{isBambu ? "3MF file" : "G-code file"}</Label>
+              <Label>{isBambu ? "G-code 3MF file" : "G-code file"}</Label>
               <div
                 className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer
                   ${
@@ -332,7 +343,7 @@ export default function PrintGcode() {
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Supports{" "}
-                        {isBambu ? ".3mf" : ".gcode, .gc, .gco, .bgcode"}
+                        {isBambu ? ".gcode.3mf" : ".gcode, .gc, .gco, .bgcode"}
                       </div>
                     </div>
                   </div>
