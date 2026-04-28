@@ -49,7 +49,7 @@ A modern, full-stack inventory management system built with React, TypeScript, t
 - **ESLint** - Code linting
 - **Prettier** - Code formatting
 - **Husky** - Git hooks
-- **Docker** - Containerization
+- **Docker** - Containerisation
 
 ## Prerequisites
 
