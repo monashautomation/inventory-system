@@ -24,7 +24,7 @@ type GetItemsOutput = inferProcedureOutput<
 >["items"][number];
 
 const Assets = () => {
-  const { addItem, itemInCart, removeItem, getItem } = useCart();
+  const { addItem, itemInCart, getItem } = useCart();
   const { "*": locationPath } = useParams();
   const locationId = locationPath?.split("/").pop();
 
@@ -107,20 +107,6 @@ const Assets = () => {
       }
     },
     [addItem],
-  );
-
-  // Handle removing item from cart
-  const handleRemoveFromCart = useCallback(
-    (id: string) => {
-      try {
-        removeItem(id);
-        toast.success("Item removed from cart.");
-      } catch (error) {
-        console.error("Failed to remove item:", error);
-        toast.error("Failed to remove item from cart.");
-      }
-    },
-    [removeItem],
   );
 
   // Handle modify action
