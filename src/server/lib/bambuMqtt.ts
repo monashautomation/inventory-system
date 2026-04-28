@@ -151,11 +151,23 @@ function connectPrinter(printer: {
   client.on("error", (err) => {
     console.error(`[bambu-mqtt] MQTT error for ${printer.name}:`, err.message);
     if (err.message.includes("connack timeout")) {
+      // Guard: only act if this client is still the active pool entry.
+      // Without this check, stale error events from an already-replaced client
+      // would remove the new client from the pool and orphan it.
+      const current = pool.get(printer.serialNumber);
+      if (!current || current.client !== client) return;
+
       console.log(
         `[bambu-mqtt] connack timeout for ${printer.name} — forcing reconnect`,
       );
-      disconnectPrinter(printer.serialNumber);
-      connectPrinter(printer);
+      // Defer out of the error callback so mqtt.js finishes its own error
+      // handling before we tear down and replace the client.
+      setTimeout(() => {
+        const stillCurrent = pool.get(printer.serialNumber);
+        if (!stillCurrent || stillCurrent.client !== client) return;
+        disconnectPrinter(printer.serialNumber);
+        connectPrinter(printer);
+      }, 0);
     }
   });
 
