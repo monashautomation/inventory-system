@@ -1514,7 +1514,8 @@ export const printRouter = router({
         }
       }
 
-      // New file — upload to S3 then dispatch
+      // New file — dispatch and S3 upload in parallel so a slow/unavailable S3
+      // does not block the print job from starting.
       const timestamp = Date.now();
       const storedName = `${timestamp}_${sha256.slice(0, 12)}_${safeName}`;
       const s3Key = buildPrintJobS3Key(
@@ -1524,23 +1525,20 @@ export const printRouter = router({
         safeName,
       );
 
-      await uploadFile(s3Key, fileBuffer);
+      const S3_TIMEOUT_MS = 60_000;
+      const s3UploadPromise = Promise.race([
+        uploadFile(s3Key, fileBuffer),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("S3 upload timed out after 60s")),
+            S3_TIMEOUT_MS,
+          ),
+        ),
+      ]);
 
-      const storedJob = await ctx.prisma.gcodePrintJob.create({
-        data: {
-          userId: ctx.user.id,
-          printerId: printer.id,
-          originalFilename: input.fileName,
-          storedFilename: storedName,
-          s3Key,
-          fileHashSha256: sha256,
-          fileSizeBytes: fileBuffer.length,
-          status: "STORED",
-        },
-      });
-
-      try {
-        const dispatchResult = await dispatchToPrinter({
+      const [s3Result, dispatchResult] = await Promise.allSettled([
+        s3UploadPromise,
+        dispatchToPrinter({
           printerType: printer.type,
           ipAddress: printer.ipAddress,
           fileBuffer,
@@ -1549,32 +1547,57 @@ export const printRouter = router({
           serialNumber: printer.serialNumber,
           useAms: input.useAms,
           amsMapping: input.amsMapping,
-        });
+        }),
+      ]);
 
-        return await ctx.prisma.gcodePrintJob.update({
-          where: { id: storedJob.id },
-          data: {
-            status: "DISPATCHED",
-            dispatchResponse: dispatchResult.details,
-          },
-        });
-      } catch (error) {
-        const message = sanitizeDbText(
-          error instanceof Error ? error.message : "Unknown dispatch error",
+      const s3Succeeded = s3Result.status === "fulfilled";
+      if (!s3Succeeded) {
+        console.error(
+          "S3 upload failed (print will proceed without reprint support):",
+          s3Result.reason instanceof Error
+            ? s3Result.reason.message
+            : s3Result.reason,
         );
-        await ctx.prisma.gcodePrintJob.update({
-          where: { id: storedJob.id },
+      }
+
+      if (dispatchResult.status === "rejected") {
+        const message = sanitizeDbText(
+          dispatchResult.reason instanceof Error
+            ? dispatchResult.reason.message
+            : "Unknown dispatch error",
+        );
+        await ctx.prisma.gcodePrintJob.create({
           data: {
+            userId: ctx.user.id,
+            printerId: printer.id,
+            originalFilename: input.fileName,
+            storedFilename: storedName,
+            s3Key: s3Succeeded ? s3Key : null,
+            fileHashSha256: sha256,
+            fileSizeBytes: fileBuffer.length,
             status: "DISPATCH_FAILED",
             dispatchError: message,
           },
         });
-
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `Dispatch failed: ${message}`,
         });
       }
+
+      return ctx.prisma.gcodePrintJob.create({
+        data: {
+          userId: ctx.user.id,
+          printerId: printer.id,
+          originalFilename: input.fileName,
+          storedFilename: storedName,
+          s3Key: s3Succeeded ? s3Key : null,
+          fileHashSha256: sha256,
+          fileSizeBytes: fileBuffer.length,
+          status: "DISPATCHED",
+          dispatchResponse: dispatchResult.value.details,
+        },
+      });
     }),
 
   reprintJob: userProcedure
