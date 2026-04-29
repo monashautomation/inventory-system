@@ -79,11 +79,16 @@ app.use(
 
 // Handle authentication routes
 app.on(["POST", "GET"], "/api/auth/*", async (c) => {
+    const method = c.req.method;
+    const path = new URL(c.req.url).pathname;
+    const start = Date.now();
+    console.log(`[auth] ${method} ${path} started`);
     try {
         const response = await auth.handler(c.req.raw);
+        console.log(`[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`);
         return response;
     } catch (error) {
-        console.error("Auth handler error:", error);
+        console.error(`[auth] ${method} ${path} threw after ${Date.now() - start}ms:`, error);
         throw new HTTPException(500, {
             message: "Authentication processing failed",
         });
@@ -349,7 +354,8 @@ initBambuMqttPool()
             initBambuMetricsListener();
         }
         // Start server-side printer status + snapshot polling for PrintCam dashboard
-        initPrintCamPoller();
+        // TEMPORARILY DISABLED — suspected of saturating connections and blocking auth POST requests
+        // initPrintCamPoller();
     })
     .catch((err) => {
         console.error("Failed to initialize Bambu MQTT pool:", err);
