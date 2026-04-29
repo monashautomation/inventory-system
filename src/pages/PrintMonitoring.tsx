@@ -496,7 +496,7 @@ function PrinterDetail({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PrintMonitoring() {
-  const dashboardQuery = trpc.print.getPrintCamDashboard.useQuery(undefined, {
+  const dashboardQuery = trpc.print.getLivePrinterStatuses.useQuery(undefined, {
     refetchInterval: 10_000,
   });
 
