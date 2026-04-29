@@ -18,7 +18,7 @@ import {
 } from "@/server/lib/bambuMqtt";
 import { initBambuStatusListener } from "@/server/lib/bambu";
 import {
-    initPrintCamPoller,
+    //initPrintCamPoller,
     getCachedSnapshot,
 } from "@/server/lib/printCamPoller";
 
