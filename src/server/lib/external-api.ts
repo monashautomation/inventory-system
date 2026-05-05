@@ -17,12 +17,11 @@ export interface DiscordMessagePayload {
   text: string;
 }
 
-// TODO: replace with real base URL from env
-const STUDENT_API_BASE = process.env.STUDENT_API_BASE ?? "";
-const DISCORD_API_BASE = process.env.DISCORD_API_BASE ?? "";
-const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
-
 export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
+  // Read env vars at call time so tests can override process.env
+  const STUDENT_API_BASE = process.env.STUDENT_API_BASE ?? "";
+  const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
+
   if (!STUDENT_API_BASE) {
     // Stub — returns mock data until real API is configured
     return {
@@ -51,6 +50,9 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
 export async function postDiscordMessage(
   payload: DiscordMessagePayload,
 ): Promise<void> {
+  const DISCORD_API_BASE = process.env.DISCORD_API_BASE ?? "";
+  const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
+
   if (!DISCORD_API_BASE) {
     // Stub — logs to console until real API is configured
     console.log("[Discord stub] channel:", payload.channel);
