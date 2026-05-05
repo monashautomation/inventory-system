@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, Table } from "@tanstack/react-table";
 import {
   type SortingState,
   type VisibilityState,
@@ -13,7 +13,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import {
-  Table,
+  Table as TableRoot,
   TableBody,
   TableHead,
   TableHeader,
@@ -39,6 +39,7 @@ interface DataTableProps<TData extends HasId, TValue> {
   onPageSizeChange?: (pageSize: number) => void;
   onFilterChange?: (filter: string) => void;
   totalCount?: number;
+  renderRows?: (table: Table<TData>) => React.ReactNode;
 }
 
 export function DataTable<TData extends HasId, TValue>({
@@ -53,6 +54,7 @@ export function DataTable<TData extends HasId, TValue>({
   onPageSizeChange,
   onFilterChange,
   totalCount,
+  renderRows,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -62,21 +64,17 @@ export function DataTable<TData extends HasId, TValue>({
     React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
 
-  // Manage pagination state
   const [pagination, setPagination] = React.useState({
     pageIndex,
     pageSize,
   });
 
-  // Sync external pageIndex/pageSize changes
   React.useEffect(() => {
     setPagination({ pageIndex, pageSize });
   }, [pageIndex, pageSize]);
 
-  // Memoize columns to prevent re-renders
   const memoizedColumns = React.useMemo(() => columns, [columns]);
 
-  // In your DataTable component, update this part:
   const table = useReactTable({
     data: data ?? [],
     columns: memoizedColumns,
@@ -103,7 +101,7 @@ export function DataTable<TData extends HasId, TValue>({
       rowSelection,
       pagination,
     },
-    manualPagination: true, // Add this line
+    manualPagination: true,
   });
 
   return (
@@ -116,7 +114,7 @@ export function DataTable<TData extends HasId, TValue>({
         BarComponents={BarComponents(table)}
       />
       <div className="rounded-md border">
-        <Table>
+        <TableRoot>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -134,9 +132,13 @@ export function DataTable<TData extends HasId, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            <DataRows table={table} columns={columns} />
+            {renderRows ? (
+              renderRows(table)
+            ) : (
+              <DataRows table={table} columns={columns} />
+            )}
           </TableBody>
-        </Table>
+        </TableRoot>
       </div>
       <div className="mt-2">
         <DataTablePagination table={table} />

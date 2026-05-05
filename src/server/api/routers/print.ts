@@ -1566,6 +1566,9 @@ export const printRouter = router({
             ? dispatchResult.reason.message
             : "Unknown dispatch error",
         );
+        console.error(
+          `[print] DISPATCH_FAILED user=${ctx.user.id} printer=${printer.name} (${printer.ipAddress}) file=${input.fileName}: ${message}`,
+        );
         await ctx.prisma.gcodePrintJob.create({
           data: {
             userId: ctx.user.id,
@@ -1704,6 +1707,9 @@ export const printRouter = router({
       } catch (error) {
         const message = sanitizeDbText(
           error instanceof Error ? error.message : "Unknown dispatch error",
+        );
+        console.error(
+          `[print] REPRINT_DISPATCH_FAILED user=${ctx.user.id} printer=${printer.name} (${printer.ipAddress}) file=${originalJob.originalFilename}: ${message}`,
         );
         await ctx.prisma.gcodePrintJob.update({
           where: { id: newJob.id },
