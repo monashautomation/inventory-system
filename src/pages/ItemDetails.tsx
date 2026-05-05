@@ -10,6 +10,8 @@ import { ImageZoom } from "@/components/ui/image-zoom";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import RestockForm from "@/components/item-crud/RestockForm";
+import { AdminAssignCard } from "@/components/item-crud/AdminAssignCard";
+import { AdminRevokeCard } from "@/components/item-crud/AdminRevokeCard";
 import { authClient } from "@/auth/client";
 import { PrintButton } from "@/components/print-label";
 
@@ -245,6 +247,34 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
               </CardContent>
             </Card>
           )}
+
+          {session?.user.role === "admin" &&
+            !data.consumable &&
+            !isLabUse &&
+            !isInUse && (
+              <AdminAssignCard
+                itemId={itemId}
+                onSuccess={async () => {
+                  await refetch();
+                  callback?.();
+                }}
+              />
+            )}
+
+          {session?.user.role === "admin" &&
+            !data.consumable &&
+            !isLabUse &&
+            isInUse &&
+            latestRecord?.actionByUserId && (
+              <AdminRevokeCard
+                itemId={itemId}
+                targetUserId={latestRecord.actionByUserId}
+                onSuccess={async () => {
+                  await refetch();
+                  callback?.();
+                }}
+              />
+            )}
         </div>
       </div>
     </div>
