@@ -23,7 +23,14 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
 
   if (!STUDENT_API_BASE) {
-    // Stub — returns mock data until real API is configured
+    if (
+      process.env.NODE_ENV !== "development" &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      throw new Error(
+        "STUDENT_API_BASE is required in non-development environments",
+      );
+    }
     return {
       studentId,
       name: "Test Student",
@@ -32,7 +39,9 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
     };
   }
 
-  const res = await fetch(`${STUDENT_API_BASE}/students/${studentId}`, {
+  const res = await fetch(
+    `${STUDENT_API_BASE}/students/${encodeURIComponent(studentId)}`,
+    {
     headers: {
       Authorization: `Bearer ${KIOSK_API_KEY}`,
       "Content-Type": "application/json",
@@ -54,7 +63,14 @@ export async function postDiscordMessage(
   const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
 
   if (!DISCORD_API_BASE) {
-    // Stub — logs to console until real API is configured
+    if (
+      process.env.NODE_ENV !== "development" &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      throw new Error(
+        "DISCORD_API_BASE is required in non-development environments",
+      );
+    }
     console.log("[Discord stub] channel:", payload.channel);
     console.log("[Discord stub] text:", payload.text);
     return;

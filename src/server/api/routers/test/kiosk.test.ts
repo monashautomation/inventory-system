@@ -54,7 +54,7 @@ describe("kiosk router", () => {
 
       expect(result.found).toBe(true);
       expect(result.user?.id).toBe(dbUser.id);
-      expect(result.studentInfo.email).toBe(studentInfo.email);
+      expect(result.studentInfo.name).toBe(studentInfo.name);
     });
 
     it("returns found=false when no DB user matches email", async () => {
@@ -103,7 +103,7 @@ describe("kiosk router", () => {
     it("posts Discord message with all details when supervisor provided", async () => {
       const studentInfo = makeStudentInfo();
       const dbUser = createUser({ email: studentInfo.email });
-      const supervisor = createUser({ name: "Dr. Smith" });
+      const supervisor = createUser({ name: "Dr. Smith", role: "admin" });
 
       vi.mocked(externalApi.getStudentInfo).mockResolvedValueOnce(studentInfo);
       prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
@@ -180,7 +180,8 @@ describe("kiosk router", () => {
       });
 
       const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
-      expect(call.text).toContain("check@student.monash.edu");
+      // @ is escaped with a zero-width space to prevent Discord mention abuse
+      expect(call.text).toContain("check@");
     });
 
     it("propagates Discord API failure", async () => {
@@ -339,21 +340,27 @@ describe("kiosk router", () => {
       const studentInfo = makeStudentInfo();
       const dbUser = createUser({ email: studentInfo.email });
       const loanedItem = createLoanedAsset(dbUser);
+      const recordId = faker.string.uuid();
 
       vi.mocked(externalApi.getStudentInfo).mockResolvedValueOnce(studentInfo);
       prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
+      // Step 1: candidate itemIds
       prismaMock.itemRecord.findMany.mockResolvedValueOnce([
-        {
-          id: faker.string.uuid(),
-          itemId: loanedItem.id,
-          createdAt: new Date(),
-          item: {
-            id: loanedItem.id,
-            name: loanedItem.name,
-            serial: loanedItem.serial,
-          },
-        },
+        { itemId: loanedItem.id },
       ] as never);
+      // Step 2: latest record for each candidate
+      prismaMock.itemRecord.findFirst.mockResolvedValueOnce({
+        id: recordId,
+        itemId: loanedItem.id,
+        loaned: true,
+        createdAt: new Date(),
+        actionByUserId: dbUser.id,
+        item: {
+          id: loanedItem.id,
+          name: loanedItem.name,
+          serial: loanedItem.serial,
+        },
+      } as never);
 
       const result = await caller.getUserLoanedItems({
         studentId: studentInfo.studentId,
@@ -417,6 +424,11 @@ describe("kiosk router", () => {
 
       vi.mocked(externalApi.getStudentInfo).mockResolvedValueOnce(studentInfo);
       prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
+      // Ownership check: item is loaned to this user
+      prismaMock.itemRecord.findFirst.mockResolvedValueOnce({
+        loaned: true,
+        actionByUserId: dbUser.id,
+      } as never);
       vi.mocked(checkinUtils.itemCheckin).mockResolvedValueOnce({
         ok: true,
         data: [{ ok: true, uuid: itemId, quantity: 1 }],
@@ -453,6 +465,11 @@ describe("kiosk router", () => {
 
       vi.mocked(externalApi.getStudentInfo).mockResolvedValueOnce(studentInfo);
       prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
+      // Ownership check passes
+      prismaMock.itemRecord.findFirst.mockResolvedValueOnce({
+        loaned: true,
+        actionByUserId: dbUser.id,
+      } as never);
       vi.mocked(checkinUtils.itemCheckin).mockResolvedValueOnce({
         ok: false,
         failures: "Item is not loaned out",

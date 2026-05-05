@@ -19,7 +19,7 @@ import { formSchema, type CartForm } from "@/components/cart/cart-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form } from "@/components/ui/form";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/client/trpc";
 function getItemInvalidReason(
@@ -46,16 +46,7 @@ function getItemInvalidReason(
 
 export default function Cart() {
   const { items, clearCart, checkout, addItem, itemInCart } = useCart();
-  const [qrCode, setQrCode] = useState<string>(""); // State to store scanned QR code
-
-  // tRPC query at the top level, only runs when qrCode is not null
-  const { data, isLoading, error } = trpc.qr.scan.useQuery(
-    { url: qrCode }, // Non-null assertion since enabled ensures qrCode exists
-    {
-      enabled: qrCode !== "", // Only run query when qrCode is set
-      retry: false, // Optional: Prevent retries on failure
-    },
-  );
+  const utils = trpc.useUtils();
 
   const form = useForm<CartForm>({
     resolver: zodResolver(formSchema),
@@ -73,39 +64,30 @@ export default function Cart() {
     form.setValue("items", formItems);
   }, [items, form]);
 
-  const onSubmit = (data: CartForm) => {
-    console.log("Cart Payload", data);
+  const onSubmit = (_data: CartForm) => {
     checkout();
   };
 
-  const handleQRScan = (qrData: string) => {
-    setQrCode(qrData); // Trigger the query by setting qrCode
-  };
-  // Handle the query result in a useEffect
-  useEffect(() => {
-    if (qrCode === "") return; // Skip if no QR code
-
-    if (isLoading) {
+  // Each scan fetches independently — avoids race where scan B replaces scan A mid-flight
+  const handleQRScan = async (qrData: string) => {
+    let data;
+    try {
       toast.info("Fetching item details...");
-      return;
-    }
-
-    // Only process data or error after loading is complete
-    if (error) {
-      toast.error(error.message || "Failed to process QR code");
-      setQrCode("");
+      data = await utils.qr.scan.fetch({ url: qrData });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to process QR code";
+      toast.error(message);
       return;
     }
 
     if (!data) {
       toast.error("No item found for this QR code");
-      setQrCode("");
       return;
     }
 
     if ("ok" in data) {
       toast.error(data.error || "Invalid QR code data");
-      setQrCode("");
       return;
     }
 
@@ -113,7 +95,6 @@ export default function Cart() {
       toast.error(
         `${data.name} is marked as Lab Use and cannot be checked out.`,
       );
-      setQrCode("");
       return;
     }
 
@@ -126,25 +107,20 @@ export default function Cart() {
         toast.error(
           `${data.name} is currently on loan and cannot be checked out.`,
         );
-        setQrCode("");
         return;
       }
     }
 
     if (!data.consumable && itemInCart(data.id)) {
       toast.info("Item is already in your cart");
-      setQrCode("");
       return;
     }
-
-    // Add item to cart
 
     const added = addItem({ ...data, quantity: 1 });
     if (added) {
       toast.success("Item added to cart");
     }
-    setQrCode("");
-  }, [data, isLoading, error, itemInCart, addItem, qrCode]);
+  };
 
   const getFormIndex = (itemId: string) => {
     return items.findIndex((item) => item.id === itemId);

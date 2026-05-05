@@ -39,9 +39,16 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       transformer: SuperJSON,
       url: getBaseUrl() + "/api/trpc",
-      headers: () => ({
-        "x-trpc-source": "react",
-      }),
+      headers: () => {
+        const headers: Record<string, string> = { "x-trpc-source": "react" };
+        if (window.location.pathname.startsWith("/kiosk")) {
+          const kioskSecret = import.meta.env.VITE_KIOSK_SECRET as
+            | string
+            | undefined;
+          if (kioskSecret) headers["x-kiosk-token"] = kioskSecret;
+        }
+        return headers;
+      },
       fetch: (url, options) =>
         fetch(url, { ...options, credentials: "include" }),
     }),

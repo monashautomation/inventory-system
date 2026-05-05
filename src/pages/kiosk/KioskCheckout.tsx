@@ -103,29 +103,34 @@ export default function KioskCheckout() {
             return;
           lastScanRef.current = { id: itemId, ts: now };
 
-          // Use ref to avoid stale closure
+          // Claim the slot synchronously before awaiting to prevent TOCTOU race
           if (scannedIdsRef.current.has(itemId)) {
             toast.info("Item already in list");
             return;
           }
+          scannedIdsRef.current.add(itemId);
 
           try {
             const item = await getItem.mutateAsync({ qrData });
-            if (!item) return;
+            if (!item) {
+              scannedIdsRef.current.delete(itemId);
+              return;
+            }
 
             const latestRecord = item.ItemRecords[0];
             if (latestRecord?.loaned) {
+              scannedIdsRef.current.delete(itemId);
               toast.error(`${item.name} is already on loan`);
               return;
             }
 
-            scannedIdsRef.current.add(itemId);
             setItems((prev) => [
               ...prev,
               { id: item.id, name: item.name, serial: item.serial },
             ]);
             toast.success(`Added: ${item.name}`);
           } catch {
+            scannedIdsRef.current.delete(itemId);
             // error handled by mutation
           }
         },
