@@ -12,15 +12,24 @@ import {
 } from "../ui/form";
 import { Input } from "../ui/input";
 import { NumberInput } from "../inputs/numeric-input";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { CascadingLocation } from "./CascadingLocation";
 import { createItemInput } from "@/server/schema";
 
 interface AddAssetFormProps {
-  createItem: (data: z.infer<typeof createItemInput>) => void;
+  createItem: (
+    data: z.infer<typeof createItemInput>,
+    quantity: number,
+  ) => void | Promise<void>;
+  onQuantityChange?: (quantity: number) => void;
 }
 
-export function AddAssetForm({ createItem }: AddAssetFormProps) {
+export function AddAssetForm({
+  createItem,
+  onQuantityChange,
+}: AddAssetFormProps) {
+  const [quantity, setQuantity] = useState(1);
+
   const form = useForm<z.infer<typeof createItemInput>>({
     resolver: zodResolver(createItemInput),
     defaultValues: {
@@ -32,11 +41,7 @@ export function AddAssetForm({ createItem }: AddAssetFormProps) {
   });
 
   function onAssetSumbit(values: z.infer<typeof createItemInput>) {
-    try {
-      createItem(values);
-    } catch (err) {
-      console.log("Error creating asset:", err);
-    }
+    createItem(values, quantity);
   }
 
   const handleLocationSelect = useCallback(
@@ -100,7 +105,32 @@ export function AddAssetForm({ createItem }: AddAssetFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit">Submit</Button>
+
+        <FormItem>
+          <FormLabel>Quantity</FormLabel>
+          <FormControl>
+            <NumberInput
+              min={1}
+              max={20}
+              value={quantity}
+              onValueChange={(v) => {
+                const next = v ?? 1;
+                setQuantity(next);
+                onQuantityChange?.(next);
+              }}
+              className=""
+            />
+          </FormControl>
+          <p className="text-xs text-muted-foreground">
+            {quantity > 1
+              ? `Creates ${quantity} identical assets with unique IDs and serials`
+              : "Creates 1 asset"}
+          </p>
+        </FormItem>
+
+        <Button type="submit">
+          {quantity > 1 ? `Add ${quantity} Assets` : "Add Asset"}
+        </Button>
       </form>
     </Form>
   );
