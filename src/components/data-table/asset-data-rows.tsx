@@ -44,10 +44,10 @@ export interface AssetDataRowsProps extends AssetActionProps {
 
 type ItemRow = Row<Item>;
 
-type RowGroup = {
+interface RowGroup {
   name: string;
   rows: ItemRow[];
-};
+}
 
 function AssetChildRow({
   row,

@@ -359,7 +359,7 @@ export const itemRouter = router({
 
       // Base structural filters (no text search) — used to fetch all sibling items
       const baseWhere = {
-        consumable: { is: null as null },
+        consumable: { is: null },
         deleted: false,
         ...(locationIds ? { locationId: { in: locationIds } } : {}),
         ...(tagIds && tagIds.length > 0
