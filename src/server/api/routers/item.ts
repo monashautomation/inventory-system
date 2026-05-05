@@ -60,7 +60,13 @@ export const itemRouter = router({
           location: true,
           tags: true,
           consumable: true,
-          ItemRecords: true,
+          ItemRecords: {
+            include: {
+              actionBy: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
         },
       });
     }),

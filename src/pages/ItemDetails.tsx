@@ -143,6 +143,12 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                     </Badge>
                   }
                 />
+                {isInUse && latestRecord?.actionBy && (
+                  <InfoRow
+                    label="Loaned To"
+                    value={latestRecord.actionBy.name}
+                  />
+                )}
                 <InfoRow label="Cost" value={`$${data?.cost}`} />
               </div>
             </Section>

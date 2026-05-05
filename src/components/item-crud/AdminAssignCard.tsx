@@ -56,14 +56,17 @@ export function AdminAssignCard({ itemId, onSuccess }: AdminAssignCardProps) {
             <SelectValue placeholder="Select a user..." />
           </SelectTrigger>
           <SelectContent>
-            {users?.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.name}
-                <span className="ml-2 text-muted-foreground text-xs">
-                  {user.email}
-                </span>
-              </SelectItem>
-            ))}
+            {users
+              ?.slice()
+              .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+              .map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name}
+                  <span className="ml-2 text-muted-foreground text-xs">
+                    {user.email}
+                  </span>
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 

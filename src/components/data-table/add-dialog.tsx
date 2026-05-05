@@ -46,6 +46,7 @@ export function AddDialog({ defaultConsumable = false }: AddDialogProps) {
     },
     onSuccess: () => {
       void utils.item.list.invalidate();
+      void utils.item.listForAssets.invalidate();
     },
   });
 
