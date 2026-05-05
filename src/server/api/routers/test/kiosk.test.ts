@@ -120,7 +120,7 @@ describe("kiosk router", () => {
       });
 
       expect(result.ok).toBe(true);
-      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0]![0];
+      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
       expect(call.text).toContain(studentInfo.name);
       expect(call.text).toContain("1 hour");
       expect(call.text).toContain("Project work");
@@ -143,7 +143,7 @@ describe("kiosk router", () => {
         reason: "Study / Research",
       });
 
-      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0]![0];
+      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
       expect(call.text).toContain("None declared");
     });
 
@@ -179,7 +179,7 @@ describe("kiosk router", () => {
         reason: "Other",
       });
 
-      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0]![0];
+      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
       expect(call.text).toContain("check@student.monash.edu");
     });
 
@@ -326,7 +326,7 @@ describe("kiosk router", () => {
 
       await caller.checkoutItems({ studentId: studentInfo.studentId, itemIds });
 
-      const checkoutCall = vi.mocked(checkoutUtils.itemCheckout).mock.calls[0]!;
+      const checkoutCall = vi.mocked(checkoutUtils.itemCheckout).mock.calls[0];
       expect(checkoutCall[1]).toHaveLength(3);
       expect(checkoutCall[1]).toEqual(
         itemIds.map((id) => ({ itemId: id, quantity: 1 })),
@@ -360,7 +360,7 @@ describe("kiosk router", () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.itemId).toBe(loanedItem.id);
+      expect(result[0].itemId).toBe(loanedItem.id);
     });
 
     it("throws NOT_FOUND when student has no account", async () => {
