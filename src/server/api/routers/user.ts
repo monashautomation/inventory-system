@@ -10,7 +10,7 @@ export const userRouter = router({
     });
   }),
 
-  get: userProcedure
+  get: adminProcedure
     .meta({
       mcp: {
         name: "user_get",
@@ -47,7 +47,7 @@ export const userRouter = router({
       });
     }),
 
-  list: userProcedure
+  list: adminProcedure
     .meta({
       mcp: {
         name: "user_list",

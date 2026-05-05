@@ -9,14 +9,25 @@ function getFourCharHash(str: string) {
   return hash.toString(16).padStart(4, "0").toUpperCase().slice(-4);
 }
 
+function toBase36Suffix(n: number): string {
+  return n.toString(36).toUpperCase().padStart(4, "0");
+}
+
+// Parses both legacy decimal suffixes (e.g. "0042") and new base-36 suffixes.
+// parseInt with radix 36 handles both: decimal digits are valid base-36.
+function parseSuffix(suffix: string): number {
+  const n = parseInt(suffix, 36);
+  return isNaN(n) ? 0 : n;
+}
+
 type ItemCreateSerialInput = Omit<Prisma.ItemCreateInput, "serial"> & {
-  serial?: never; // Explicitly disallow serial in the input
+  serial?: never;
 };
 type ItemUncheckedCreateSerialInput = Omit<
   Prisma.ItemUncheckedCreateInput,
   "serial"
 > & {
-  serial?: never; // Explicitly disallow serial in the input
+  serial?: never;
 };
 
 // Initialize base Prisma Client
@@ -33,16 +44,27 @@ export const prisma = basePrisma.$extends({
           >;
         },
       ) {
-        return await prisma.item.count().then(
-          async (x) =>
-            await prisma.item.create({
-              ...args,
-              data: {
-                ...args.data,
-                serial: `${getFourCharHash(args.data.name)}${(x + 1).toString().padStart(4, "0")}`,
-              },
-            }),
-        );
+        return await basePrisma.$transaction(async (tx) => {
+          const prefix = getFourCharHash(args.data.name);
+
+          const latest = await tx.item.findFirst({
+            where: { serial: { startsWith: prefix } },
+            orderBy: { serial: "desc" },
+            select: { serial: true },
+          });
+
+          const nextNum = latest?.serial
+            ? parseSuffix(latest.serial.slice(4)) + 1
+            : 1;
+
+          return tx.item.create({
+            ...args,
+            data: {
+              ...args.data,
+              serial: `${prefix}${toBase36Suffix(nextNum)}`,
+            },
+          });
+        });
       },
     },
   },

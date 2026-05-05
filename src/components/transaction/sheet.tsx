@@ -169,12 +169,22 @@ export default function TransactionDetailsSheet({
                       <div className="space-y-4">
                         <div>
                           <p className="text-xs text-neutral-400 uppercase tracking-wide mb-1">
-                            User
+                            {selectedRow.performedBy ? "Assigned To" : "User"}
                           </p>
                           <p className="text-neutral-300">
                             {selectedRow.actionBy?.name ?? "-"}
                           </p>
                         </div>
+                        {selectedRow.performedBy && (
+                          <div>
+                            <p className="text-xs text-neutral-400 uppercase tracking-wide mb-1">
+                              Assigned By
+                            </p>
+                            <p className="text-neutral-300">
+                              {selectedRow.performedBy.name}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Separator />

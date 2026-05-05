@@ -29,6 +29,7 @@ export const itemRecordRouter = router({
         where: { id: input.id },
         include: {
           actionBy: true,
+          performedBy: true,
           item: { include: { location: true, consumable: true } },
         },
       });
@@ -81,6 +82,7 @@ export const itemRecordRouter = router({
           // where,
           include: {
             actionBy: true,
+            performedBy: true,
             item: { include: { location: true, consumable: true } },
           },
           orderBy: { createdAt: "desc" },

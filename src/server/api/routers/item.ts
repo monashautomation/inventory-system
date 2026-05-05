@@ -443,6 +443,24 @@ export const itemRouter = router({
       return await itemCheckout(ctx.user.id, input);
     }),
 
+  adminCheckoutCart: adminProcedure
+    .input(
+      z.object({
+        targetUserId: z.uuid(),
+        cart: z
+          .array(
+            z.object({
+              itemId: z.uuid(),
+              quantity: z.number().min(1),
+            }),
+          )
+          .nonempty(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return await itemCheckout(input.targetUserId, input.cart, ctx.user.id);
+    }),
+
   checkinCart: userProcedure
     .input(
       z
@@ -456,6 +474,24 @@ export const itemRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       return await itemCheckin(ctx.user.id, input);
+    }),
+
+  adminCheckinCart: adminProcedure
+    .input(
+      z.object({
+        targetUserId: z.uuid(),
+        cart: z
+          .array(
+            z.object({
+              itemId: z.uuid(),
+              quantity: z.number().min(1),
+            }),
+          )
+          .nonempty(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return await itemCheckin(input.targetUserId, input.cart, ctx.user.id);
     }),
 
   printLabel: userProcedure

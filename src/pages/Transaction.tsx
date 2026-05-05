@@ -130,14 +130,22 @@ export default function Transactions() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="User" />
       ),
-      cell: ({ row }) => (
-        <span
-          onClick={() => handleRowClick(row.original)}
-          className="cursor-pointer  hover:underline transition p-2 rounded"
-        >
-          {row.getValue("name")}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const performedBy = row.original?.performedBy;
+        return (
+          <span
+            onClick={() => handleRowClick(row.original)}
+            className="cursor-pointer hover:underline transition p-2 rounded flex flex-col items-center"
+          >
+            {row.getValue("name")}
+            {performedBy && (
+              <span className="text-xs text-muted-foreground">
+                via {performedBy.name}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "location",
