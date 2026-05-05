@@ -56,14 +56,20 @@ export const kioskRouter = router({
         // Only return name — email and discordId are not needed by the UI
         return {
           found: false as const,
-          studentInfo: { studentId: studentInfo.studentId, name: studentInfo.name },
+          studentInfo: {
+            studentId: studentInfo.studentId,
+            name: studentInfo.name,
+          },
           user: null,
         };
       }
 
       return {
         found: true as const,
-        studentInfo: { studentId: studentInfo.studentId, name: studentInfo.name },
+        studentInfo: {
+          studentId: studentInfo.studentId,
+          name: studentInfo.name,
+        },
         user: { id: user.id, name: user.name, email: user.email },
       };
     }),

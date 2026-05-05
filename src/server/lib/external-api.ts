@@ -42,11 +42,12 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   const res = await fetch(
     `${STUDENT_API_BASE}/students/${encodeURIComponent(studentId)}`,
     {
-    headers: {
-      Authorization: `Bearer ${KIOSK_API_KEY}`,
-      "Content-Type": "application/json",
+      headers: {
+        Authorization: `Bearer ${KIOSK_API_KEY}`,
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
 
   if (!res.ok) {
     throw new Error(`Student API error: ${res.status} ${res.statusText}`);
