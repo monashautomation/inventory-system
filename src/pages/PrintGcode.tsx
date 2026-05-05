@@ -517,11 +517,15 @@ export default function PrintGcode() {
                         {job.printer.name} ({job.printer.type}) &bull;{" "}
                         {job.status}
                       </div>
-                      {job.status === "DISPATCH_FAILED" && job.dispatchError && (
-                        <div className="text-xs text-destructive mt-1 truncate" title={job.dispatchError}>
-                          {job.dispatchError}
-                        </div>
-                      )}
+                      {job.status === "DISPATCH_FAILED" &&
+                        job.dispatchError && (
+                          <div
+                            className="text-xs text-destructive mt-1 truncate"
+                            title={job.dispatchError}
+                          >
+                            {job.dispatchError}
+                          </div>
+                        )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <Button
