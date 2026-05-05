@@ -71,6 +71,7 @@ export default function ModifyItemForm({
     onSuccess: () => {
       void utils.item.get.invalidate({ id: item?.id ?? "" });
       void utils.item.list.invalidate();
+      void utils.item.listForAssets.invalidate();
       toast.success("Item successfully modified!");
       onSuccess?.();
       onOpenChange(false);
