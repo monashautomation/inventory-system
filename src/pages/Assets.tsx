@@ -9,6 +9,7 @@ import { trpc } from "@/client/trpc";
 import type { inferProcedureOutput } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 import { TableActions } from "@/components/data-table/table-actions";
+import { AssetDataRows } from "@/components/data-table/asset-data-rows";
 import { ManageLocationsDialog } from "@/components/data-table/manage-locations-dialog";
 import ErrorPage from "./Error";
 import { Route, Routes, useParams } from "react-router-dom";
@@ -42,9 +43,8 @@ const Assets = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   // Fetch paginated data
-  const { data, isLoading, error, refetch } = trpc.item.list.useQuery(
+  const { data, isLoading, error, refetch } = trpc.item.listForAssets.useQuery(
     {
-      consumable: false,
       locationId: locationId === "" ? null : locationId,
       filter: filter || undefined,
       page: pageIndex,
@@ -216,6 +216,18 @@ const Assets = () => {
         onPageChange={setPageIndex}
         onPageSizeChange={setPageSize}
         totalCount={data?.totalCount}
+        renderRows={(table) => (
+          <AssetDataRows
+            table={table}
+            onAddToCart={handleAddToCart}
+            onModify={handleModify}
+            onDelete={handleDelete}
+            itemInCart={itemInCart}
+            getCartQuantity={getCartQuantity}
+            isDeleting={deleteMut.isPending}
+            isAdmin={isAdmin}
+          />
+        )}
       />
 
       {selectedItem && (

@@ -205,13 +205,21 @@ export const itemRouter = router({
         locationId: z.uuid().optional().nullable(),
         tagGroupId: z.uuid().optional(),
         filter: z.string().optional(),
+        exactName: z.string().optional(),
         page: z.number().min(0).default(0),
         pageSize: z.number().min(1).max(100).default(10),
       }),
     )
     .query(async ({ input }) => {
-      const { consumable, locationId, tagGroupId, filter, page, pageSize } =
-        input;
+      const {
+        consumable,
+        locationId,
+        tagGroupId,
+        filter,
+        exactName,
+        page,
+        pageSize,
+      } = input;
 
       // If locationId is provided, get all descendant location IDs including itself
       let locationIds: string[] | undefined = undefined;
@@ -255,28 +263,35 @@ export const itemRouter = router({
               },
             }
           : {}),
-        ...(filter
+        ...(exactName
           ? {
-              OR: [
-                {
-                  name: {
-                    contains: filter,
-                    mode: "insensitive" as const,
+              name: {
+                equals: exactName,
+                mode: "insensitive" as const,
+              },
+            }
+          : filter
+            ? {
+                OR: [
+                  {
+                    name: {
+                      contains: filter,
+                      mode: "insensitive" as const,
+                    },
                   },
-                },
-                {
-                  tags: {
-                    some: {
-                      name: {
-                        contains: filter,
-                        mode: "insensitive" as const,
+                  {
+                    tags: {
+                      some: {
+                        name: {
+                          contains: filter,
+                          mode: "insensitive" as const,
+                        },
                       },
                     },
                   },
-                },
-              ],
-            }
-          : {}),
+                ],
+              }
+            : {}),
       };
 
       // Fetch paginated items and total count concurrently
@@ -294,6 +309,115 @@ export const itemRouter = router({
         }),
         prisma.item.count({ where }),
       ]);
+
+      return {
+        items,
+        totalCount,
+        page,
+        pageSize,
+        pageCount: Math.ceil(totalCount / pageSize),
+      };
+    }),
+
+  listForAssets: userProcedure
+    .input(
+      z.object({
+        locationId: z.uuid().optional().nullable(),
+        tagGroupId: z.uuid().optional(),
+        filter: z.string().optional(),
+        page: z.number().min(0).default(0),
+        pageSize: z.number().min(1).max(100).default(10),
+      }),
+    )
+    .query(async ({ input }) => {
+      const { locationId, tagGroupId, filter, page, pageSize } = input;
+
+      let locationIds: string[] | undefined = undefined;
+      if (locationId) {
+        const locations = await prisma.$queryRaw<{ id: string }[]>`
+        WITH RECURSIVE location_tree AS (
+          SELECT id FROM "Location" WHERE id = ${locationId}
+          UNION ALL
+          SELECT l.id FROM "Location" l
+          INNER JOIN location_tree lt ON l."parentId" = lt.id
+        )
+        SELECT id FROM location_tree
+      `;
+        locationIds = locations.map((loc) => loc.id);
+      }
+
+      let tagIds: string[] | undefined = undefined;
+      if (tagGroupId) {
+        const tagGroup = await prisma.tagGroup.findUnique({
+          where: { id: tagGroupId },
+          include: { tags: { select: { id: true } } },
+        });
+        if (tagGroup) {
+          tagIds = tagGroup.tags.map((tag) => tag.id);
+        }
+      }
+
+      // Base structural filters (no text search) — used to fetch all sibling items
+      const baseWhere = {
+        consumable: { is: null as null },
+        deleted: false,
+        ...(locationIds ? { locationId: { in: locationIds } } : {}),
+        ...(tagIds && tagIds.length > 0
+          ? { tags: { some: { id: { in: tagIds } } } }
+          : {}),
+      };
+
+      // Text search added on top for the name-discovery step
+      const filteredWhere = {
+        ...baseWhere,
+        ...(filter
+          ? {
+              OR: [
+                { name: { contains: filter, mode: "insensitive" as const } },
+                {
+                  tags: {
+                    some: {
+                      name: { contains: filter, mode: "insensitive" as const },
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      };
+
+      // Step 1: paginate distinct names that match the filter
+      const [nameGroups, allNameGroups] = await Promise.all([
+        prisma.item.groupBy({
+          by: ["name"],
+          where: filteredWhere,
+          skip: page * pageSize,
+          take: pageSize,
+          orderBy: { name: "asc" },
+        }),
+        prisma.item.groupBy({
+          by: ["name"],
+          where: filteredWhere,
+        }),
+      ]);
+
+      const totalCount = allNameGroups.length;
+      const names = nameGroups.map((g) => g.name);
+
+      // Step 2: fetch ALL items for those names (no text filter — show all siblings)
+      const items =
+        names.length > 0
+          ? await prisma.item.findMany({
+              where: { ...baseWhere, name: { in: names } },
+              include: {
+                location: true,
+                tags: true,
+                consumable: true,
+                ItemRecords: true,
+              },
+              orderBy: { name: "asc" },
+            })
+          : [];
 
       return {
         items,
