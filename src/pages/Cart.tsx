@@ -183,8 +183,9 @@ export default function Cart() {
           <div className="flex items-center gap-2">
             <QRScanner
               onScan={handleQRScan}
-              title="Scan Item QR Code"
-              description="Scan a QR code to quickly add an item to your cart"
+              title="Scan Item QR Codes"
+              description="Scan QR codes to add items — camera stays open for multiple scans"
+              multiScan
             />
             {items.length > 0 && (
               <AlertDialog>

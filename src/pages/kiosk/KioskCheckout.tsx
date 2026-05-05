@@ -213,7 +213,10 @@ export default function KioskCheckout() {
             )}
           </div>
           {!scanning ? (
-            <Button onClick={startCamera} className="w-full md:max-w-sm md:mx-auto">
+            <Button
+              onClick={startCamera}
+              className="w-full md:max-w-sm md:mx-auto"
+            >
               <Camera className="w-4 h-4 mr-2" />
               Start Scanning
             </Button>
@@ -255,7 +258,9 @@ export default function KioskCheckout() {
                   >
                     <div className="min-w-0 mr-2">
                       <p className="font-medium truncate">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.serial}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.serial}
+                      </p>
                     </div>
                     <Button
                       variant="ghost"

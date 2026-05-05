@@ -119,8 +119,9 @@ export default function KioskCheckin() {
                   Scan to Select
                 </Button>
               }
-              title="Scan Item QR Code"
-              description="Scan a QR code to quickly select an item for check-in"
+              title="Scan Item QR Codes"
+              description="Scan QR codes to select items — camera stays open for multiple scans"
+              multiScan
             />
             {safeItems.length > 0 && (
               <Button
