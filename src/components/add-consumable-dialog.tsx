@@ -14,7 +14,9 @@ import { useEffect, useState } from "react";
 import { NumberInput } from "./inputs/numeric-input";
 import { toast } from "sonner";
 
-type GetItemOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
+type GetItemOutput = inferProcedureOutput<
+  AppRouter["item"]["list"]
+>["items"][number];
 
 export interface AddConsumableDialogProps {
   item: GetItemOutput;
@@ -28,7 +30,7 @@ export function AddConsumableDialog({
   const { addItem, getItem } = useCart();
   const currentQuantity = getItem(item?.id ?? "")?.quantity ?? 0;
   const availableToAdd = Math.max(
-    getCartItemMaxQuantity(item!) - currentQuantity,
+    getCartItemMaxQuantity(item) - currentQuantity,
     0,
   );
   const [itemQty, setItemQty] = useState(1);

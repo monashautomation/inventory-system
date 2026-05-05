@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/sheet";
 import ModifyItemForm from "@/components/item-crud/ModifyItemForm";
 
-type GetItemOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
+type GetItemOutput = inferProcedureOutput<
+  AppRouter["item"]["list"]
+>["items"][number];
 
 interface ModifyFormProps {
   item: GetItemOutput;

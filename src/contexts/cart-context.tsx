@@ -16,7 +16,9 @@ export const cartItemSchema = z.object({
   quantity: z.number().min(1),
 });
 
-type GetItemsOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
+type GetItemsOutput = inferProcedureOutput<
+  AppRouter["item"]["list"]
+>["items"][number];
 export type CartItem = GetItemsOutput & { quantity: number };
 
 export function getCartItemMaxQuantity(item: Pick<CartItem, "consumable">) {
