@@ -29,6 +29,8 @@ export default function KioskCheckout() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const lastScanRef = useRef<{ id: string; ts: number } | null>(null);
+  // Ref tracks scanned IDs to avoid stale closure in scan callback
+  const scannedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!session) navigate("/kiosk", { replace: true });
@@ -101,7 +103,8 @@ export default function KioskCheckout() {
             return;
           lastScanRef.current = { id: itemId, ts: now };
 
-          if (items.some((i) => i.id === itemId)) {
+          // Use ref to avoid stale closure
+          if (scannedIdsRef.current.has(itemId)) {
             toast.info("Item already in list");
             return;
           }
@@ -116,6 +119,7 @@ export default function KioskCheckout() {
               return;
             }
 
+            scannedIdsRef.current.add(itemId);
             setItems((prev) => [
               ...prev,
               { id: item.id, name: item.name, serial: item.serial },
@@ -132,10 +136,12 @@ export default function KioskCheckout() {
       );
       setScanning(false);
     }
-  }, [items, getItem]);
+  }, [getItem]);
 
-  const removeItem = (id: string) =>
+  const removeItem = (id: string) => {
+    scannedIdsRef.current.delete(id);
     setItems((prev) => prev.filter((i) => i.id !== id));
+  };
 
   const handleConfirm = () => {
     if (!session || items.length === 0) return;
@@ -148,11 +154,13 @@ export default function KioskCheckout() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <div className="border-b px-8 py-4 flex items-center gap-3">
+    <div className="h-dvh bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="border-b px-4 py-3 flex items-center gap-3 shrink-0">
         <Button
           variant="ghost"
           size="icon"
+          className="shrink-0"
           onClick={() => {
             stopCamera();
             navigate("/kiosk/home");
@@ -160,19 +168,25 @@ export default function KioskCheckout() {
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
-        <div className="flex items-center gap-2">
-          <PackagePlus className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-semibold">Check Out Items</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <PackagePlus className="w-5 h-5 text-primary shrink-0" />
+          <h1 className="text-base font-semibold truncate">Check Out Items</h1>
         </div>
+        {items.length > 0 && (
+          <Badge variant="secondary" className="ml-auto shrink-0">
+            {items.length} item{items.length !== 1 ? "s" : ""}
+          </Badge>
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row gap-6 p-8">
+      {/* Body */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Camera panel */}
-        <div className="md:w-1/2 space-y-3">
+        <div className="md:w-1/2 flex flex-col gap-3 p-4 md:p-6 md:border-r shrink-0 md:overflow-y-auto">
           <p className="text-sm text-muted-foreground">
-            Scan item QR codes to add them to your cart
+            Scan QR codes — camera stays open to add multiple items
           </p>
-          <div className="aspect-square w-full max-w-sm mx-auto bg-black rounded-lg overflow-hidden relative">
+          <div className="relative bg-black rounded-xl overflow-hidden w-full aspect-[4/3] md:aspect-square md:max-w-sm md:mx-auto">
             <video
               ref={videoRef}
               autoPlay
@@ -182,27 +196,24 @@ export default function KioskCheckout() {
               style={{ display: scanning ? "block" : "none" }}
             />
             {!scanning && (
-              <div className="w-full h-full flex items-center justify-center text-white">
+              <div className="absolute inset-0 flex items-center justify-center text-white">
                 <div className="text-center space-y-3">
-                  <Camera className="w-12 h-12 mx-auto opacity-50" />
-                  <p className="text-sm">Camera not active</p>
+                  <Camera className="w-10 h-10 mx-auto opacity-40" />
+                  <p className="text-sm opacity-60">Camera not active</p>
                 </div>
               </div>
             )}
             {scanning && (
-              <div className="absolute inset-4 border-2 border-primary rounded-lg pointer-events-none">
-                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl" />
-                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr" />
-                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl" />
-                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br" />
+              <div className="absolute inset-6 pointer-events-none">
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-sm" />
+                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-sm" />
+                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-sm" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-sm" />
               </div>
             )}
           </div>
           {!scanning ? (
-            <Button
-              onClick={startCamera}
-              className="w-full max-w-sm mx-auto flex"
-            >
+            <Button onClick={startCamera} className="w-full md:max-w-sm md:mx-auto">
               <Camera className="w-4 h-4 mr-2" />
               Start Scanning
             </Button>
@@ -210,7 +221,7 @@ export default function KioskCheckout() {
             <Button
               variant="outline"
               onClick={stopCamera}
-              className="w-full max-w-sm mx-auto flex"
+              className="w-full md:max-w-sm md:mx-auto"
             >
               <X className="w-4 h-4 mr-2" />
               Stop Camera
@@ -219,55 +230,52 @@ export default function KioskCheckout() {
         </div>
 
         {/* Item list panel */}
-        <div className="md:w-1/2 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">
+        <div className="flex-1 flex flex-col min-h-0 md:w-1/2">
+          <div className="px-4 pt-3 pb-2 md:px-6 md:pt-6 shrink-0">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Scanned Items
-              {items.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {items.length}
-                </Badge>
-              )}
             </h2>
           </div>
 
-          {items.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg p-8">
-              <p className="text-sm text-muted-foreground text-center">
-                No items scanned yet.
-                <br />
-                Start the camera and scan a QR code.
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1 space-y-2 overflow-y-auto">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-lg border px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.serial}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeItem(item.id)}
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-2">
+            {items.length === 0 ? (
+              <div className="h-full min-h-[80px] flex items-center justify-center border border-dashed rounded-lg p-6">
+                <p className="text-sm text-muted-foreground text-center">
+                  No items scanned yet.
+                  <br />
+                  Start the camera and scan a QR code.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between rounded-lg border px-4 py-3 bg-card"
                   >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+                    <div className="min-w-0 mr-2">
+                      <p className="font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.serial}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => removeItem(item.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {items.length > 0 && (
+          {/* Sticky confirm */}
+          <div className="px-4 py-3 md:px-6 md:pb-6 border-t shrink-0">
             <Button
-              className="h-12 text-base"
-              disabled={checkout.isPending}
+              className="w-full h-12 text-base"
+              disabled={items.length === 0 || checkout.isPending}
               onClick={handleConfirm}
             >
               {checkout.isPending ? (
@@ -275,11 +283,13 @@ export default function KioskCheckout() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
                 </>
+              ) : items.length === 0 ? (
+                "Scan items to check out"
               ) : (
                 `Check Out ${items.length} Item${items.length !== 1 ? "s" : ""}`
               )}
             </Button>
-          )}
+          </div>
         </div>
       </div>
     </div>
