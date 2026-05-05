@@ -446,7 +446,7 @@ export const itemRouter = router({
   adminCheckoutCart: adminProcedure
     .input(
       z.object({
-        targetUserId: z.uuid(),
+        targetUserId: z.string(),
         cart: z
           .array(
             z.object({
@@ -479,7 +479,7 @@ export const itemRouter = router({
   adminCheckinCart: adminProcedure
     .input(
       z.object({
-        targetUserId: z.uuid(),
+        targetUserId: z.string(),
         cart: z
           .array(
             z.object({
