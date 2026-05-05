@@ -14,7 +14,9 @@ import { useEffect, useState } from "react";
 import { NumberInput } from "./inputs/numeric-input";
 import { toast } from "sonner";
 
-type GetItemOutput = inferProcedureOutput<AppRouter["item"]["get"]>;
+type GetItemOutput = inferProcedureOutput<
+  AppRouter["item"]["list"]
+>["items"][number];
 
 export interface AddConsumableDialogProps {
   item: GetItemOutput;

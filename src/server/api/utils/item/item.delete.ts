@@ -1,10 +1,8 @@
 import { prisma } from "@/server/lib/prisma";
 import { TRPCError } from "@trpc/server";
-import type { AppRouter } from "../../routers/_app";
 import { getByUuid } from "./item.utils";
-import type { inferProcedureOutput } from "@trpc/server";
 
-type Item = inferProcedureOutput<AppRouter["item"]["get"]>;
+type Item = Awaited<ReturnType<typeof getByUuid>>;
 
 export const itemBulkDelete = async (ids: string[]) => {
   const items = await validateDeleteItems(ids);
