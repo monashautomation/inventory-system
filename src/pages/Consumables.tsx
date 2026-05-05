@@ -217,13 +217,16 @@ const Consumables = () => {
 
       <AlertDialog
         open={!!itemToDelete}
-        onOpenChange={(open) => { if (!open) setItemToDelete(null); }}
+        onOpenChange={(open) => {
+          if (!open) setItemToDelete(null);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete item?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{itemToDelete?.name}</strong>. This action cannot be undone.
+              This will permanently delete <strong>{itemToDelete?.name}</strong>
+              . This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

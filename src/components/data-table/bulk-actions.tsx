@@ -286,9 +286,12 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selectedCount} item{selectedCount > 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selectedCount} item{selectedCount > 1 ? "s" : ""}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {selectedCount} selected item{selectedCount > 1 ? "s" : ""}. This action cannot be undone.
+              This will permanently delete {selectedCount} selected item
+              {selectedCount > 1 ? "s" : ""}. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
