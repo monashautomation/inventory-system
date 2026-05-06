@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useKiosk } from "@/contexts/kiosk-context";
 import { trpc } from "@/client/trpc";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,11 +18,22 @@ import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-const schema = z.object({
-  duration: z.string().min(1, "Select a duration"),
-  reason: z.string().min(1, "Select a reason"),
-  supervisorId: z.string().optional(),
-});
+const schema = z
+  .object({
+    duration: z.string().min(1, "Select a duration"),
+    reason: z.string().min(1, "Select a reason"),
+    customReason: z.string().optional(),
+    supervisorId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.reason === "Other" && !data.customReason?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please describe what you're working on",
+        path: ["customReason"],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -49,11 +61,20 @@ export default function KioskAfterHours() {
   const {
     control,
     handleSubmit,
+    watch,
+    register,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { duration: "", reason: "", supervisorId: undefined },
+    defaultValues: {
+      duration: "",
+      reason: "",
+      customReason: "",
+      supervisorId: undefined,
+    },
   });
+
+  const watchedReason = watch("reason");
 
   const onSubmit = (values: FormValues) => {
     if (!session) return;
@@ -61,6 +82,7 @@ export default function KioskAfterHours() {
       studentId: session.student.studentId,
       duration: values.duration as Parameters<typeof log.mutate>[0]["duration"],
       reason: values.reason as Parameters<typeof log.mutate>[0]["reason"],
+      customReason: values.reason === "Other" ? values.customReason : undefined,
       supervisorId: values.supervisorId || undefined,
     });
   };
@@ -150,6 +172,23 @@ export default function KioskAfterHours() {
               </p>
             )}
           </div>
+
+          {watchedReason === "Other" && (
+            <div className="space-y-2">
+              <Label>Describe what you're working on</Label>
+              <Input
+                {...register("customReason")}
+                placeholder="e.g. Inventory Project"
+                className="h-12"
+                autoFocus
+              />
+              {errors.customReason && (
+                <p className="text-sm text-destructive">
+                  {errors.customReason.message}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>

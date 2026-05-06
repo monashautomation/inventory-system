@@ -9,14 +9,19 @@ import { TRPCError } from "@trpc/server";
 const AFTER_HOURS_DURATIONS = [
   "30 minutes",
   "1 hour",
-  "1.5 hours",
   "2 hours",
   "3 hours",
-  "4+ hours",
+  "4 hours",
+  "5 hours",
+  "6 hours",
+  "7 hours",
+  "8 hours",
+  "9 hours",
+  "10 hours",
 ] as const;
 
 const AFTER_HOURS_REASONS = [
-  "Project work",
+  "Project Work",
   "Study / Research",
   "Club activities",
   "Equipment maintenance",
@@ -94,12 +99,23 @@ export const kioskRouter = router({
 
   logAfterHours: kioskProcedure
     .input(
-      z.object({
-        studentId: studentIdSchema,
-        duration: z.enum(AFTER_HOURS_DURATIONS),
-        reason: z.enum(AFTER_HOURS_REASONS),
-        supervisorId: z.string().uuid().optional(),
-      }),
+      z
+        .object({
+          studentId: studentIdSchema,
+          duration: z.enum(AFTER_HOURS_DURATIONS),
+          reason: z.enum(AFTER_HOURS_REASONS),
+          customReason: z.string().min(1).max(200).optional(),
+          supervisorId: z.string().uuid().optional(),
+        })
+        .refine(
+          (data) =>
+            data.reason !== "Other" ||
+            (data.customReason?.trim().length ?? 0) > 0,
+          {
+            message: "Custom reason required when reason is Other",
+            path: ["customReason"],
+          },
+        ),
     )
     .mutation(async ({ input }) => {
       const { studentInfo, user } = await resolveUser(input.studentId);
@@ -127,19 +143,53 @@ export const kioskRouter = router({
         supervisorName = supervisor.name;
       }
 
-      const timestamp = new Date().toLocaleString("en-AU", {
+      const date = new Intl.DateTimeFormat("en-AU", {
         timeZone: "Australia/Melbourne",
-        dateStyle: "short",
-        timeStyle: "short",
+        day: "2-digit",
+        month: "2-digit",
+      }).format(new Date());
+
+      const durationMinutesByLabel: Record<
+        (typeof AFTER_HOURS_DURATIONS)[number],
+        number
+      > = {
+        "30 minutes": 30,
+        "1 hour": 60,
+        "2 hours": 120,
+        "3 hours": 180,
+        "4 hours": 240,
+        "5 hours": 300,
+        "6 hours": 360,
+        "7 hours": 420,
+        "8 hours": 480,
+        "9 hours": 540,
+        "10 hours": 600,
+      };
+
+      const now = new Date();
+      const endTime = new Date(
+        now.getTime() + durationMinutesByLabel[input.duration] * 60 * 1000,
+      );
+
+      const timeFormatter = new Intl.DateTimeFormat("en-AU", {
+        timeZone: "Australia/Melbourne",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
       });
 
+      const startTimeText = timeFormatter.format(now).toLowerCase();
+      const endTimeText = timeFormatter.format(endTime).toLowerCase();
+
       const text = [
-        "🌙 **After Hours Access Log**",
-        `👤 **Student:** ${escapeDiscordMarkdown(studentInfo.name)} (${escapeDiscordMarkdown(studentInfo.email)})`,
-        `🕐 **Duration:** ${input.duration}`,
-        `📋 **Reason:** ${input.reason}`,
-        `👔 **Supervisor:** ${escapeDiscordMarkdown(supervisorName)}`,
-        `📅 **Time:** ${timestamp}`,
+        "@Keenan",
+        `Who: @${escapeDiscordMarkdown(studentInfo.discordId)}`,
+        `Day: ${date}`,
+        `Time: ${startTimeText} - ${endTimeText}`,
+        `Activity: ${input.reason === "Other" ? escapeDiscordMarkdown(input.customReason!) : input.reason}`,
+        ...(input.supervisorId
+          ? [`Supervisor: ${escapeDiscordMarkdown(supervisorName)}`]
+          : []),
       ].join("\n");
 
       await postDiscordMessage({
@@ -184,7 +234,10 @@ export const kioskRouter = router({
       });
 
       if (!item) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Item not found",
+        });
       }
 
       return item;
@@ -207,7 +260,10 @@ export const kioskRouter = router({
         });
       }
 
-      const cart = input.itemIds.map((id) => ({ itemId: id, quantity: 1 }));
+      const cart = input.itemIds.map((id) => ({
+        itemId: id,
+        quantity: 1,
+      }));
       const result = await itemCheckout(user.id, cart);
       return result;
     }),
@@ -298,7 +354,10 @@ export const kioskRouter = router({
         });
       }
 
-      const cart = input.itemIds.map((id) => ({ itemId: id, quantity: 1 }));
+      const cart = input.itemIds.map((id) => ({
+        itemId: id,
+        quantity: 1,
+      }));
       const result = await itemCheckin(user.id, cart);
       return result;
     }),
