@@ -1,6 +1,5 @@
-import { describe, it, vi, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, vi, expect, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
-import { TRPCError } from "@trpc/server";
 import { createCallerFactory } from "@/server/trpc";
 import { kioskRouter } from "../kiosk";
 import prismaMock from "@/server/lib/__mocks__/prisma";
@@ -25,7 +24,7 @@ const KIOSK_SECRET = process.env.KIOSK_SECRET ?? "";
 
 const createCaller = createCallerFactory(kioskRouter);
 const caller = createCaller({
-  prisma: prismaMock,
+  prisma: prismaMock as never,
   user: undefined,
   req: new Request("http://localhost", {
     headers: { "x-kiosk-token": KIOSK_SECRET },

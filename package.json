@@ -126,6 +126,7 @@
         "node-fetch": "^3.3.2",
         "prettier": "^3.5.3",
         "prisma-zod-generator": "^1.14.0",
+        "rollup-plugin-visualizer": "^7.0.1",
         "tsx": "^4.20.3",
         "tw-animate-css": "^1.3.4",
         "typescript": "~5.8.3",
