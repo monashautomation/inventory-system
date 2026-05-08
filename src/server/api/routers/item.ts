@@ -7,7 +7,6 @@ import { itemCheckin } from "../utils/item/item.checkin";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import type { PrintResponse } from "../utils/item/item.utils";
 import { itemBulkDelete } from "../utils/item/item.delete";
-import { resolveImageUrl } from "@/server/lib/s3";
 
 export const itemRouter = router({
   create: adminProcedure
@@ -510,7 +509,7 @@ export const itemRouter = router({
         select: { image: true },
       });
       if (!item?.image) return null;
-      return resolveImageUrl(item.image);
+      return `/api/items/${input.id}/image`;
     }),
 
   updateNote: userProcedure

@@ -22,7 +22,7 @@ import {
     getCachedSnapshot,
 } from "@/server/lib/printCamPoller";
 import sharp from "sharp";
-import { uploadFile, buildItemImageKey, deleteFile, fileExists } from "@/server/lib/s3";
+import { uploadFile, buildItemImageKey, deleteFile, fileExists, downloadFile } from "@/server/lib/s3";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -125,6 +125,31 @@ app.onError((err, c) => {
 
 // Health check endpoint
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// ─── Item image proxy ─────────────────────────────────────────────────────────
+app.get("/api/items/:id/image", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) {
+        throw new HTTPException(401, { message: "Authentication required" });
+    }
+
+    const itemId = c.req.param("id");
+    const item = await prisma.item.findUnique({
+        where: { id: itemId, deleted: false },
+        select: { image: true },
+    });
+    if (!item?.image) {
+        throw new HTTPException(404, { message: "No image" });
+    }
+
+    const bytes = await downloadFile(item.image);
+    return new Response(bytes, {
+        headers: {
+            "Content-Type": "image/webp",
+            "Cache-Control": "private, max-age=3600",
+        },
+    });
+});
 
 // ─── Item image upload ────────────────────────────────────────────────────────
 app.post("/api/items/:id/image", async (c) => {
