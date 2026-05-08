@@ -43,4 +43,4 @@ EXPOSE 4173
 ENV NODE_ENV=production
 
 # Start the server
-CMD ["/bin/sh", "-c", "bunx prisma db push --accept-data-loss && bun run start"]
+CMD ["/bin/sh", "-c", "bunx prisma db push && bun run start"]
