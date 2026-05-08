@@ -21,11 +21,15 @@ vi.mock("@/server/api/utils/item/item.checkin");
 // Clear call histories between tests (prismaMock reset is handled by __mocks__/prisma.ts)
 afterEach(() => vi.clearAllMocks());
 
+const KIOSK_SECRET = process.env.KIOSK_SECRET ?? "";
+
 const createCaller = createCallerFactory(kioskRouter);
 const caller = createCaller({
   prisma: prismaMock,
   user: undefined,
-  req: {} as Request,
+  req: new Request("http://localhost", {
+    headers: { "x-kiosk-token": KIOSK_SECRET },
+  }),
   res: {} as Response,
 });
 

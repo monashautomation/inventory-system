@@ -12,14 +12,14 @@ import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 beforeEach(() => {
   delete process.env.STUDENT_API_BASE;
   delete process.env.DISCORD_API_BASE;
-  delete process.env.KIOSK_API_KEY;
+  delete process.env.STUDENT_API_KEY;
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   delete process.env.STUDENT_API_BASE;
   delete process.env.DISCORD_API_BASE;
-  delete process.env.KIOSK_API_KEY;
+  delete process.env.STUDENT_API_KEY;
 });
 
 describe("getStudentInfo", () => {
@@ -44,7 +44,7 @@ describe("getStudentInfo", () => {
   describe("real API mode (STUDENT_API_BASE set)", () => {
     it("calls API with correct URL and auth header", async () => {
       process.env.STUDENT_API_BASE = "https://api.example.com";
-      process.env.KIOSK_API_KEY = "test-key";
+      process.env.STUDENT_API_KEY = "test-key";
 
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -105,7 +105,10 @@ describe("getStudentInfo", () => {
 describe("postDiscordMessage", () => {
   describe("stub mode (no DISCORD_API_BASE)", () => {
     it("logs to console instead of calling API", async () => {
-      await postDiscordMessage({ channel: "test-channel", text: "hello" });
+      await postDiscordMessage({
+        channel: "test-channel",
+        text: "hello",
+      });
 
       expect(fetchMock).not.toHaveBeenCalled();
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -125,7 +128,7 @@ describe("postDiscordMessage", () => {
   describe("real API mode (DISCORD_API_BASE set)", () => {
     it("POSTs to correct URL with correct payload", async () => {
       process.env.DISCORD_API_BASE = "https://discord-api.example.com";
-      process.env.KIOSK_API_KEY = "discord-key";
+      process.env.STUDENT_API_KEY = "discord-key";
 
       fetchMock.mockResolvedValueOnce({ ok: true });
 

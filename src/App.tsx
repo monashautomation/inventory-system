@@ -26,6 +26,8 @@ import KioskHome from "@/pages/kiosk/KioskHome";
 import KioskAfterHours from "@/pages/kiosk/KioskAfterHours";
 import KioskCheckout from "@/pages/kiosk/KioskCheckout";
 import KioskCheckin from "@/pages/kiosk/KioskCheckin";
+import KioskProvision from "@/pages/kiosk/KioskProvision";
+import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
 
 const App = () => {
   React.useEffect(() => {
@@ -46,11 +48,17 @@ const App = () => {
             <Routes>
               <Route path="error" element={<ErrorPage />} />
               <Route path="/auth/:pathname" element={<AuthPage />} />
-              <Route path="/kiosk" element={<KioskLanding />} />
-              <Route path="/kiosk/home" element={<KioskHome />} />
-              <Route path="/kiosk/after-hours" element={<KioskAfterHours />} />
-              <Route path="/kiosk/checkout" element={<KioskCheckout />} />
-              <Route path="/kiosk/checkin" element={<KioskCheckin />} />
+              <Route path="/kiosk/provision" element={<KioskProvision />} />
+              <Route element={<KioskGuardLayout />}>
+                <Route path="/kiosk" element={<KioskLanding />} />
+                <Route path="/kiosk/home" element={<KioskHome />} />
+                <Route
+                  path="/kiosk/after-hours"
+                  element={<KioskAfterHours />}
+                />
+                <Route path="/kiosk/checkout" element={<KioskCheckout />} />
+                <Route path="/kiosk/checkin" element={<KioskCheckin />} />
+              </Route>
               <Route path="/" element={<ProtectedLayout />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />

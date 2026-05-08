@@ -20,7 +20,7 @@ export interface DiscordMessagePayload {
 export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   // Read env vars at call time so tests can override process.env
   const STUDENT_API_BASE = process.env.STUDENT_API_BASE ?? "";
-  const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
+  const STUDENT_API_KEY = process.env.STUDENT_API_KEY ?? "";
 
   if (!STUDENT_API_BASE) {
     if (
@@ -43,7 +43,7 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
     `${STUDENT_API_BASE}/members/${encodeURIComponent(studentId)}`,
     {
       headers: {
-        Authorization: `Bearer ${KIOSK_API_KEY}`,
+        Authorization: `Bearer ${STUDENT_API_KEY}`,
         "Content-Type": "application/json",
       },
     },
@@ -51,7 +51,9 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
 
   if (!res.ok) {
     if (res.status === 404) {
-      const err = new Error("Member not found") as Error & { code: string };
+      const err = new Error("Member not found") as Error & {
+        code: string;
+      };
       err.code = "MEMBER_NOT_FOUND";
       throw err;
     }
@@ -92,7 +94,7 @@ export async function postDiscordMessage(
   payload: DiscordMessagePayload,
 ): Promise<void> {
   const DISCORD_API_BASE = process.env.DISCORD_API_BASE ?? "";
-  const KIOSK_API_KEY = process.env.KIOSK_API_KEY ?? "";
+  const STUDENT_API_KEY = process.env.STUDENT_API_KEY ?? "";
 
   if (!DISCORD_API_BASE) {
     if (
@@ -111,7 +113,7 @@ export async function postDiscordMessage(
   const res = await fetch(`${DISCORD_API_BASE}/message`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${KIOSK_API_KEY}`,
+      Authorization: `Bearer ${STUDENT_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),

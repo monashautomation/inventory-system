@@ -1,4 +1,4 @@
-import { router, kioskProcedure } from "@/server/trpc";
+import { router, kioskProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 import { itemCheckout } from "../utils/item/item.checkout";
@@ -336,6 +336,17 @@ export const kioskRouter = router({
         (r) => r.loaned && r.actionByUserId === user.id,
       );
     }),
+
+  provisionTerminal: adminProcedure.mutation(() => {
+    const token = process.env.KIOSK_SECRET;
+    if (!token) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "KIOSK_SECRET not configured",
+      });
+    }
+    return { token };
+  }),
 
   checkinItems: kioskProcedure
     .input(
