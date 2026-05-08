@@ -36,10 +36,32 @@ const DISCORD_AFTER_HOURS_CHANNEL =
 const studentIdSchema = z.string().regex(/^[A-Za-z0-9]{1,20}$/);
 
 async function resolveUser(studentId: string) {
-  const studentInfo = await getStudentInfo(studentId);
+  let studentInfo;
+  try {
+    studentInfo = await getStudentInfo(studentId);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err as Error & { code?: string }).code === "MEMBER_NOT_FOUND"
+    ) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "MEMBER_NOT_FOUND",
+      });
+    }
+    throw err;
+  }
   const user = await prisma.user.findFirst({
     where: { email: studentInfo.email },
   });
+
+  if (user && !user.studentNumber) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { studentNumber: studentInfo.studentId },
+    });
+  }
+
   return { studentInfo, user };
 }
 

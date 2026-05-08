@@ -9,9 +9,14 @@ const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 
+beforeEach(() => {
+  delete process.env.STUDENT_API_BASE;
+  delete process.env.DISCORD_API_BASE;
+  delete process.env.KIOSK_API_KEY;
+});
+
 afterEach(() => {
   vi.clearAllMocks();
-  // Reset env vars between tests
   delete process.env.STUDENT_API_BASE;
   delete process.env.DISCORD_API_BASE;
   delete process.env.KIOSK_API_KEY;
@@ -54,7 +59,7 @@ describe("getStudentInfo", () => {
       const result = await getStudentInfo("12345678");
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://api.example.com/students/12345678",
+        "https://api.example.com/members/12345678",
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: "Bearer test-key",
@@ -75,7 +80,7 @@ describe("getStudentInfo", () => {
       });
 
       await expect(getStudentInfo("00000000")).rejects.toThrow(
-        "Student API error: 404 Not Found",
+        "Member not found",
       );
     });
 

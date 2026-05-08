@@ -115,15 +115,14 @@ describe("kiosk router", () => {
       const result = await caller.logAfterHours({
         studentId: studentInfo.studentId,
         duration: "1 hour",
-        reason: "Project work",
+        reason: "Project Work",
         supervisorId: supervisor.id,
       });
 
       expect(result.ok).toBe(true);
       const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
-      expect(call.text).toContain(studentInfo.name);
-      expect(call.text).toContain("1 hour");
-      expect(call.text).toContain("Project work");
+      expect(call.text).toContain(studentInfo.discordId);
+      expect(call.text).toContain("Project Work");
       expect(call.text).toContain("Dr. Smith");
     });
 
@@ -144,7 +143,7 @@ describe("kiosk router", () => {
       });
 
       const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
-      expect(call.text).toContain("None declared");
+      expect(call.text).not.toContain("Supervisor:");
     });
 
     it("throws NOT_FOUND when student has no DB account", async () => {
@@ -156,14 +155,14 @@ describe("kiosk router", () => {
         caller.logAfterHours({
           studentId: studentInfo.studentId,
           duration: "1 hour",
-          reason: "Project work",
+          reason: "Project Work",
         }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
-    it("Discord message includes student email", async () => {
+    it("Discord message includes student discordId", async () => {
       const studentInfo = makeStudentInfo({
-        email: "check@student.monash.edu",
+        discordId: "123456789012345678",
       });
       const dbUser = createUser({ email: studentInfo.email });
 
@@ -177,11 +176,11 @@ describe("kiosk router", () => {
         studentId: studentInfo.studentId,
         duration: "30 minutes",
         reason: "Other",
+        customReason: "Personal project",
       });
 
       const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
-      // @ is escaped with a zero-width space to prevent Discord mention abuse
-      expect(call.text).toContain("check@");
+      expect(call.text).toContain("123456789012345678");
     });
 
     it("propagates Discord API failure", async () => {
@@ -198,7 +197,7 @@ describe("kiosk router", () => {
         caller.logAfterHours({
           studentId: studentInfo.studentId,
           duration: "1 hour",
-          reason: "Project work",
+          reason: "Project Work",
         }),
       ).rejects.toThrow("Discord API error");
     });
@@ -500,7 +499,7 @@ describe("kiosk router", () => {
 
     it("includes 'Project work' in reasons", async () => {
       const result = await caller.getAfterHoursOptions();
-      expect(result.reasons).toContain("Project work");
+      expect(result.reasons).toContain("Project Work");
     });
   });
 

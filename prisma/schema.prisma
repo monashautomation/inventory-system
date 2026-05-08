@@ -118,10 +118,11 @@ model User {
     printers      Printer[]
     gcodePrintJobs GcodePrintJob[]
 
-    role       String    @default("user")
-    banned     Boolean?
-    banReason  String?
-    banExpires DateTime?
+    role          String    @default("user")
+    banned        Boolean?
+    banReason     String?
+    banExpires    DateTime?
+    studentNumber String?   @unique
 
     @@index([email])
     @@index([groupId])

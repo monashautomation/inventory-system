@@ -40,7 +40,7 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   }
 
   const res = await fetch(
-    `${STUDENT_API_BASE}/students/${encodeURIComponent(studentId)}`,
+    `${STUDENT_API_BASE}/members/${encodeURIComponent(studentId)}`,
     {
       headers: {
         Authorization: `Bearer ${KIOSK_API_KEY}`,
@@ -50,11 +50,42 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   );
 
   if (!res.ok) {
+    if (res.status === 404) {
+      const err = new Error("Member not found") as Error & { code: string };
+      err.code = "MEMBER_NOT_FOUND";
+      throw err;
+    }
     throw new Error(`Student API error: ${res.status} ${res.statusText}`);
   }
 
-  const data = (await res.json()) as StudentInfo;
-  return { ...data, studentId };
+  const body = (await res.json()) as { error?: string } & {
+    id?: string;
+    name?: string;
+    student_number?: string;
+    email?: string;
+    discord_id?: string;
+  };
+
+  if (body.error) {
+    const err = new Error(body.error) as Error & { code: string };
+    err.code = "MEMBER_NOT_FOUND";
+    throw err;
+  }
+
+  const raw = body as {
+    id: string;
+    name: string;
+    student_number: string;
+    email: string;
+    discord_id: string;
+  };
+
+  return {
+    studentId: raw.student_number ?? studentId,
+    name: raw.name,
+    email: raw.email,
+    discordId: raw.discord_id,
+  };
 }
 
 export async function postDiscordMessage(
