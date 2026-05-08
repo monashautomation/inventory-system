@@ -60,6 +60,7 @@ export const itemRouter = router({
           location: true,
           tags: true,
           consumable: true,
+          notesUpdatedBy: { select: { id: true, name: true } },
           ItemRecords: {
             include: {
               actionBy: {
@@ -498,6 +499,29 @@ export const itemRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       return await itemCheckin(input.targetUserId, input.cart, ctx.user.id);
+    }),
+
+  updateNote: userProcedure
+    .input(
+      z.object({
+        id: z.uuid(),
+        notes: z.string().max(2000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      return prisma.item.update({
+        where: { id: input.id, deleted: false },
+        data: {
+          notes: input.notes || null,
+          notesUpdatedByUserId: ctx.user.id,
+          notesUpdatedAt: new Date(),
+        },
+        select: {
+          notes: true,
+          notesUpdatedAt: true,
+          notesUpdatedBy: { select: { id: true, name: true } },
+        },
+      });
     }),
 
   printLabel: userProcedure

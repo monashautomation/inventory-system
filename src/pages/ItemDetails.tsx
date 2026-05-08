@@ -14,6 +14,10 @@ import { AdminAssignCard } from "@/components/item-crud/AdminAssignCard";
 import { AdminRevokeCard } from "@/components/item-crud/AdminRevokeCard";
 import { authClient } from "@/auth/client";
 import { PrintButton } from "@/components/print-label";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Pencil, X, Check } from "lucide-react";
 
 interface ItemDetailsProps {
   passedId?: string;
@@ -196,6 +200,9 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                                 </div>
                             </Section>*/}
             </div>
+            {/* Notes */}
+            <ItemNotes itemId={itemId} data={data} onSaved={refetch} />
+
             {/* Timestamps */}
             <Section title="Timestamps">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
@@ -284,6 +291,113 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
         </div>
       </div>
     </div>
+  );
+};
+
+interface ItemNotesProps {
+  itemId: string;
+  data: {
+    notes?: string | null;
+    notesUpdatedAt?: Date | string | null;
+    notesUpdatedBy?: { id: string; name: string } | null;
+  };
+  onSaved: () => void;
+}
+
+const ItemNotes = ({ itemId, data, onSaved }: ItemNotesProps) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(data.notes ?? "");
+
+  const updateNote = trpc.item.updateNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note saved.");
+      setEditing(false);
+      onSaved();
+    },
+    onError: (err) => {
+      toast.error(`Failed to save note: ${err.message}`);
+    },
+  });
+
+  const handleEdit = () => {
+    setDraft(data.notes ?? "");
+    setEditing(true);
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setDraft(data.notes ?? "");
+  };
+
+  const handleSave = () => {
+    updateNote.mutate({ id: itemId, notes: draft });
+  };
+
+  return (
+    <Section title="Notes">
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Notes are visible to all users.
+        </p>
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add a note..."
+              className="min-h-[80px] resize-y"
+              maxLength={2000}
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={updateNote.isPending}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={updateNote.isPending}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm whitespace-pre-wrap">
+                {data.notes ?? (
+                  <span className="text-muted-foreground italic">
+                    No notes yet.
+                  </span>
+                )}
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-shrink-0"
+                onClick={handleEdit}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit
+              </Button>
+            </div>
+            {data.notesUpdatedBy && data.notesUpdatedAt && (
+              <p className="text-xs text-muted-foreground">
+                Last edited by {data.notesUpdatedBy.name} on{" "}
+                {new Date(data.notesUpdatedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
   );
 };
 
