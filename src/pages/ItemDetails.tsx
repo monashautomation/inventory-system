@@ -51,10 +51,8 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
     id: itemId,
   });
 
-  const { data: imageUrl, refetch: refetchImage } = trpc.item.getImageUrl.useQuery(
-    { id: itemId },
-    { enabled: !!data?.image },
-  );
+  const { data: imageUrl, refetch: refetchImage } =
+    trpc.item.getImageUrl.useQuery({ id: itemId }, { enabled: !!data?.image });
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -70,8 +68,12 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
         credentials: "include",
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Upload failed" }));
-        throw new Error((err as { message?: string }).message ?? "Upload failed");
+        const err = await res
+          .json()
+          .catch(() => ({ message: "Upload failed" }));
+        throw new Error(
+          (err as { message?: string }).message ?? "Upload failed",
+        );
       }
       await refetch();
       await refetchImage();

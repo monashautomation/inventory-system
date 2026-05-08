@@ -81,7 +81,7 @@ export function QRScanner({
           }
         },
       );
-    } catch (err) {
+    } catch {
       setError(
         "Unable to access camera. Please check permissions and try again.",
       );

@@ -94,6 +94,7 @@ describe("kiosk router", () => {
 
       await caller.lookupStudent({ studentId: studentInfo.studentId });
 
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { email: "specific@student.monash.edu" },
@@ -394,6 +395,7 @@ describe("kiosk router", () => {
 
       await caller.getUserLoanedItems({ studentId: studentInfo.studentId });
 
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(prismaMock.itemRecord.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({

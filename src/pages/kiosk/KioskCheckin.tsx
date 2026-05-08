@@ -16,7 +16,7 @@ export default function KioskCheckin() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!session) navigate("/kiosk", { replace: true });
+    if (!session) void navigate("/kiosk", { replace: true });
   }, [session, navigate]);
 
   const { data: loanedItems, isLoading } =
@@ -34,7 +34,7 @@ export default function KioskCheckin() {
       if (data.ok) {
         void utils.kiosk.getUserLoanedItems.invalidate();
         toast.success("Items checked in successfully");
-        navigate("/kiosk/home");
+        void navigate("/kiosk/home");
       } else {
         toast.error(
           typeof data.failures === "string"
@@ -49,7 +49,8 @@ export default function KioskCheckin() {
   const toggleItem = (itemId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
       return next;
     });
   };

@@ -5,6 +5,7 @@ const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
 // Must mock console before import too
+// eslint-disable-next-line @typescript-eslint/no-empty-function
 const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
@@ -48,7 +49,7 @@ describe("getStudentInfo", () => {
 
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
+        json: () => ({
           studentId: "12345678",
           name: "Jane Smith",
           email: "jane@student.monash.edu",
@@ -89,7 +90,7 @@ describe("getStudentInfo", () => {
 
       fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
+        json: () => ({
           name: "No ID Student",
           email: "noid@student.monash.edu",
           discordId: "999",

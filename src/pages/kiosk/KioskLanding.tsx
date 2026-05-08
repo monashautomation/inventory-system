@@ -38,7 +38,7 @@ export default function KioskLanding() {
         },
         user: data.user,
       });
-      navigate("/kiosk/home");
+      void navigate("/kiosk/home");
     },
     onError: (err) => {
       if (err.message === "MEMBER_NOT_FOUND") {

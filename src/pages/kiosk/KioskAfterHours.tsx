@@ -42,7 +42,7 @@ export default function KioskAfterHours() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!session) navigate("/kiosk", { replace: true });
+    if (!session) void navigate("/kiosk", { replace: true });
   }, [session, navigate]);
 
   const { data: options } = trpc.kiosk.getAfterHoursOptions.useQuery();
@@ -51,7 +51,7 @@ export default function KioskAfterHours() {
   const log = trpc.kiosk.logAfterHours.useMutation({
     onSuccess: () => {
       toast.success("After hours access logged successfully");
-      navigate("/kiosk/home");
+      void navigate("/kiosk/home");
     },
     onError: (err) => {
       toast.error(err.message);
@@ -83,7 +83,7 @@ export default function KioskAfterHours() {
       duration: values.duration as Parameters<typeof log.mutate>[0]["duration"],
       reason: values.reason as Parameters<typeof log.mutate>[0]["reason"],
       customReason: values.reason === "Other" ? values.customReason : undefined,
-      supervisorId: values.supervisorId || undefined,
+      supervisorId: values.supervisorId ?? undefined,
     });
   };
 

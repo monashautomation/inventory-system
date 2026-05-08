@@ -33,7 +33,7 @@ export default function KioskCheckout() {
   const scannedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!session) navigate("/kiosk", { replace: true });
+    if (!session) void navigate("/kiosk", { replace: true });
     return () => stopCamera();
   }, [session, navigate]);
 
@@ -48,7 +48,7 @@ export default function KioskCheckout() {
       if (data.ok) {
         void utils.kiosk.getUserLoanedItems.invalidate();
         toast.success("Items checked out successfully");
-        navigate("/kiosk/home");
+        void navigate("/kiosk/home");
       } else {
         toast.error(
           typeof data.failures === "string"
@@ -184,7 +184,7 @@ export default function KioskCheckout() {
           className="shrink-0"
           onClick={() => {
             stopCamera();
-            navigate("/kiosk/home");
+            void navigate("/kiosk/home");
           }}
         >
           <ArrowLeft className="w-4 h-4" />

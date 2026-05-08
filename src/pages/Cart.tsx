@@ -64,7 +64,7 @@ export default function Cart() {
     form.setValue("items", formItems);
   }, [items, form]);
 
-  const onSubmit = (_data: CartForm) => {
+  const onSubmit = () => {
     checkout();
   };
 

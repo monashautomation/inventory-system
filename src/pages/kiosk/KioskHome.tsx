@@ -31,7 +31,7 @@ export default function KioskHome() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!session) navigate("/kiosk", { replace: true });
+    if (!session) void navigate("/kiosk", { replace: true });
   }, [session, navigate]);
 
   if (!session) return null;

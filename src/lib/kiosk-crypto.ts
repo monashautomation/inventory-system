@@ -11,7 +11,7 @@ function openDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME);
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => reject(req.error ?? new Error("IDB open failed"));
   });
 }
 
@@ -22,7 +22,7 @@ function idbGet(db: IDBDatabase, key: string): Promise<CryptoKey | undefined> {
       .objectStore(STORE_NAME)
       .get(key);
     req.onsuccess = () => resolve(req.result as CryptoKey | undefined);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => reject(req.error ?? new Error("IDB get failed"));
   });
 }
 
@@ -33,7 +33,7 @@ function idbPut(db: IDBDatabase, key: string, value: CryptoKey): Promise<void> {
       .objectStore(STORE_NAME)
       .put(value, key);
     req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    req.onerror = () => reject(req.error ?? new Error("IDB put failed"));
   });
 }
 
@@ -44,7 +44,7 @@ function idbDelete(db: IDBDatabase, key: string): Promise<void> {
       .objectStore(STORE_NAME)
       .delete(key);
     req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    req.onerror = () => reject(req.error ?? new Error("IDB delete failed"));
   });
 }
 
@@ -77,8 +77,7 @@ export async function storeToken(token: string): Promise<void> {
 
   // Encode to base64 safely without spread (avoids stack overflow on larger payloads)
   let binary = "";
-  for (let i = 0; i < combined.length; i++)
-    binary += String.fromCharCode(combined[i]);
+  for (const byte of combined) binary += String.fromCharCode(byte);
   localStorage.setItem(TOKEN_STORAGE_KEY, btoa(binary));
 
   _cachedToken = token;
