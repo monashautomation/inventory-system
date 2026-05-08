@@ -98,6 +98,7 @@ export class DatabaseMockFactory {
       banReason: null,
       banExpires: null,
       ...overrides,
+      studentNumber: overrides?.studentNumber ?? null,
     } satisfies User;
   }
 
@@ -397,6 +398,9 @@ export class DatabaseMockFactory {
       createdAt: faker.date.past({ years: 2 }),
       updatedAt: faker.date.recent(),
       deleted: faker.datatype.boolean({ probability: 0.05 }),
+      notes: null,
+      notesUpdatedByUserId: null,
+      notesUpdatedAt: null,
       // Relations
       location,
       tags, // Changed from itemTag to tags

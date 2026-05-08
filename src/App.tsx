@@ -20,6 +20,14 @@ import PrintGcode from "@/pages/PrintGcode";
 import PrintMonitoring from "@/pages/PrintMonitoring";
 import PrintCam from "@/pages/PrintCam";
 import PrinterManagement from "@/pages/PrinterManagement";
+import { KioskProvider } from "@/contexts/kiosk-context";
+import KioskLanding from "@/pages/kiosk/KioskLanding";
+import KioskHome from "@/pages/kiosk/KioskHome";
+import KioskAfterHours from "@/pages/kiosk/KioskAfterHours";
+import KioskCheckout from "@/pages/kiosk/KioskCheckout";
+import KioskCheckin from "@/pages/kiosk/KioskCheckin";
+import KioskProvision from "@/pages/kiosk/KioskProvision";
+import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
 
 const App = () => {
   React.useEffect(() => {
@@ -35,31 +43,44 @@ const App = () => {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <Toaster position="top-right" richColors closeButton />
-          <Routes>
-            <Route path="error" element={<ErrorPage />} />
-            <Route path="/auth/:pathname" element={<AuthPage />} />
-            <Route path="/" element={<ProtectedLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/transactions" element={<Transaction />} />
-              <Route path="/assets/*" element={<Assets />} />
-              <Route path="/consumables/*" element={<Consumables />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/item/:id" element={<ItemDetails />} />
-              <Route path="/qr/*" element={<QR />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/chat" element={<Chat />} />
-              <Route path="/checkin" element={<CheckIn />} />
-              <Route path="/print" element={<PrintGcode />} />
-              <Route path="/print-monitor" element={<PrintMonitoring />} />
-              <Route path="/print-cam" element={<PrintCam />} />
-              <Route
-                path="/printer-management"
-                element={<PrinterManagement />}
-              />
-            </Route>
-          </Routes>
+          <KioskProvider>
+            <Toaster position="top-right" richColors closeButton />
+            <Routes>
+              <Route path="error" element={<ErrorPage />} />
+              <Route path="/auth/:pathname" element={<AuthPage />} />
+              <Route path="/kiosk/provision" element={<KioskProvision />} />
+              <Route element={<KioskGuardLayout />}>
+                <Route path="/kiosk" element={<KioskLanding />} />
+                <Route path="/kiosk/home" element={<KioskHome />} />
+                <Route
+                  path="/kiosk/after-hours"
+                  element={<KioskAfterHours />}
+                />
+                <Route path="/kiosk/checkout" element={<KioskCheckout />} />
+                <Route path="/kiosk/checkin" element={<KioskCheckin />} />
+              </Route>
+              <Route path="/" element={<ProtectedLayout />}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/transactions" element={<Transaction />} />
+                <Route path="/assets/*" element={<Assets />} />
+                <Route path="/consumables/*" element={<Consumables />} />
+                <Route path="/cart" element={<Cart />} />
+                <Route path="/item/:id" element={<ItemDetails />} />
+                <Route path="/qr/*" element={<QR />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/chat" element={<Chat />} />
+                <Route path="/checkin" element={<CheckIn />} />
+                <Route path="/print" element={<PrintGcode />} />
+                <Route path="/print-monitor" element={<PrintMonitoring />} />
+                <Route path="/print-cam" element={<PrintCam />} />
+                <Route
+                  path="/printer-management"
+                  element={<PrinterManagement />}
+                />
+              </Route>
+            </Routes>
+          </KioskProvider>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>

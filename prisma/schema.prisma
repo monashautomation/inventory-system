@@ -43,6 +43,10 @@ model Item {
     consumable  Consumable?  @relation(name: "ItemToConsumable")
     ItemRecords ItemRecord[] @relation("ItemToItemRecord")
     deleted     Boolean      @default(false)
+    notes                String?
+    notesUpdatedBy       User?     @relation("ItemNotesUpdatedBy", fields: [notesUpdatedByUserId], references: [id])
+    notesUpdatedByUserId String?
+    notesUpdatedAt       DateTime?
 
     @@index([serial])
     @@index([locationId])
@@ -115,13 +119,15 @@ model User {
     accounts      Account[]
     ItemRecords        ItemRecord[] @relation("UserToItemRecord")
     PerformedRecords   ItemRecord[] @relation("AdminPerformedItemRecord")
+    ItemNotesUpdated   Item[]       @relation("ItemNotesUpdatedBy")
     printers      Printer[]
     gcodePrintJobs GcodePrintJob[]
 
-    role       String    @default("user")
-    banned     Boolean?
-    banReason  String?
-    banExpires DateTime?
+    role          String    @default("user")
+    banned        Boolean?
+    banReason     String?
+    banExpires    DateTime?
+    studentNumber String?   @unique
 
     @@index([email])
     @@index([groupId])

@@ -17,6 +17,8 @@ interface QRScannerProps {
   title?: string;
   description?: string;
   disabled?: boolean;
+  /** Keep dialog open and camera running after each scan */
+  multiScan?: boolean;
 }
 
 export function QRScanner({
@@ -25,64 +27,67 @@ export function QRScanner({
   title = "Scan QR Code",
   description = "Position the QR code within the camera view to scan",
   disabled = false,
+  multiScan = false,
 }: QRScannerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const lastScanRef = useRef<{ text: string; ts: number } | null>(null);
 
   const startCamera = useCallback(async () => {
     try {
       setError(null);
       setIsScanning(true);
 
-      // Initialize the QR code reader
       const reader = new BrowserMultiFormatReader();
       readerRef.current = reader;
 
-      // Get available video input devices
       const videoInputDevices = await reader.listVideoInputDevices();
-
       if (videoInputDevices.length === 0) {
         throw new Error("No camera devices found");
       }
 
-      // Use the first available camera (usually the back camera on mobile)
-      const selectedDeviceId = videoInputDevices[0].deviceId;
-
-      // Start decoding from the video element
       await reader.decodeFromVideoDevice(
-        selectedDeviceId,
+        videoInputDevices[0].deviceId,
         videoRef.current,
-        (result, error) => {
+        (result, err) => {
           if (result) {
-            console.log("something");
             const text = result.getText();
-            handleScan(text);
+
+            // Debounce: ignore same code within 3 seconds
+            const now = Date.now();
+            if (
+              lastScanRef.current?.text === text &&
+              now - lastScanRef.current.ts < 3000
+            )
+              return;
+            lastScanRef.current = { text, ts: now };
+
+            onScan(text);
+
+            if (!multiScan) {
+              stopCamera();
+              setIsOpen(false);
+            }
           }
           if (
-            error &&
-            error.name !== "NotFoundException" &&
-            error.name !== "NotFoundException2"
+            err &&
+            err.name !== "NotFoundException" &&
+            err.name !== "NotFoundException2"
           ) {
-            console.warn(
-              "QR Code detection error:",
-              error,
-              error.name,
-              error.message,
-            );
+            console.warn("QR decode error:", err.name, err.message);
           }
         },
       );
-    } catch (err) {
-      console.error("Error accessing camera:", err);
+    } catch {
       setError(
         "Unable to access camera. Please check permissions and try again.",
       );
       setIsScanning(false);
     }
-  }, []);
+  }, [onScan, multiScan]);
 
   const stopCamera = useCallback(() => {
     if (readerRef.current) {
@@ -92,31 +97,17 @@ export function QRScanner({
     setIsScanning(false);
   }, []);
 
-  const handleScan = useCallback(
-    (result: string) => {
-      onScan(result);
-      setIsOpen(false);
-      stopCamera();
-    },
-    [onScan, stopCamera],
-  );
-
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
-      if (!open) {
-        stopCamera();
-      }
+      if (!open) stopCamera();
     },
     [stopCamera],
   );
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (readerRef.current) {
-        readerRef.current.reset();
-      }
+      readerRef.current?.reset();
     };
   }, []);
 
@@ -168,14 +159,13 @@ export function QRScanner({
               )}
             </div>
 
-            {/* Scanning overlay */}
             {isScanning && (
               <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute inset-4 border-2 border-primary rounded-lg">
-                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg"></div>
+                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg" />
+                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg" />
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg" />
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg" />
                 </div>
               </div>
             )}

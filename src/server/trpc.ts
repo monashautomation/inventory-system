@@ -62,6 +62,26 @@ export const createCallerFactory = t.createCallerFactory;
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
+// Kiosk procedure: validates x-kiosk-token against KIOSK_SECRET env var.
+// In development/test the check is skipped for convenience.
+// In production, KIOSK_SECRET must be set — missing secret fails closed.
+export const kioskProcedure = t.procedure.use(({ ctx, next }) => {
+  const secret = process.env.KIOSK_SECRET;
+  const isDev =
+    process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
+  if (!secret) {
+    if (!isDev) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+  } else {
+    const token = ctx.req.headers.get("x-kiosk-token");
+    if (token !== secret) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+  }
+  return next({ ctx });
+});
+
 // Protected procedure for authenticated users
 export const userProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.user?.id) {
