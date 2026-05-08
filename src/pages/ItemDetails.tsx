@@ -7,7 +7,7 @@ import { trpc } from "@/client/trpc";
 import ErrorPage from "./Error";
 import Loading from "@/components/misc/loading";
 import { ImageZoom } from "@/components/ui/image-zoom";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import RestockForm from "@/components/item-crud/RestockForm";
 import { AdminAssignCard } from "@/components/item-crud/AdminAssignCard";
@@ -17,7 +17,7 @@ import { PrintButton } from "@/components/print-label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Pencil, X, Check } from "lucide-react";
+import { Pencil, X, Check, Upload, Trash2 } from "lucide-react";
 
 interface ItemDetailsProps {
   passedId?: string;
@@ -30,8 +30,9 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
 
   const itemId = passedId ?? id;
 
-  const [imageSrc, setImageSrc] = useState<string | undefined>(undefined);
   const [isImgLoading, setIsImgLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Use effectiveId for your logic
 
@@ -49,6 +50,57 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
   const { data, isLoading, error, refetch } = trpc.item.get.useQuery({
     id: itemId,
   });
+
+  const { data: imageUrl, refetch: refetchImage } = trpc.item.getImageUrl.useQuery(
+    { id: itemId },
+    { enabled: !!data?.image },
+  );
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setIsImgLoading(true);
+    try {
+      const body = new FormData();
+      body.append("image", file);
+      const res = await fetch(`/api/items/${itemId}/image`, {
+        method: "POST",
+        body,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error((err as { message?: string }).message ?? "Upload failed");
+      }
+      await refetch();
+      await refetchImage();
+      toast.success("Image updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleImageDelete = async () => {
+    setIsUploading(true);
+    try {
+      const res = await fetch(`/api/items/${itemId}/image`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      await refetch();
+      await refetchImage();
+      toast.success("Image removed.");
+    } catch {
+      toast.error("Failed to remove image.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const onRestock = async () => {
     await refetch();
@@ -96,26 +148,57 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
             </div>
 
             {/* Image next to Serial */}
-            {data?.image && (
-              <div className="relative h-24 w-24">
-                {isImgLoading && (
-                  <Skeleton className="h-full w-full rounded-md bg-muted" />
-                )}
-                <ImageZoom>
-                  <img
-                    loading="lazy"
-                    src={imageSrc ?? data.image}
-                    alt={`${data.name} preview`}
-                    className={`max-h-24 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
-                    onLoad={() => setIsImgLoading(false)}
-                    onError={() => {
-                      setImageSrc("/path/to/fallback-image.jpg");
-                      setIsImgLoading(false);
-                    }}
+            <div className="flex flex-col items-end gap-2">
+              {data?.image && (
+                <div className="relative h-24 w-24">
+                  {isImgLoading && (
+                    <Skeleton className="h-full w-full rounded-md bg-muted" />
+                  )}
+                  {imageUrl && (
+                    <ImageZoom>
+                      <img
+                        loading="lazy"
+                        src={imageUrl}
+                        alt={`${data.name} preview`}
+                        className={`max-h-24 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
+                        onLoad={() => setIsImgLoading(false)}
+                        onError={() => setIsImgLoading(false)}
+                      />
+                    </ImageZoom>
+                  )}
+                </div>
+              )}
+              {session?.user.role === "admin" && (
+                <div className="flex gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={handleImageUpload}
                   />
-                </ImageZoom>
-              </div>
-            )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1" />
+                    {data?.image ? "Replace" : "Upload Image"}
+                  </Button>
+                  {data?.image && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isUploading}
+                      onClick={handleImageDelete}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Basic Information */}

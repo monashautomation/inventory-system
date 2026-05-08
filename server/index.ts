@@ -21,6 +21,11 @@ import {
     //initPrintCamPoller,
     getCachedSnapshot,
 } from "@/server/lib/printCamPoller";
+import sharp from "sharp";
+import { uploadFile, buildItemImageKey, deleteFile, fileExists } from "@/server/lib/s3";
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 // Load environment variables
 config();
@@ -120,6 +125,88 @@ app.onError((err, c) => {
 
 // Health check endpoint
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// ─── Item image upload ────────────────────────────────────────────────────────
+app.post("/api/items/:id/image", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) {
+        throw new HTTPException(401, { message: "Authentication required" });
+    }
+    if (session.user.role !== "admin") {
+        throw new HTTPException(403, { message: "Admin only" });
+    }
+
+    const itemId = c.req.param("id");
+    const item = await prisma.item.findUnique({
+        where: { id: itemId, deleted: false },
+        select: { id: true, image: true },
+    });
+    if (!item) {
+        throw new HTTPException(404, { message: "Item not found" });
+    }
+
+    const formData = await c.req.formData();
+    const file = formData.get("image");
+    if (!(file instanceof File)) {
+        throw new HTTPException(400, { message: "Missing image field" });
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+        throw new HTTPException(400, { message: "Unsupported image type. Use JPEG, PNG, WebP, or GIF." });
+    }
+
+    const rawBytes = await file.arrayBuffer();
+    if (rawBytes.byteLength > MAX_IMAGE_BYTES) {
+        throw new HTTPException(413, { message: "Image exceeds 10 MB limit" });
+    }
+
+    const webpBuffer = await sharp(Buffer.from(rawBytes))
+        .rotate()
+        .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer();
+
+    const key = buildItemImageKey(itemId);
+    await uploadFile(key, webpBuffer, "image/webp");
+
+    await prisma.item.update({
+        where: { id: itemId },
+        data: { image: key },
+    });
+
+    return c.json({ ok: true, key });
+});
+
+// ─── Item image delete ────────────────────────────────────────────────────────
+app.delete("/api/items/:id/image", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) {
+        throw new HTTPException(401, { message: "Authentication required" });
+    }
+    if (session.user.role !== "admin") {
+        throw new HTTPException(403, { message: "Admin only" });
+    }
+
+    const itemId = c.req.param("id");
+    const item = await prisma.item.findUnique({
+        where: { id: itemId, deleted: false },
+        select: { id: true, image: true },
+    });
+    if (!item) {
+        throw new HTTPException(404, { message: "Item not found" });
+    }
+
+    if (item.image?.startsWith("items/")) {
+        const exists = await fileExists(item.image);
+        if (exists) await deleteFile(item.image);
+    }
+
+    await prisma.item.update({
+        where: { id: itemId },
+        data: { image: null },
+    });
+
+    return c.json({ ok: true });
+});
 
 // ─── Webcam proxy ────────────────────────────────────────────────────────────
 // Streams printer webcam feeds through the server so clients outside the local

@@ -7,6 +7,7 @@ import { itemCheckin } from "../utils/item/item.checkin";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import type { PrintResponse } from "../utils/item/item.utils";
 import { itemBulkDelete } from "../utils/item/item.delete";
+import { resolveImageUrl } from "@/server/lib/s3";
 
 export const itemRouter = router({
   create: adminProcedure
@@ -499,6 +500,17 @@ export const itemRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       return await itemCheckin(input.targetUserId, input.cart, ctx.user.id);
+    }),
+
+  getImageUrl: userProcedure
+    .input(z.object({ id: z.uuid() }))
+    .query(async ({ input }) => {
+      const item = await prisma.item.findUnique({
+        where: { id: input.id, deleted: false },
+        select: { image: true },
+      });
+      if (!item?.image) return null;
+      return resolveImageUrl(item.image);
     }),
 
   updateNote: userProcedure
