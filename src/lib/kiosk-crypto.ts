@@ -78,7 +78,7 @@ export async function storeToken(token: string): Promise<void> {
   // Encode to base64 safely without spread (avoids stack overflow on larger payloads)
   let binary = "";
   for (let i = 0; i < combined.length; i++)
-    binary += String.fromCharCode(combined[i]!);
+    binary += String.fromCharCode(combined[i]);
   localStorage.setItem(TOKEN_STORAGE_KEY, btoa(binary));
 
   _cachedToken = token;
