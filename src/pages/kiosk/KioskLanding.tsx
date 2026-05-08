@@ -119,7 +119,12 @@ export default function KioskLanding() {
               autoFocus
               placeholder="Student ID"
               value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                setStudentId(digits);
+              }}
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="text-center text-lg h-14"
               disabled={lookup.isPending}
             />
