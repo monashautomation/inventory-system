@@ -7,13 +7,17 @@ import { trpc } from "@/client/trpc";
 import ErrorPage from "./Error";
 import Loading from "@/components/misc/loading";
 import { ImageZoom } from "@/components/ui/image-zoom";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import RestockForm from "@/components/item-crud/RestockForm";
 import { AdminAssignCard } from "@/components/item-crud/AdminAssignCard";
 import { AdminRevokeCard } from "@/components/item-crud/AdminRevokeCard";
 import { authClient } from "@/auth/client";
 import { PrintButton } from "@/components/print-label";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Pencil, X, Check, Upload, Trash2 } from "lucide-react";
 
 interface ItemDetailsProps {
   passedId?: string;
@@ -26,8 +30,9 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
 
   const itemId = passedId ?? id;
 
-  const [imageSrc, setImageSrc] = useState<string | undefined>(undefined);
   const [isImgLoading, setIsImgLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Use effectiveId for your logic
 
@@ -45,6 +50,59 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
   const { data, isLoading, error, refetch } = trpc.item.get.useQuery({
     id: itemId,
   });
+
+  const { data: imageUrl, refetch: refetchImage } =
+    trpc.item.getImageUrl.useQuery({ id: itemId }, { enabled: !!data?.image });
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setIsImgLoading(true);
+    try {
+      const body = new FormData();
+      body.append("image", file);
+      const res = await fetch(`/api/items/${itemId}/image`, {
+        method: "POST",
+        body,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res
+          .json()
+          .catch(() => ({ message: "Upload failed" }));
+        throw new Error(
+          (err as { message?: string }).message ?? "Upload failed",
+        );
+      }
+      await refetch();
+      await refetchImage();
+      toast.success("Image updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleImageDelete = async () => {
+    setIsUploading(true);
+    try {
+      const res = await fetch(`/api/items/${itemId}/image`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      await refetch();
+      await refetchImage();
+      toast.success("Image removed.");
+    } catch {
+      toast.error("Failed to remove image.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const onRestock = async () => {
     await refetch();
@@ -92,26 +150,57 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
             </div>
 
             {/* Image next to Serial */}
-            {data?.image && (
-              <div className="relative h-24 w-24">
-                {isImgLoading && (
-                  <Skeleton className="h-full w-full rounded-md bg-muted" />
-                )}
-                <ImageZoom>
-                  <img
-                    loading="lazy"
-                    src={imageSrc ?? data.image}
-                    alt={`${data.name} preview`}
-                    className={`max-h-24 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
-                    onLoad={() => setIsImgLoading(false)}
-                    onError={() => {
-                      setImageSrc("/path/to/fallback-image.jpg");
-                      setIsImgLoading(false);
-                    }}
+            <div className="flex flex-col items-end gap-2">
+              {data?.image && (
+                <div className="relative h-24 w-24">
+                  {isImgLoading && (
+                    <Skeleton className="h-full w-full rounded-md bg-muted" />
+                  )}
+                  {imageUrl && (
+                    <ImageZoom>
+                      <img
+                        loading="lazy"
+                        src={imageUrl}
+                        alt={`${data.name} preview`}
+                        className={`max-h-24 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
+                        onLoad={() => setIsImgLoading(false)}
+                        onError={() => setIsImgLoading(false)}
+                      />
+                    </ImageZoom>
+                  )}
+                </div>
+              )}
+              {session?.user.role === "admin" && (
+                <div className="flex gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={handleImageUpload}
                   />
-                </ImageZoom>
-              </div>
-            )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1" />
+                    {data?.image ? "Replace" : "Upload Image"}
+                  </Button>
+                  {data?.image && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isUploading}
+                      onClick={handleImageDelete}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Basic Information */}
@@ -196,6 +285,9 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                                 </div>
                             </Section>*/}
             </div>
+            {/* Notes */}
+            <ItemNotes itemId={itemId} data={data} onSaved={refetch} />
+
             {/* Timestamps */}
             <Section title="Timestamps">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
@@ -284,6 +376,113 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
         </div>
       </div>
     </div>
+  );
+};
+
+interface ItemNotesProps {
+  itemId: string;
+  data: {
+    notes?: string | null;
+    notesUpdatedAt?: Date | string | null;
+    notesUpdatedBy?: { id: string; name: string } | null;
+  };
+  onSaved: () => void;
+}
+
+const ItemNotes = ({ itemId, data, onSaved }: ItemNotesProps) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(data.notes ?? "");
+
+  const updateNote = trpc.item.updateNote.useMutation({
+    onSuccess: () => {
+      toast.success("Note saved.");
+      setEditing(false);
+      onSaved();
+    },
+    onError: (err) => {
+      toast.error(`Failed to save note: ${err.message}`);
+    },
+  });
+
+  const handleEdit = () => {
+    setDraft(data.notes ?? "");
+    setEditing(true);
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setDraft(data.notes ?? "");
+  };
+
+  const handleSave = () => {
+    updateNote.mutate({ id: itemId, notes: draft });
+  };
+
+  return (
+    <Section title="Notes">
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Notes are visible to all users.
+        </p>
+        {editing ? (
+          <div className="space-y-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add a note..."
+              className="min-h-[80px] resize-y"
+              maxLength={2000}
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={updateNote.isPending}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={updateNote.isPending}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm whitespace-pre-wrap">
+                {data.notes ?? (
+                  <span className="text-muted-foreground italic">
+                    No notes yet.
+                  </span>
+                )}
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-shrink-0"
+                onClick={handleEdit}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit
+              </Button>
+            </div>
+            {data.notesUpdatedBy && data.notesUpdatedAt && (
+              <p className="text-xs text-muted-foreground">
+                Last edited by {data.notesUpdatedBy.name} on{" "}
+                {new Date(data.notesUpdatedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
   );
 };
 

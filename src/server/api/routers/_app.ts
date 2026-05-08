@@ -11,6 +11,7 @@ import z from "zod";
 import { chatRouter } from "./chat";
 import { printRouter } from "./print";
 import { userRouter } from "./user";
+import { kioskRouter } from "./kiosk";
 
 export const appRouter = router({
   group: groupRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   qr: qrRouter,
   chat: chatRouter,
   print: printRouter,
+  kiosk: kioskRouter,
   hello: userProcedure.query(() => {
     return "hello world";
   }),

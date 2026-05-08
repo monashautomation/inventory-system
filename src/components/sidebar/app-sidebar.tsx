@@ -136,7 +136,7 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <div className="flex justify-between mr-2 mt-3 items-center">
-                <SidebarGroupLabel>Created by Team SubSeven</SidebarGroupLabel>
+                <SidebarGroupLabel>Operation Tamarin</SidebarGroupLabel>
                 <ThemeToggle />
               </div>
             </div>

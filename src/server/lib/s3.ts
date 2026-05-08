@@ -85,3 +85,17 @@ export function presignDownload(key: string, expiresIn = 3600): string {
 export async function fileExists(key: string): Promise<boolean> {
   return s3.file(key).exists();
 }
+
+// ─── Item image ───────────────────────────────────────────────────────────────
+
+export function buildItemImageKey(itemId: string): string {
+  return `items/${itemId}/image.webp`;
+}
+
+/** Returns presigned URL if value looks like an S3 key, otherwise passes through. */
+export function resolveImageUrl(imageValue: string, expiresIn = 3600): string {
+  if (imageValue.startsWith("items/")) {
+    return presignDownload(imageValue, expiresIn);
+  }
+  return imageValue;
+}

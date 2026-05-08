@@ -7,6 +7,7 @@ import App from "./App";
 import "./index.css";
 import SuperJSON from "superjson";
 import { getBaseUrl } from "./lib/utils";
+import { loadToken } from "./lib/kiosk-crypto";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -39,9 +40,14 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       transformer: SuperJSON,
       url: getBaseUrl() + "/api/trpc",
-      headers: () => ({
-        "x-trpc-source": "react",
-      }),
+      headers: async () => {
+        const headers: Record<string, string> = { "x-trpc-source": "react" };
+        if (window.location.pathname.startsWith("/kiosk")) {
+          const kioskToken = await loadToken();
+          if (kioskToken) headers["x-kiosk-token"] = kioskToken;
+        }
+        return headers;
+      },
       fetch: (url, options) =>
         fetch(url, { ...options, credentials: "include" }),
     }),
