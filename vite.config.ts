@@ -45,7 +45,6 @@ export default defineConfig({
             if (id.includes("/rxjs/") || id.includes("/rxjs@")) return "rxjs";
             if (id.includes("es-toolkit")) return "es-toolkit";
             if (id.includes("qrcode")) return "qr-gen";
-            if (id.includes("/react/") || id.includes("/react-dom/")) return "react";
             return "vendor";
           },
         },
