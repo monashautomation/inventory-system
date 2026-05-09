@@ -201,6 +201,101 @@ app.post("/api/items/:id/image", async (c) => {
     return c.json({ ok: true, key });
 });
 
+// ─── Apply item image to all same-name items ─────────────────────────────────
+app.post("/api/items/:id/image/apply-to-group", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) {
+        throw new HTTPException(401, { message: "Authentication required" });
+    }
+    if (session.user.role !== "admin") {
+        throw new HTTPException(403, { message: "Admin only" });
+    }
+
+    const itemId = c.req.param("id");
+    const source = await prisma.item.findUnique({
+        where: { id: itemId, deleted: false },
+        select: { id: true, name: true, image: true },
+    });
+    if (!source) {
+        throw new HTTPException(404, { message: "Item not found" });
+    }
+    if (!source.image) {
+        throw new HTTPException(400, { message: "Source item has no image" });
+    }
+
+    const siblings = await prisma.item.findMany({
+        where: { name: source.name, deleted: false, id: { not: itemId } },
+        select: { id: true, image: true },
+    });
+
+    if (siblings.length === 0) {
+        return c.json({ ok: true, updated: 0 });
+    }
+
+    const imageBytes = await downloadFile(source.image);
+
+    await Promise.all(
+        siblings.map(async (sibling) => {
+            if (sibling.image && sibling.image !== source.image) {
+                const exists = await fileExists(sibling.image);
+                if (exists) await deleteFile(sibling.image);
+            }
+            const key = buildItemImageKey(sibling.id);
+            await uploadFile(key, imageBytes, "image/webp");
+            await prisma.item.update({
+                where: { id: sibling.id },
+                data: { image: key },
+            });
+        }),
+    );
+
+    return c.json({ ok: true, updated: siblings.length });
+});
+
+// ─── Remove image from all same-name items ────────────────────────────────────
+app.delete("/api/items/:id/image/apply-to-group", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) {
+        throw new HTTPException(401, { message: "Authentication required" });
+    }
+    if (session.user.role !== "admin") {
+        throw new HTTPException(403, { message: "Admin only" });
+    }
+
+    const itemId = c.req.param("id");
+    const source = await prisma.item.findUnique({
+        where: { id: itemId, deleted: false },
+        select: { name: true },
+    });
+    if (!source) {
+        throw new HTTPException(404, { message: "Item not found" });
+    }
+
+    const siblings = await prisma.item.findMany({
+        where: { name: source.name, deleted: false, id: { not: itemId }, image: { not: null } },
+        select: { id: true, image: true },
+    });
+
+    if (siblings.length === 0) {
+        return c.json({ ok: true, updated: 0 });
+    }
+
+    await Promise.all(
+        siblings.map(async (sibling) => {
+            if (sibling.image?.startsWith("items/")) {
+                const exists = await fileExists(sibling.image);
+                if (exists) await deleteFile(sibling.image);
+            }
+            await prisma.item.update({
+                where: { id: sibling.id },
+                data: { image: null },
+            });
+        }),
+    );
+
+    return c.json({ ok: true, updated: siblings.length });
+});
+
 // ─── Item image delete ────────────────────────────────────────────────────────
 app.delete("/api/items/:id/image", async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

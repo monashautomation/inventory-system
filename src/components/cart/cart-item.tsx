@@ -20,7 +20,9 @@ interface CartDialogItemProps {
 export const CartDialogItem = React.memo(
   ({ item, form, index, invalidReason }: CartDialogItemProps) => {
     const { updateQty, removeItem } = useCart();
-    const [imageSrc, setImageSrc] = useState(item.image ?? "");
+    const [imageSrc, setImageSrc] = useState(
+      item.image ? `/api/items/${item.id}/image` : "",
+    );
     const [isImgLoading, setIsImgLoading] = useState(true);
     const handleChangeQuantity = useCallback(
       (field: ControllerRenderProps<CartForm>) =>
@@ -56,7 +58,7 @@ export const CartDialogItem = React.memo(
                     className={`h-full w-full object-contain ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
                     onLoad={() => setIsImgLoading(false)}
                     onError={() => {
-                      setImageSrc("/path/to/fallback-image.jpg");
+                      setImageSrc("");
                       setIsImgLoading(false);
                     }}
                   />

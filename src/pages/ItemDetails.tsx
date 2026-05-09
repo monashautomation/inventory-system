@@ -18,6 +18,16 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Pencil, X, Check, Upload, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ItemDetailsProps {
   passedId?: string;
@@ -32,6 +42,9 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
 
   const [isImgLoading, setIsImgLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
+  const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false);
+  const [isApplyingToGroup, setIsApplyingToGroup] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Use effectiveId for your logic
@@ -53,6 +66,11 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
 
   const { data: imageUrl, refetch: refetchImage } =
     trpc.item.getImageUrl.useQuery({ id: itemId }, { enabled: !!data?.image });
+
+  const { data: siblingCount } = trpc.item.countByName.useQuery(
+    { id: itemId },
+    { enabled: !!data },
+  );
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,11 +96,32 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
       await refetch();
       await refetchImage();
       toast.success("Image updated.");
+      if (siblingCount && siblingCount > 0) {
+        setShowGroupDialog(true);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleApplyToGroup = async () => {
+    setIsApplyingToGroup(true);
+    try {
+      const res = await fetch(`/api/items/${itemId}/image/apply-to-group`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to apply image to group");
+      const result = (await res.json()) as { updated: number };
+      toast.success(`Image applied to ${result.updated} other item(s).`);
+    } catch {
+      toast.error("Failed to apply image to group.");
+    } finally {
+      setIsApplyingToGroup(false);
+      setShowGroupDialog(false);
     }
   };
 
@@ -97,10 +136,31 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
       await refetch();
       await refetchImage();
       toast.success("Image removed.");
+      if (siblingCount && siblingCount > 0) {
+        setShowDeleteGroupDialog(true);
+      }
     } catch {
       toast.error("Failed to remove image.");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleDeleteFromGroup = async () => {
+    setIsApplyingToGroup(true);
+    try {
+      const res = await fetch(`/api/items/${itemId}/image/apply-to-group`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to remove image from group");
+      const result = (await res.json()) as { updated: number };
+      toast.success(`Image removed from ${result.updated} other item(s).`);
+    } catch {
+      toast.error("Failed to remove image from group.");
+    } finally {
+      setIsApplyingToGroup(false);
+      setShowDeleteGroupDialog(false);
     }
   };
 
@@ -375,6 +435,66 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
             )}
         </div>
       </div>
+
+      <AlertDialog
+        open={showDeleteGroupDialog}
+        onOpenChange={setShowDeleteGroupDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove image from all versions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              There {siblingCount === 1 ? "is" : "are"}{" "}
+              <strong>{siblingCount}</strong> other item
+              {siblingCount === 1 ? "" : "s"} named &ldquo;{data?.name}&rdquo;.
+              Remove the image from all of them too?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isApplyingToGroup}>
+              No, just this one
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeleteFromGroup();
+              }}
+              disabled={isApplyingToGroup}
+            >
+              {isApplyingToGroup ? "Removing..." : "Yes, remove from all"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showGroupDialog} onOpenChange={setShowGroupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apply image to all versions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              There {siblingCount === 1 ? "is" : "are"}{" "}
+              <strong>{siblingCount}</strong> other item
+              {siblingCount === 1 ? "" : "s"} named &ldquo;{data?.name}&rdquo;.
+              Apply this image to all of them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isApplyingToGroup}>
+              No, just this one
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleApplyToGroup();
+              }}
+              disabled={isApplyingToGroup}
+            >
+              {isApplyingToGroup ? "Applying..." : "Yes, apply to all"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

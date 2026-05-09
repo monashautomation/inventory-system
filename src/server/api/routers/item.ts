@@ -512,6 +512,19 @@ export const itemRouter = router({
       return `/api/items/${input.id}/image`;
     }),
 
+  countByName: userProcedure
+    .input(z.object({ id: z.uuid() }))
+    .query(async ({ input }) => {
+      const item = await prisma.item.findUnique({
+        where: { id: input.id, deleted: false },
+        select: { name: true },
+      });
+      if (!item) return 0;
+      return prisma.item.count({
+        where: { name: item.name, deleted: false, id: { not: input.id } },
+      });
+    }),
+
   updateNote: userProcedure
     .input(
       z.object({

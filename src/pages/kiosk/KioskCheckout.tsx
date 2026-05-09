@@ -19,6 +19,7 @@ interface ScannedItem {
   id: string;
   name: string;
   serial: string;
+  image: string | null;
 }
 
 export default function KioskCheckout() {
@@ -142,7 +143,12 @@ export default function KioskCheckout() {
             resetTimeout();
             setItems((prev) => [
               ...prev,
-              { id: item.id, name: item.name, serial: item.serial },
+              {
+                id: item.id,
+                name: item.name,
+                serial: item.serial,
+                image: item.image ? `/api/items/${item.id}/image` : null,
+              },
             ]);
             toast.success(`Added: ${item.name}`);
           } catch {
@@ -275,9 +281,18 @@ export default function KioskCheckout() {
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between rounded-lg border px-4 py-3 bg-card"
+                    className="flex items-center justify-between rounded-lg border px-4 py-3 bg-card gap-3"
                   >
-                    <div className="min-w-0 mr-2">
+                    {item.image && (
+                      <div className="shrink-0 h-10 w-10 rounded-md overflow-hidden border bg-muted">
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
                       <p className="font-medium truncate">{item.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {item.serial}
