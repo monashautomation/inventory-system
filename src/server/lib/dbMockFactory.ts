@@ -325,6 +325,7 @@ export class DatabaseMockFactory {
       itemId,
       available,
       total,
+      minStock: overrides?.minStock ?? 0,
       ...overrides,
     } satisfies Consumable;
   }

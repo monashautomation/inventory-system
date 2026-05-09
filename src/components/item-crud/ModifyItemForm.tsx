@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { Badge } from "../ui/badge";
 import { authClient } from "@/auth/client";
 import { Separator } from "../ui/separator";
+import SupplierManager from "./SupplierManager";
 
 type GetItemOutput = inferProcedureOutput<
   AppRouter["item"]["list"]
@@ -329,6 +330,9 @@ export default function ModifyItemForm({
                   </Button>
                 </div>
               </div>
+              {item.consumable.id && (
+                <SupplierManager consumableId={item.consumable.id} />
+              )}
             </>
           )}
 

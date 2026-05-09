@@ -12,7 +12,10 @@ import {
   Printer,
   Monitor,
   Wrench,
+  ClipboardList,
 } from "lucide-react";
+import { authClient } from "@/auth/client";
+import { trpc } from "@/client/trpc";
 
 import {
   Sidebar,
@@ -85,6 +88,13 @@ const items = [
 export function AppSidebar() {
   const { itemCount } = useCart();
   const navigate = useNavigate();
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user.role === "admin";
+  const { data: pendingRequestCount } =
+    trpc.consumableRequest.pendingCount.useQuery(undefined, {
+      enabled: isAdmin,
+      refetchInterval: 30000,
+    });
 
   return (
     <Sidebar>
@@ -104,6 +114,24 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                {isAdmin && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <a
+                        onClick={() => void navigate("/consumables/requests")}
+                        className="flex items-center gap-2"
+                      >
+                        <ClipboardList />
+                        <span>Requests</span>
+                        {pendingRequestCount && pendingRequestCount > 0 ? (
+                          <span className="ml-auto h-5 min-w-5 rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-200 leading-5 text-center tabular-nums">
+                            {pendingRequestCount}
+                          </span>
+                        ) : null}
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
             <div>

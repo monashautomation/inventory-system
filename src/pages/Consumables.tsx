@@ -8,7 +8,7 @@ import { useCart } from "@/contexts/cart-context";
 import { trpc } from "@/client/trpc";
 import type { inferProcedureOutput } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
-import { Dialog, DialogContent, DialogOverlay } from "@radix-ui/react-dialog";
+import { Dialog, DialogOverlay } from "@radix-ui/react-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AddConsumableDialog } from "@/components/add-consumable-dialog";
+import { RequestConsumableDialog } from "@/components/request-consumable-dialog";
 import { TableActions } from "@/components/data-table/table-actions";
 import ErrorPage from "./Error";
 import { Route, Routes, useParams } from "react-router-dom";
@@ -196,14 +196,12 @@ const Consumables = () => {
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogOverlay />
-        <DialogContent>
-          {selectedItem && (
-            <AddConsumableDialog
-              item={selectedItem}
-              onClose={() => setIsDialogOpen(false)}
-            />
-          )}
-        </DialogContent>
+        {selectedItem && (
+          <RequestConsumableDialog
+            item={selectedItem}
+            onClose={() => setIsDialogOpen(false)}
+          />
+        )}
       </Dialog>
 
       {selectedItem && (

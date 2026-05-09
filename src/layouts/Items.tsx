@@ -1,4 +1,4 @@
-import { ShoppingCart, Pencil, Trash2 } from "lucide-react";
+import { ShoppingCart, Pencil, Trash2, PackagePlus } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -45,7 +45,6 @@ function Items({
   onModify,
   onDelete,
   itemInCart,
-  getCartQuantity,
   isDeleting,
   callback,
   isAdmin,
@@ -236,22 +235,12 @@ function Items({
       id: "actions",
       cell: ({ row }) => {
         const item = row.original;
-        const inCart = itemInCart(item.id);
-        const cartQty = getCartQuantity(item.id);
 
         let cartDisabled = false;
-        let cartLabel = "Add to Cart";
+        let cartLabel = consumable ? "Request More" : "Add to Cart";
 
-        if (consumable) {
-          const available = item.consumable?.available ?? 0;
-          if (available === 0) {
-            cartDisabled = true;
-            cartLabel = "Out of Stock";
-          } else if (inCart && cartQty >= available) {
-            cartDisabled = true;
-            cartLabel = "All in Cart";
-          }
-        } else {
+        if (!consumable) {
+          const inCart = itemInCart(item.id);
           const isLabUse = item.stored === false;
           const latest = item.ItemRecords?.slice().sort(
             (a, b) =>
@@ -281,7 +270,11 @@ function Items({
               disabled={cartDisabled}
               title={cartLabel}
             >
-              <ShoppingCart className="h-3.5 w-3.5" />
+              {consumable ? (
+                <PackagePlus className="h-3.5 w-3.5" />
+              ) : (
+                <ShoppingCart className="h-3.5 w-3.5" />
+              )}
               {cartLabel}
             </Button>
             {isAdmin && (

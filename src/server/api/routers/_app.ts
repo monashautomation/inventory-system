@@ -1,6 +1,8 @@
 import { userProcedure, router } from "@/server/trpc";
 import { groupRouter } from "./group";
 import { consumableRouter } from "./consumable";
+import { consumableSupplierRouter } from "./consumableSupplier";
+import { consumableRequestRouter } from "./consumableRequest";
 import { itemRouter } from "./item";
 import { tagRouter } from "./tag";
 import { locationRouter } from "./location";
@@ -16,6 +18,8 @@ import { kioskRouter } from "./kiosk";
 export const appRouter = router({
   group: groupRouter,
   consumable: consumableRouter,
+  consumableSupplier: consumableSupplierRouter,
+  consumableRequest: consumableRequestRouter,
   item: itemRouter,
   tag: tagRouter,
   location: locationRouter,

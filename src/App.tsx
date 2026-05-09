@@ -1,6 +1,7 @@
 import { Route, BrowserRouter, Routes, Navigate } from "react-router-dom";
 import Assets from "@/pages/Assets";
 import Consumables from "@/pages/Consumables";
+import ConsumableRequests from "@/pages/ConsumableRequests";
 import Dashboard from "@/pages/Dashboard";
 import Cart from "@/pages/Cart";
 import AuthPage from "@/auth/page.tsx";
@@ -64,6 +65,10 @@ const App = () => {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/transactions" element={<Transaction />} />
                 <Route path="/assets/*" element={<Assets />} />
+                <Route
+                  path="/consumables/requests"
+                  element={<ConsumableRequests />}
+                />
                 <Route path="/consumables/*" element={<Consumables />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/item/:id" element={<ItemDetails />} />
