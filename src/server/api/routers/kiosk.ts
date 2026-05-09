@@ -246,6 +246,7 @@ export const kioskRouter = router({
           name: true,
           serial: true,
           stored: true,
+          image: true,
           consumable: { select: { available: true } },
           ItemRecords: {
             orderBy: { createdAt: "desc" },
@@ -328,7 +329,7 @@ export const kioskRouter = router({
           loaned: true,
           createdAt: true,
           actionByUserId: true,
-          item: { select: { id: true, name: true, serial: true } },
+          item: { select: { id: true, name: true, serial: true, image: true } },
         },
       });
 

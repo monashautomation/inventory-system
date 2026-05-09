@@ -32,7 +32,9 @@ interface CheckinItemProps {
 }
 
 export default function CheckinItem({ record, form }: CheckinItemProps) {
-  const [imageSrc, setImageSrc] = useState(record?.item.image ?? "");
+  const [imageSrc, setImageSrc] = useState(
+    record?.item.image ? `/api/items/${record.itemId}/image` : "",
+  );
   const [isImgLoading, setIsImgLoading] = useState(true);
 
   return (
@@ -95,7 +97,7 @@ export default function CheckinItem({ record, form }: CheckinItemProps) {
                           }`}
                           onLoad={() => setIsImgLoading(false)}
                           onError={() => {
-                            setImageSrc("/placeholder.png");
+                            setImageSrc("");
                             setIsImgLoading(false);
                           }}
                         />

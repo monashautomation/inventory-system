@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, PackageCheck, QrCode } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Package,
+  PackageCheck,
+  QrCode,
+} from "lucide-react";
 import { QRScanner } from "@/components/ui/qr-scanner";
 
 export default function KioskCheckin() {
@@ -181,6 +187,19 @@ export default function KioskCheckin() {
                     onCheckedChange={() => toggleItem(record.itemId)}
                     onClick={(e) => e.stopPropagation()}
                   />
+                  <div className="shrink-0 h-10 w-10 rounded-md overflow-hidden border bg-muted">
+                    {record.item.image ? (
+                      <img
+                        src={`/api/items/${record.item.id}/image`}
+                        alt={record.item.name}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                        <Package className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1">
                     <p className="font-medium">{record.item.name}</p>
                     <p className="text-xs text-muted-foreground">
