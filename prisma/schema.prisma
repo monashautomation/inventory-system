@@ -184,6 +184,8 @@ model User {
     SuppliersCreated      ConsumableSupplier[] @relation("SupplierCreatedBy")
     ConsumableRequests    ConsumableRequest[]  @relation("RequestRequestedBy")
     ConsumablePurchases   ConsumableRequest[]  @relation("RequestPurchasedBy")
+    Notifications         Notification[]       @relation("UserNotifications")
+    AuditLogs             AuditLog[]           @relation("AuditActor")
 
     role          String    @default("user")
     banned        Boolean?
@@ -308,4 +310,51 @@ model Chat {
   userMessageChildIds Json   // Stores Record<string, string[]>
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+enum NotificationType {
+    REQUEST_ORDERED
+    REQUEST_RECEIVED
+    REQUEST_CANCELLED
+    REQUEST_PARTIAL
+}
+
+model Notification {
+    id         String           @id @default(uuid())
+    user       User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+    userId     String
+    type       NotificationType
+    title      String
+    body       String?
+    entityType String?
+    entityId   String?
+    readAt     DateTime?
+    createdAt  DateTime         @default(now())
+
+    @@index([userId, readAt, createdAt])
+    @@index([userId, createdAt])
+}
+
+enum AuditAction {
+    REQUEST_CREATED
+    REQUEST_STATUS_CHANGED
+    REQUEST_CANCELLED
+    REQUEST_RECEIVED
+}
+
+model AuditLog {
+    id         String      @id @default(uuid())
+    action     AuditAction
+    actor      User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+    actorId    String?
+    entityType String
+    entityId   String
+    before     Json?
+    after      Json?
+    metadata   Json?
+    createdAt  DateTime    @default(now())
+
+    @@index([entityType, entityId, createdAt])
+    @@index([actorId, createdAt])
+    @@index([action, createdAt])
 }

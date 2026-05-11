@@ -60,14 +60,24 @@ export function RequestConsumableDialog({
     onSuccess: () => {
       toast.success("Request submitted");
       void utils.consumableRequest.pendingCount.invalidate();
+      void utils.consumableRequest.myPendingCount.invalidate();
       void utils.consumableRequest.listMine.invalidate();
       void utils.consumableRequest.list.invalidate();
       onClose();
     },
-    onError: (err) =>
-      toast.error("Request failed", {
-        description: err.message,
-      }),
+    onError: (err) => {
+      if (err.data?.httpStatus === 409 || err.message.includes("pending request")) {
+        toast.warning("Already have a pending request", {
+          description: "You already have a pending request for this item.",
+          action: {
+            label: "View requests",
+            onClick: () => window.location.assign("/my-requests"),
+          },
+        });
+      } else {
+        toast.error("Request failed", { description: err.message });
+      }
+    },
   });
 
   if (!consumableId) {

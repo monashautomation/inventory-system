@@ -14,6 +14,8 @@ import { chatRouter } from "./chat";
 import { printRouter } from "./print";
 import { userRouter } from "./user";
 import { kioskRouter } from "./kiosk";
+import { notificationRouter } from "./notification";
+import { auditLogRouter } from "./auditLog";
 
 export const appRouter = router({
   group: groupRouter,
@@ -29,6 +31,8 @@ export const appRouter = router({
   chat: chatRouter,
   print: printRouter,
   kiosk: kioskRouter,
+  notification: notificationRouter,
+  auditLog: auditLogRouter,
   hello: userProcedure.query(() => {
     return "hello world";
   }),

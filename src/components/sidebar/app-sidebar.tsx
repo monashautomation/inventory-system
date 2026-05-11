@@ -13,9 +13,12 @@ import {
   Monitor,
   Wrench,
   ClipboardList,
+  FileText,
+  ScrollText,
 } from "lucide-react";
 import { authClient } from "@/auth/client";
 import { trpc } from "@/client/trpc";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 import {
   Sidebar,
@@ -96,6 +99,11 @@ export function AppSidebar() {
       refetchInterval: 30000,
     });
 
+  const { data: myPendingData } =
+    trpc.consumableRequest.myPendingCount.useQuery(undefined, {
+      refetchInterval: 60000,
+    });
+
   return (
     <Sidebar>
       <SidebarContent className="min-h-full">
@@ -114,6 +122,22 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <a
+                      onClick={() => void navigate("/my-requests")}
+                      className="flex items-center gap-2"
+                    >
+                      <FileText />
+                      <span>My Requests</span>
+                      {myPendingData && myPendingData.count > 0 ? (
+                        <span className="ml-auto h-5 min-w-5 rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-200 leading-5 text-center tabular-nums">
+                          {myPendingData.count}
+                        </span>
+                      ) : null}
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
                 {isAdmin && (
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
@@ -128,6 +152,19 @@ export function AppSidebar() {
                             {pendingRequestCount}
                           </span>
                         ) : null}
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {isAdmin && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <a
+                        onClick={() => void navigate("/audit-log")}
+                        className="flex items-center gap-2"
+                      >
+                        <ScrollText />
+                        <span>Audit Log</span>
                       </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -165,7 +202,10 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <div className="flex justify-between mr-2 mt-3 items-center">
                 <SidebarGroupLabel>Operation Tamarin</SidebarGroupLabel>
-                <ThemeToggle />
+                <div className="flex items-center gap-1">
+                  <NotificationBell />
+                  <ThemeToggle />
+                </div>
               </div>
             </div>
           </div>

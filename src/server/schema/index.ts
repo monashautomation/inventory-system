@@ -8,3 +8,5 @@ export * from "./tag.schema";
 export * from "./location.schema";
 export * from "./user.schema";
 export * from "./itemRecord.schema";
+export * from "./notification.schema";
+export * from "./auditLog.schema";
