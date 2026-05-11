@@ -62,7 +62,7 @@ const Assets = () => {
       filter: filter || undefined,
       page: pageIndex,
       pageSize,
-      sortOrder: (sorting[0]?.desc ? "desc" : "asc") as "asc" | "desc",
+      sortOrder: sorting[0]?.desc ? "desc" : "asc",
     },
     {
       placeholderData: keepPreviousData,
