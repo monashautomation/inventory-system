@@ -23,7 +23,8 @@ export async function writeAuditLog(
       entityId: args.entityId,
       before: args.before !== undefined ? (args.before as object) : undefined,
       after: args.after !== undefined ? (args.after as object) : undefined,
-      metadata: args.metadata !== undefined ? (args.metadata as object) : undefined,
+      metadata:
+        args.metadata !== undefined ? (args.metadata as object) : undefined,
     },
   });
 }

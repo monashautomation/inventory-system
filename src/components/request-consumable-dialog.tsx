@@ -66,7 +66,10 @@ export function RequestConsumableDialog({
       onClose();
     },
     onError: (err) => {
-      if (err.data?.httpStatus === 409 || err.message.includes("pending request")) {
+      if (
+        err.data?.httpStatus === 409 ||
+        err.message.includes("pending request")
+      ) {
         toast.warning("Already have a pending request", {
           description: "You already have a pending request for this item.",
           action: {

@@ -12,7 +12,9 @@ interface SupplierManagerProps {
   consumableId: string;
 }
 
-export default function SupplierManager({ consumableId }: SupplierManagerProps) {
+export default function SupplierManager({
+  consumableId,
+}: SupplierManagerProps) {
   const utils = trpc.useUtils();
   const { data: suppliers, isLoading } =
     trpc.consumableSupplier.listForConsumable.useQuery({ consumableId });
@@ -64,7 +66,12 @@ export default function SupplierManager({ consumableId }: SupplierManagerProps) 
     onError: (e) => toast.error("Update failed", { description: e.message }),
   });
 
-  const startEdit = (s: { id: string; name: string; url: string; sku: string | null }) => {
+  const startEdit = (s: {
+    id: string;
+    name: string;
+    url: string;
+    sku: string | null;
+  }) => {
     setEditId(s.id);
     setName(s.name);
     setUrl(s.url);
@@ -97,9 +104,7 @@ export default function SupplierManager({ consumableId }: SupplierManagerProps) 
     <div className="flex flex-col gap-3">
       <Separator />
       <Label className="text-base">Suppliers</Label>
-      {isLoading && (
-        <p className="text-xs text-muted-foreground">Loading…</p>
-      )}
+      {isLoading && <p className="text-xs text-muted-foreground">Loading…</p>}
 
       {suppliers && suppliers.length === 0 && (
         <p className="text-xs text-muted-foreground">
@@ -113,7 +118,8 @@ export default function SupplierManager({ consumableId }: SupplierManagerProps) 
             key={s.id}
             className={cn(
               "flex items-center gap-2 rounded-md border p-2",
-              s.isPrimary && "border-amber-400/60 bg-amber-50/30 dark:bg-amber-900/10",
+              s.isPrimary &&
+                "border-amber-400/60 bg-amber-50/30 dark:bg-amber-900/10",
             )}
           >
             <Button
@@ -177,8 +183,13 @@ export default function SupplierManager({ consumableId }: SupplierManagerProps) 
         ))}
       </ul>
 
-      <form onSubmit={submit} className="flex flex-col gap-2 rounded-md border p-3">
-        <Label className="text-sm">{editId ? "Edit supplier" : "Add supplier"}</Label>
+      <form
+        onSubmit={submit}
+        className="flex flex-col gap-2 rounded-md border p-3"
+      >
+        <Label className="text-sm">
+          {editId ? "Edit supplier" : "Add supplier"}
+        </Label>
         <div className="grid grid-cols-2 gap-2">
           <Input
             placeholder="Name"

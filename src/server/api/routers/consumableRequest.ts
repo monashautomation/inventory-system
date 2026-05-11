@@ -103,28 +103,26 @@ export const consumableRequestRouter = router({
       });
     }),
 
-  list: adminProcedure
-    .input(listRequestsInput)
-    .query(async ({ input }) => {
-      const where = {
-        ...(input.status && { status: input.status }),
-        ...(input.consumableId && { consumableId: input.consumableId }),
-        ...(input.requestedById && { requestedById: input.requestedById }),
-      };
+  list: adminProcedure.input(listRequestsInput).query(async ({ input }) => {
+    const where = {
+      ...(input.status && { status: input.status }),
+      ...(input.consumableId && { consumableId: input.consumableId }),
+      ...(input.requestedById && { requestedById: input.requestedById }),
+    };
 
-      const [items, totalCount] = await prisma.$transaction([
-        prisma.consumableRequest.findMany({
-          where,
-          include: requestInclude,
-          orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-          skip: input.page * input.pageSize,
-          take: input.pageSize,
-        }),
-        prisma.consumableRequest.count({ where }),
-      ]);
+    const [items, totalCount] = await prisma.$transaction([
+      prisma.consumableRequest.findMany({
+        where,
+        include: requestInclude,
+        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        skip: input.page * input.pageSize,
+        take: input.pageSize,
+      }),
+      prisma.consumableRequest.count({ where }),
+    ]);
 
-      return { items, totalCount };
-    }),
+    return { items, totalCount };
+  }),
 
   listMine: userProcedure
     .input(
@@ -194,10 +192,7 @@ export const consumableRequestRouter = router({
           });
         }
 
-        if (
-          existing.status === "RECEIVED" ||
-          existing.status === "CANCELLED"
-        ) {
+        if (existing.status === "RECEIVED" || existing.status === "CANCELLED") {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: `Request is already ${existing.status} and cannot be changed`,

@@ -81,11 +81,7 @@ export function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="w-80 p-0"
-      >
+      <PopoverContent align="end" sideOffset={8} className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-sm font-semibold">Notifications</span>
           {unreadCount > 0 && (
@@ -128,7 +124,9 @@ export function NotificationBell() {
                           <p
                             className={cn(
                               "text-sm leading-snug",
-                              isUnread ? "font-semibold" : "text-muted-foreground",
+                              isUnread
+                                ? "font-semibold"
+                                : "text-muted-foreground",
                             )}
                           >
                             {n.title}

@@ -34,17 +34,35 @@ type RequestRow = inferProcedureOutput<
   AppRouter["consumableRequest"]["listMine"]
 >["items"][number];
 
-const ALL_STATUSES = ["ALL", "PENDING", "ORDERED", "RECEIVED", "CANCELLED"] as const;
+const ALL_STATUSES = [
+  "ALL",
+  "PENDING",
+  "ORDERED",
+  "RECEIVED",
+  "CANCELLED",
+] as const;
 type TabValue = (typeof ALL_STATUSES)[number];
 
 const statusVariant: Record<
   RequestStatusType,
   { label: string; className: string }
 > = {
-  PENDING: { label: "Pending", className: "bg-amber-500/15 text-amber-700 dark:text-amber-200" },
-  ORDERED: { label: "Ordered", className: "bg-blue-500/15 text-blue-700 dark:text-blue-200" },
-  RECEIVED: { label: "Received", className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-muted text-muted-foreground" },
+  PENDING: {
+    label: "Pending",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-200",
+  },
+  ORDERED: {
+    label: "Ordered",
+    className: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
+  },
+  RECEIVED: {
+    label: "Received",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground",
+  },
 };
 
 function StatusBadge({ status }: { status: RequestStatusType }) {
@@ -86,7 +104,10 @@ export default function MyRequests() {
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
   useEffect(() => {
     if (highlightRef.current) {
-      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlightRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     }
   }, [data]);
 

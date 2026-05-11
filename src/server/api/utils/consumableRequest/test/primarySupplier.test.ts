@@ -34,9 +34,7 @@ describe("resolvePrimarySupplierId", () => {
     prismaMock.consumableSupplier.findFirst.mockResolvedValueOnce(
       null as never,
     );
-    prismaMock.consumableRequest.findFirst.mockResolvedValueOnce(
-      null as never,
-    );
+    prismaMock.consumableRequest.findFirst.mockResolvedValueOnce(null as never);
 
     const result = await resolvePrimarySupplierId(txMock, "consumable-1");
 

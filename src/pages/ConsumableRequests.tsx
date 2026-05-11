@@ -60,10 +60,22 @@ const statusVariant: Record<
   RequestStatusType,
   { label: string; className: string }
 > = {
-  PENDING: { label: "Pending", className: "bg-amber-500/15 text-amber-700 dark:text-amber-200" },
-  ORDERED: { label: "Ordered", className: "bg-blue-500/15 text-blue-700 dark:text-blue-200" },
-  RECEIVED: { label: "Received", className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200" },
-  CANCELLED: { label: "Cancelled", className: "bg-muted text-muted-foreground" },
+  PENDING: {
+    label: "Pending",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-200",
+  },
+  ORDERED: {
+    label: "Ordered",
+    className: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
+  },
+  RECEIVED: {
+    label: "Received",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground",
+  },
 };
 
 function StatusBadge({ status }: { status: RequestStatusType }) {
@@ -185,7 +197,10 @@ export default function ConsumableRequests() {
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                <TableCell
+                  colSpan={7}
+                  className="text-center py-10 text-muted-foreground"
+                >
                   No requests
                 </TableCell>
               </TableRow>
@@ -247,8 +262,7 @@ export default function ConsumableRequests() {
                             Order
                           </Button>
                         )}
-                        {(r.status === "PENDING" ||
-                          r.status === "ORDERED") && (
+                        {(r.status === "PENDING" || r.status === "ORDERED") && (
                           <Button
                             size="sm"
                             variant="default"

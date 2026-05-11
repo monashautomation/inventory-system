@@ -33,11 +33,26 @@ type AuditRow = inferProcedureOutput<
   AppRouter["auditLog"]["list"]
 >["items"][number];
 
-const ACTION_LABELS: Record<AuditActionType, { label: string; className: string }> = {
-  REQUEST_CREATED: { label: "Created", className: "bg-blue-500/15 text-blue-700 dark:text-blue-200" },
-  REQUEST_STATUS_CHANGED: { label: "Status changed", className: "bg-muted text-muted-foreground" },
-  REQUEST_CANCELLED: { label: "Cancelled", className: "bg-destructive/15 text-destructive" },
-  REQUEST_RECEIVED: { label: "Received", className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200" },
+const ACTION_LABELS: Record<
+  AuditActionType,
+  { label: string; className: string }
+> = {
+  REQUEST_CREATED: {
+    label: "Created",
+    className: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
+  },
+  REQUEST_STATUS_CHANGED: {
+    label: "Status changed",
+    className: "bg-muted text-muted-foreground",
+  },
+  REQUEST_CANCELLED: {
+    label: "Cancelled",
+    className: "bg-destructive/15 text-destructive",
+  },
+  REQUEST_RECEIVED: {
+    label: "Received",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+  },
 };
 
 const ALL_ACTIONS: AuditActionType[] = [
@@ -48,7 +63,8 @@ const ALL_ACTIONS: AuditActionType[] = [
 ];
 
 function DiffCell({ before, after }: { before: unknown; after: unknown }) {
-  if (!before && !after) return <span className="text-muted-foreground">—</span>;
+  if (!before && !after)
+    return <span className="text-muted-foreground">—</span>;
 
   const renderObj = (obj: unknown) => {
     if (!obj || typeof obj !== "object") return null;
@@ -66,13 +82,17 @@ function DiffCell({ before, after }: { before: unknown; after: unknown }) {
     <div className="flex gap-3 text-xs">
       {before != null && (
         <div className="rounded bg-destructive/5 px-1.5 py-1 min-w-[80px]">
-          <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">before</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+            before
+          </span>
           {renderObj(before)}
         </div>
       )}
       {after != null && (
         <div className="rounded bg-emerald-500/5 px-1.5 py-1 min-w-[80px]">
-          <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">after</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+            after
+          </span>
           {renderObj(after)}
         </div>
       )}
@@ -84,7 +104,10 @@ function ExpandableRow({ row }: { row: AuditRow }) {
   const [expanded, setExpanded] = useState(false);
   const ts = new Date(row.createdAt);
   const dateStr = ts.toLocaleDateString();
-  const timeStr = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const timeStr = ts.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const actionMeta = ACTION_LABELS[row.action as AuditActionType] ?? {
     label: row.action,
     className: "bg-muted text-muted-foreground",
@@ -103,7 +126,9 @@ function ExpandableRow({ row }: { row: AuditRow }) {
         <TableCell>
           <span className="text-sm">{row.actor?.name ?? "System"}</span>
           {row.actor?.email && (
-            <span className="block text-xs text-muted-foreground">{row.actor.email}</span>
+            <span className="block text-xs text-muted-foreground">
+              {row.actor.email}
+            </span>
           )}
         </TableCell>
         <TableCell>
@@ -122,12 +147,14 @@ function ExpandableRow({ row }: { row: AuditRow }) {
         <TableRow>
           <TableCell colSpan={5} className="bg-muted/20 py-3 px-4">
             <DiffCell before={row.before} after={row.after} />
-            {row.metadata && typeof row.metadata === "object" && Object.keys(row.metadata).length > 0 && (
-              <div className="mt-2 text-xs text-muted-foreground">
-                <span className="font-semibold">Metadata: </span>
-                {JSON.stringify(row.metadata)}
-              </div>
-            )}
+            {row.metadata &&
+              typeof row.metadata === "object" &&
+              Object.keys(row.metadata).length > 0 && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <span className="font-semibold">Metadata: </span>
+                  {JSON.stringify(row.metadata)}
+                </div>
+              )}
           </TableCell>
         </TableRow>
       )}
@@ -139,7 +166,9 @@ export default function AuditLog() {
   const { data: session, isPending } = authClient.useSession();
   const isAdmin = session?.user.role === "admin";
 
-  const [actionFilter, setActionFilter] = useState<"ALL" | AuditActionType>("ALL");
+  const [actionFilter, setActionFilter] = useState<"ALL" | AuditActionType>(
+    "ALL",
+  );
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
@@ -161,7 +190,9 @@ export default function AuditLog() {
   if (error) return <ErrorPage message={error.message} />;
 
   const items = data?.items ?? [];
-  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / pageSize)) : 1;
+  const totalPages = data
+    ? Math.max(1, Math.ceil(data.totalCount / pageSize))
+    : 1;
 
   return (
     <div className="container mx-auto py-3 p-6 md:p-8">
@@ -223,7 +254,10 @@ export default function AuditLog() {
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center py-10 text-muted-foreground"
+                >
                   No audit entries
                 </TableCell>
               </TableRow>

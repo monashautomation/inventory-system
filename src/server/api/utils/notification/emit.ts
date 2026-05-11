@@ -14,7 +14,14 @@ interface EmitArgs {
 }
 
 const notificationMap: Partial<
-  Record<RequestStatus, { type: NotificationType; title: (name: string) => string; body?: (args: EmitArgs) => string }>
+  Record<
+    RequestStatus,
+    {
+      type: NotificationType;
+      title: (name: string) => string;
+      body?: (args: EmitArgs) => string;
+    }
+  >
 > = {
   ORDERED: {
     type: "REQUEST_ORDERED",

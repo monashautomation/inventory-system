@@ -1,6 +1,9 @@
 import { router, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
-import { listNotificationsInput, markReadInput } from "@/server/schema/notification.schema";
+import {
+  listNotificationsInput,
+  markReadInput,
+} from "@/server/schema/notification.schema";
 import { z } from "zod";
 
 export const notificationRouter = router({
