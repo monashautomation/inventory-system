@@ -26,6 +26,7 @@ import { Route, Routes, useParams } from "react-router-dom";
 import LocationBreadcrumb from "@/components/Location";
 import ModifyItemSheet from "@/components/item-crud/ModifyItemSheet";
 import { keepPreviousData } from "@tanstack/react-query";
+import type { SortingState } from "@tanstack/react-table";
 import { authClient } from "@/auth/client";
 
 type GetItemsOutput = inferProcedureOutput<
@@ -43,10 +44,14 @@ const Consumables = () => {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [filter, setFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<GetItemsOutput | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<GetItemsOutput | null>(null);
+
+  const sortBy = (sorting[0]?.id ?? "name") as "name" | "serial" | "location";
+  const sortOrder: "asc" | "desc" = sorting[0]?.desc ? "desc" : "asc";
 
   // Fetch paginated data
   const { data, isLoading, error, refetch } = trpc.item.list.useQuery(
@@ -56,6 +61,8 @@ const Consumables = () => {
       filter: filter || undefined,
       page: pageIndex,
       pageSize,
+      sortBy,
+      sortOrder,
     },
     {
       placeholderData: keepPreviousData,
@@ -103,6 +110,16 @@ const Consumables = () => {
   // Handle delete action
   const handleDelete = useCallback((item: GetItemsOutput) => {
     setItemToDelete(item);
+  }, []);
+
+  const handleFilterChange = useCallback((f: string) => {
+    setFilter(f);
+    setPageIndex(0);
+  }, []);
+
+  const handleSortingChange = useCallback((s: typeof sorting) => {
+    setSorting(s);
+    setPageIndex(0);
   }, []);
 
   const getCartQuantity = useCallback(
@@ -178,7 +195,8 @@ const Consumables = () => {
         data={data?.items ?? []}
         filterKey="name"
         filterValue={filter}
-        onFilterChange={setFilter}
+        onFilterChange={handleFilterChange}
+        onSortingChange={handleSortingChange}
         BarComponents={(table) => (
           <TableActions
             table={table}

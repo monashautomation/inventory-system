@@ -40,7 +40,7 @@ export function TableTopBar<TData>({
   return (
     <div className="flex justify-between items-center py-4">
       <Input
-        placeholder="Filter..."
+        placeholder="Search..."
         value={localFilter}
         onChange={(event) => setLocalFilter(event.target.value)}
         className="max-w-sm"

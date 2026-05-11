@@ -16,6 +16,7 @@ import { Route, Routes, useParams } from "react-router-dom";
 import LocationBreadcrumb from "@/components/Location";
 import ModifyItemSheet from "@/components/item-crud/ModifyItemSheet";
 import { keepPreviousData } from "@tanstack/react-query";
+import type { SortingState } from "@tanstack/react-table";
 import { authClient } from "@/auth/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +49,7 @@ const Assets = () => {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [filter, setFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   // Manage Modify Sheet state
   const [selectedItem, setSelectedItem] = useState<GetItemsOutput | null>(null);
@@ -60,6 +62,7 @@ const Assets = () => {
       filter: filter || undefined,
       page: pageIndex,
       pageSize,
+      sortOrder: (sorting[0]?.desc ? "desc" : "asc") as "asc" | "desc",
     },
     {
       placeholderData: keepPreviousData,
@@ -131,6 +134,16 @@ const Assets = () => {
     setItemToDelete(item);
   }, []);
 
+  const handleFilterChange = useCallback((f: string) => {
+    setFilter(f);
+    setPageIndex(0);
+  }, []);
+
+  const handleSortingChange = useCallback((s: typeof sorting) => {
+    setSorting(s);
+    setPageIndex(0);
+  }, []);
+
   // Memoize columns to prevent re-creation on every render
   const getCartQuantity = useCallback(
     (id: string) => getItem(id)?.quantity ?? 0,
@@ -148,6 +161,7 @@ const Assets = () => {
         getCartQuantity,
         isDeleting: deleteMut.isPending,
         isAdmin,
+        disableFieldSorting: true,
       }),
     [
       handleAddToCart,
@@ -215,7 +229,8 @@ const Assets = () => {
         data={data?.items ?? []}
         filterKey="name"
         filterValue={filter}
-        onFilterChange={setFilter}
+        onFilterChange={handleFilterChange}
+        onSortingChange={handleSortingChange}
         BarComponents={(table) => (
           <TableActions table={table} onRefetch={refetch} isAdmin={isAdmin} />
         )}

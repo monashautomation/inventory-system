@@ -38,6 +38,7 @@ interface DataTableProps<TData extends HasId, TValue> {
   onPageChange?: (pageIndex: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
   onFilterChange?: (filter: string) => void;
+  onSortingChange?: (sorting: SortingState) => void;
   totalCount?: number;
   renderRows?: (table: Table<TData>) => React.ReactNode;
 }
@@ -53,6 +54,7 @@ export function DataTable<TData extends HasId, TValue>({
   onPageChange,
   onPageSizeChange,
   onFilterChange,
+  onSortingChange,
   totalCount,
   renderRows,
 }: DataTableProps<TData, TValue>) {
@@ -81,7 +83,12 @@ export function DataTable<TData extends HasId, TValue>({
     pageCount: totalCount ? Math.ceil(totalCount / pagination.pageSize) : -1,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+      setSorting(newSorting);
+      onSortingChange?.(newSorting);
+    },
     getSortedRowModel: getSortedRowModel(),
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
@@ -102,6 +109,7 @@ export function DataTable<TData extends HasId, TValue>({
       pagination,
     },
     manualPagination: true,
+    manualSorting: true,
   });
 
   return (

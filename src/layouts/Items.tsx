@@ -37,6 +37,7 @@ interface ItemProps {
   isDeleting?: boolean;
   callback?: () => void;
   isAdmin?: boolean;
+  disableFieldSorting?: boolean;
 }
 
 function Items({
@@ -48,6 +49,7 @@ function Items({
   isDeleting,
   callback,
   isAdmin,
+  disableFieldSorting = false,
 }: ItemProps) {
   const columns: ColumnDef<GetItemsOutput>[] = [
     {
@@ -86,6 +88,7 @@ function Items({
     },
     {
       accessorKey: "serial",
+      enableSorting: !disableFieldSorting,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Serial" />
       ),
@@ -130,6 +133,7 @@ function Items({
     },
     {
       accessorKey: "tag",
+      enableSorting: false,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Tag" />
       ),
@@ -159,6 +163,7 @@ function Items({
     {
       accessorKey: "location",
       accessorFn: (row) => row?.location?.name,
+      enableSorting: !disableFieldSorting,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Storage Location" />
       ),
