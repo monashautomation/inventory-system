@@ -26,6 +26,65 @@ model Consumable {
     itemId    String @unique
     available Int
     total     Int
+    minStock  Int    @default(0)
+
+    suppliers ConsumableSupplier[]
+    requests  ConsumableRequest[]
+}
+
+model ConsumableSupplier {
+    id           String     @id @default(uuid())
+    consumable   Consumable @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+    consumableId String
+    name         String
+    url          String
+    sku          String?
+    notes        String?
+    isPrimary    Boolean    @default(false)
+    createdBy    User       @relation("SupplierCreatedBy", fields: [createdById], references: [id])
+    createdById  String
+    createdAt    DateTime   @default(now())
+    updatedAt    DateTime   @updatedAt
+
+    requests ConsumableRequest[]
+
+    @@index([consumableId])
+    @@index([consumableId, isPrimary])
+}
+
+enum RequestStatus {
+    PENDING
+    ORDERED
+    RECEIVED
+    CANCELLED
+}
+
+model ConsumableRequest {
+    id             String              @id @default(uuid())
+    consumable     Consumable          @relation(fields: [consumableId], references: [id])
+    consumableId   String
+    requestedBy    User                @relation("RequestRequestedBy", fields: [requestedById], references: [id])
+    requestedById  String
+    quantity       Int
+    status         RequestStatus       @default(PENDING)
+    supplier       ConsumableSupplier? @relation(fields: [supplierId], references: [id])
+    supplierId     String?
+    customSupplier String?
+    customUrl      String?
+    notes          String?
+    purchasedBy    User?               @relation("RequestPurchasedBy", fields: [purchasedById], references: [id])
+    purchasedById  String?
+    purchasedAt    DateTime?
+    receivedAt     DateTime?
+    fulfilledQty   Int?
+    cancelReason   String?
+    createdAt      DateTime            @default(now())
+    updatedAt      DateTime            @updatedAt
+
+    @@index([consumableId])
+    @@index([status, createdAt])
+    @@index([requestedById])
+    @@index([supplierId])
 }
 
 model Item {
@@ -122,6 +181,11 @@ model User {
     ItemNotesUpdated   Item[]       @relation("ItemNotesUpdatedBy")
     printers      Printer[]
     gcodePrintJobs GcodePrintJob[]
+    SuppliersCreated      ConsumableSupplier[] @relation("SupplierCreatedBy")
+    ConsumableRequests    ConsumableRequest[]  @relation("RequestRequestedBy")
+    ConsumablePurchases   ConsumableRequest[]  @relation("RequestPurchasedBy")
+    Notifications         Notification[]       @relation("UserNotifications")
+    AuditLogs             AuditLog[]           @relation("AuditActor")
 
     role          String    @default("user")
     banned        Boolean?
@@ -246,4 +310,51 @@ model Chat {
   userMessageChildIds Json   // Stores Record<string, string[]>
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+enum NotificationType {
+    REQUEST_ORDERED
+    REQUEST_RECEIVED
+    REQUEST_CANCELLED
+    REQUEST_PARTIAL
+}
+
+model Notification {
+    id         String           @id @default(uuid())
+    user       User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+    userId     String
+    type       NotificationType
+    title      String
+    body       String?
+    entityType String?
+    entityId   String?
+    readAt     DateTime?
+    createdAt  DateTime         @default(now())
+
+    @@index([userId, readAt, createdAt])
+    @@index([userId, createdAt])
+}
+
+enum AuditAction {
+    REQUEST_CREATED
+    REQUEST_STATUS_CHANGED
+    REQUEST_CANCELLED
+    REQUEST_RECEIVED
+}
+
+model AuditLog {
+    id         String      @id @default(uuid())
+    action     AuditAction
+    actor      User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+    actorId    String?
+    entityType String
+    entityId   String
+    before     Json?
+    after      Json?
+    metadata   Json?
+    createdAt  DateTime    @default(now())
+
+    @@index([entityType, entityId, createdAt])
+    @@index([actorId, createdAt])
+    @@index([action, createdAt])
 }

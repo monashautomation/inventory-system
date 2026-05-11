@@ -1,6 +1,8 @@
 import { userProcedure, router } from "@/server/trpc";
 import { groupRouter } from "./group";
 import { consumableRouter } from "./consumable";
+import { consumableSupplierRouter } from "./consumableSupplier";
+import { consumableRequestRouter } from "./consumableRequest";
 import { itemRouter } from "./item";
 import { tagRouter } from "./tag";
 import { locationRouter } from "./location";
@@ -12,10 +14,14 @@ import { chatRouter } from "./chat";
 import { printRouter } from "./print";
 import { userRouter } from "./user";
 import { kioskRouter } from "./kiosk";
+import { notificationRouter } from "./notification";
+import { auditLogRouter } from "./auditLog";
 
 export const appRouter = router({
   group: groupRouter,
   consumable: consumableRouter,
+  consumableSupplier: consumableSupplierRouter,
+  consumableRequest: consumableRequestRouter,
   item: itemRouter,
   tag: tagRouter,
   location: locationRouter,
@@ -25,6 +31,8 @@ export const appRouter = router({
   chat: chatRouter,
   print: printRouter,
   kiosk: kioskRouter,
+  notification: notificationRouter,
+  auditLog: auditLogRouter,
   hello: userProcedure.query(() => {
     return "hello world";
   }),

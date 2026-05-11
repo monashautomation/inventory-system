@@ -3,6 +3,12 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/server/lib/prisma";
 import { admin, customSession, genericOAuth } from "better-auth/plugins";
 export const auth = betterAuth({
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["authentik"],
+    },
+  },
   plugins: [
     customSession(async ({ user, session }) => {
       const role = await prisma.user

@@ -1,195 +1,517 @@
-// pages/dashboard/index.tsx
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { TrendingUp, Flame } from "lucide-react";
-import { ChartBarDynamic } from "@/components/charts/dynamic-charts";
+import { Link } from "react-router-dom";
+import { authClient } from "@/auth/client";
 import { trpc } from "@/client/trpc";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-type ConsumptionRange = "1d" | "1w" | "1m" | "3m" | "6m" | "1yr";
-const CONSUMPTION_RANGES: { label: string; value: ConsumptionRange }[] = [
-  { label: "1D", value: "1d" },
-  { label: "1W", value: "1w" },
-  { label: "1M", value: "1m" },
-  { label: "3M", value: "3m" },
-  { label: "6M", value: "6m" },
-  { label: "1YR", value: "1yr" },
-];
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ChartBarDynamic } from "@/components/charts/dynamic-charts";
+
+import {
+  AlertTriangle,
+  Archive,
+  Bell,
+  ChevronRight,
+  Clock,
+  Package,
+  PackageSearch,
+  ShoppingBag,
+} from "lucide-react";
+
+import type { RequestStatusType } from "@/server/schema/consumableRequest.schema";
+
+const statusVariant: Record<
+  RequestStatusType,
+  { label: string; className: string }
+> = {
+  PENDING: {
+    label: "Pending",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-200",
+  },
+  ORDERED: {
+    label: "Ordered",
+    className: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
+  },
+  RECEIVED: {
+    label: "Received",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground",
+  },
+};
+
+function StatusBadge({ status }: { status: RequestStatusType }) {
+  const v = statusVariant[status];
+  return <Badge className={v.className}>{v.label}</Badge>;
+}
+
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  highlight,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  highlight?: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className={cn("h-4 w-4 text-muted-foreground", highlight)} />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function fmt(date: string | Date) {
+  return new Date(date).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function ViewAllLink({ to }: { to: string }) {
+  return (
+    <Button variant="ghost" size="sm" asChild>
+      <Link to={to} className="flex items-center gap-1 text-xs">
+        View all <ChevronRight className="h-3 w-3" />
+      </Link>
+    </Button>
+  );
+}
+
+function MyRequestsCard() {
+  const { data, isLoading } = trpc.consumableRequest.listMine.useQuery({
+    page: 0,
+    pageSize: 5,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="text-base">My Recent Requests</CardTitle>
+        <ViewAllLink to="/my-requests" />
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Loading…</p>
+        ) : !data?.items.length ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">
+            No requests yet.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.items.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">
+                    {req.consumable.item?.name}
+                  </TableCell>
+                  <TableCell className="text-right">{req.quantity}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={req.status} />
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">
+                    {fmt(req.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MyLoansCard() {
+  const { data: loans, isLoading } =
+    trpc.itemRecord.getUserLoanedItems.useQuery();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">My Active Loans</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Loading…</p>
+        ) : !loans?.length ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">
+            No active loans.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Serial</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loans.map((loan) => (
+                <TableRow key={loan.id}>
+                  <TableCell className="font-medium">
+                    {loan.item.name}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {loan.item.serial}
+                  </TableCell>
+                  <TableCell className="text-right">{loan.loanedQty}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminPendingRequestsCard() {
+  const utils = trpc.useUtils();
+  const { data, isLoading } = trpc.consumableRequest.list.useQuery({
+    status: "PENDING",
+    page: 0,
+    pageSize: 5,
+  });
+
+  const updateMut = trpc.consumableRequest.updateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Marked as ordered");
+      void utils.consumableRequest.list.invalidate();
+      void utils.consumableRequest.pendingCount.invalidate();
+      void utils.dashboard.getRequestStatusCounts.invalidate();
+    },
+    onError: (e) => toast.error("Update failed", { description: e.message }),
+  });
+
+  const total = data?.totalCount ?? 0;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="text-base">
+          Pending Requests
+          {total > 0 && <span className="ml-2 text-amber-600">({total})</span>}
+        </CardTitle>
+        <ViewAllLink to="/consumables/requests" />
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Loading…</p>
+        ) : !data?.items.length ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">
+            No pending requests.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Requested by</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.items.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-medium">
+                    {req.consumable.item?.name}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {req.requestedBy.name}
+                  </TableCell>
+                  <TableCell className="text-right">{req.quantity}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={updateMut.isPending}
+                      onClick={() =>
+                        updateMut.mutate({ id: req.id, status: "ORDERED" })
+                      }
+                    >
+                      Order
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LowStockCard() {
+  const { data: items, isLoading } =
+    trpc.dashboard.getLowStockConsumables.useQuery();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <CardTitle className="text-base">Low Stock</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Loading…</p>
+        ) : !items?.length ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">
+            All consumables sufficiently stocked.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Available</TableHead>
+                <TableHead className="text-right">Min</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">{c.item?.name}</TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-bold",
+                      c.available === 0 ? "text-destructive" : "text-amber-600",
+                    )}
+                  >
+                    {c.available}
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {c.minStock}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  REQUEST_CREATED: "Request created",
+  REQUEST_STATUS_CHANGED: "Status changed",
+  REQUEST_CANCELLED: "Request cancelled",
+  REQUEST_RECEIVED: "Request received",
+};
+
+function AuditLogCard() {
+  const { data, isLoading } = trpc.auditLog.list.useQuery({
+    page: 0,
+    pageSize: 8,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="text-base">Recent Activity</CardTitle>
+        <ViewAllLink to="/audit-log" />
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Loading…</p>
+        ) : !data?.items.length ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">
+            No activity yet.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Action</TableHead>
+                <TableHead>Actor</TableHead>
+                <TableHead className="text-right">Time</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.items.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="text-sm">
+                    {ACTION_LABELS[log.action] ?? log.action}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {log.actor?.name ?? "System"}
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">
+                    {fmt(log.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export const formatConsumableTotalCost = (totalCost: number): string =>
   `$${totalCost.toFixed(2)}`;
 
 export default function Dashboard() {
-  const [consumptionRange, setConsumptionRange] =
-    useState<ConsumptionRange>("1m");
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user.role === "admin";
 
-  // Data fetching hooks
+  const { data: myPending } = trpc.consumableRequest.myPendingCount.useQuery();
+  const { data: unread } = trpc.notification.unreadCount.useQuery();
+  const { data: loans } = trpc.itemRecord.getUserLoanedItems.useQuery();
+
+  const { data: statusCounts } = trpc.dashboard.getRequestStatusCounts.useQuery(
+    undefined,
+    { enabled: isAdmin },
+  );
+  const { data: inventoryStats } = trpc.dashboard.getItemStatusStats.useQuery(
+    undefined,
+    { enabled: isAdmin },
+  );
   const { data: inventoryByLocation } =
-    trpc.dashboard.getInventoryByLocation.useQuery();
-  const { data: topItems } = trpc.dashboard.getTopLoanedItems.useQuery({
-    limit: 5,
-  });
-  const { data: consumptionStats } =
-    trpc.dashboard.getConsumptionStats.useQuery({
-      range: consumptionRange,
-    });
-  const { data: topConsumed } =
-    trpc.dashboard.getTopConsumedConsumables.useQuery({
-      range: consumptionRange,
-      limit: 10,
+    trpc.dashboard.getInventoryByLocation.useQuery(undefined, {
+      enabled: isAdmin,
     });
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-left">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Overview of your inventory system
-        </p>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        {session?.user.name && (
+          <p className="text-muted-foreground">
+            Welcome back, {session.user.name}.
+          </p>
+        )}
       </div>
 
-      <div className="mx-auto grid gap-4 md:grid-cols-2 auto-rows-[minmax(300px,auto)]">
-        <Card className="flex flex-col h-full">
-          <CardHeader>
-            <CardTitle>Top Loaned Items</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1">
-            <ChartBarDynamic
-              data={topItems ?? []}
-              dataKey="loanCount"
-              nameKey="itemName"
-              color="#3b82f6"
+      {/* User stat cards */}
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <StatCard
+          title="My Pending Requests"
+          value={myPending?.count ?? 0}
+          icon={ShoppingBag}
+          highlight={myPending?.count ? "text-amber-500" : undefined}
+        />
+        <StatCard
+          title="My Active Loans"
+          value={loans?.length ?? 0}
+          icon={Package}
+        />
+        <StatCard
+          title="Unread Notifications"
+          value={unread?.count ?? 0}
+          icon={Bell}
+          highlight={unread?.count ? "text-blue-500" : undefined}
+        />
+      </div>
+
+      {/* User cards */}
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <MyRequestsCard />
+        <MyLoansCard />
+      </div>
+
+      {/* Admin section */}
+      {isAdmin && (
+        <>
+          <div className="mb-6 flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Admin Overview
+            </span>
+            <Separator className="flex-1" />
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatCard
+              title="Pending Requests"
+              value={statusCounts?.PENDING ?? 0}
+              icon={Clock}
+              highlight={statusCounts?.PENDING ? "text-amber-500" : undefined}
             />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Inventory Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartBarDynamic
-              data={inventoryByLocation ?? []}
-              dataKey="itemCount"
-              nameKey="locationName"
-              color="#10b981"
+            <StatCard
+              title="Ordered"
+              value={statusCounts?.ORDERED ?? 0}
+              icon={ShoppingBag}
+              highlight="text-blue-500"
             />
-          </CardContent>
-        </Card>
-      </div>
+            <StatCard
+              title="Total Items"
+              value={inventoryStats?.total ?? 0}
+              icon={Archive}
+            />
+            <StatCard
+              title="Consumable Units"
+              value={inventoryStats?.available ?? 0}
+              icon={PackageSearch}
+            />
+          </div>
 
-      {/* Consumables Section */}
-      <div className="mt-8 mb-3 flex items-center gap-2">
-        <Flame className="h-5 w-5 text-orange-400" />
-        <h2 className="text-xl font-semibold">Consumables</h2>
-        <div className="ml-auto flex gap-1">
-          {CONSUMPTION_RANGES.map((r) => (
-            <Button
-              key={r.value}
-              size="sm"
-              variant={consumptionRange === r.value ? "default" : "outline"}
-              className="h-7 px-2 text-xs"
-              onClick={() => setConsumptionRange(r.value)}
-            >
-              {r.label}
-            </Button>
-          ))}
-        </div>
-      </div>
+          <div className="mb-4 grid gap-4 md:grid-cols-2">
+            <AdminPendingRequestsCard />
+            <LowStockCard />
+          </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Units Consumed
-              </CardTitle>
-              <Flame className="h-4 w-4 text-orange-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {consumptionStats?.totalConsumed.toLocaleString() ?? "0"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Over selected period
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatConsumableTotalCost(consumptionStats?.totalCost ?? 0)}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Over selected period
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Top 10 Most Consumed
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {!topConsumed || topConsumed.length === 0 ? (
-              <p className="text-sm text-muted-foreground px-4 pb-4">
-                No consumptions in this period
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left px-4 py-2 font-medium text-muted-foreground w-8">
-                      #
-                    </th>
-                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">
-                      Serial
-                    </th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">
-                      Used
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topConsumed.map((item, i) => (
-                    <tr
-                      key={item.serial}
-                      className={cn(
-                        "border-b last:border-0",
-                        i % 2 === 0 ? "bg-muted/30" : "",
-                      )}
-                    >
-                      <td className="px-4 py-2 text-muted-foreground">
-                        {i + 1}
-                      </td>
-                      <td className="px-4 py-2 font-medium">{item.name}</td>
-                      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                        {item.serial}
-                      </td>
-                      <td className="px-4 py-2 text-right font-bold text-orange-400">
-                        {item.consumed}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <AuditLogCard />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Inventory by Location
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartBarDynamic
+                  data={inventoryByLocation ?? []}
+                  dataKey="itemCount"
+                  nameKey="locationName"
+                  color="#10b981"
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }
