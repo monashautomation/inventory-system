@@ -20,8 +20,9 @@ function headers(apiKey: string): Record<string, string> {
 async function checkResponse(res: Response, context: string): Promise<void> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    const safeBody = (body || "<empty>").replace(/\s+/g, " ").slice(0, 1024);
     throw new Error(
-      `BambBuddy ${context} failed (HTTP ${res.status}): ${body || "<empty>"}`,
+      `BambBuddy ${context} failed (HTTP ${res.status}): ${safeBody}`,
     );
   }
 }
@@ -325,6 +326,17 @@ export async function stopBambuddyCameraStream(
   );
   // Ignore errors — stream may have already stopped
   res.body?.cancel().catch(() => undefined);
+}
+
+/** Fetch Prometheus-formatted metrics directly from Bambuddy. */
+export async function getBambuddyPrometheusMetrics(): Promise<string> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/metrics`, {
+    headers: headers(apiKey),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "get prometheus metrics");
+  return res.text();
 }
 
 /** Fetch status for all BambuBuddy printers in parallel. Failed individual lookups are skipped. */

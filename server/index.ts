@@ -18,10 +18,21 @@ import {
     syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
 import sharp from "sharp";
-import { uploadFile, buildItemImageKey, deleteFile, fileExists, downloadFile } from "@/server/lib/s3";
+import {
+    uploadFile,
+    buildItemImageKey,
+    deleteFile,
+    fileExists,
+    downloadFile,
+} from "@/server/lib/s3";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED_IMAGE_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
 
 // Load environment variables
 config();
@@ -84,10 +95,15 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     console.log(`[auth] ${method} ${path} started`);
     try {
         const response = await auth.handler(c.req.raw);
-        console.log(`[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`);
+        console.log(
+            `[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`,
+        );
         return response;
     } catch (error) {
-        console.error(`[auth] ${method} ${path} threw after ${Date.now() - start}ms:`, error);
+        console.error(
+            `[auth] ${method} ${path} threw after ${Date.now() - start}ms:`,
+            error,
+        );
         throw new HTTPException(500, {
             message: "Authentication processing failed",
         });
@@ -170,7 +186,9 @@ app.post("/api/items/:id/image", async (c) => {
         throw new HTTPException(400, { message: "Missing image field" });
     }
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-        throw new HTTPException(400, { message: "Unsupported image type. Use JPEG, PNG, WebP, or GIF." });
+        throw new HTTPException(400, {
+            message: "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+        });
     }
 
     const rawBytes = await file.arrayBuffer();
@@ -180,7 +198,12 @@ app.post("/api/items/:id/image", async (c) => {
 
     const webpBuffer = await sharp(Buffer.from(rawBytes))
         .rotate()
-        .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+        .resize({
+            width: 1200,
+            height: 1200,
+            fit: "inside",
+            withoutEnlargement: true,
+        })
         .webp({ quality: 80 })
         .toBuffer();
 
@@ -266,7 +289,12 @@ app.delete("/api/items/:id/image/apply-to-group", async (c) => {
     }
 
     const siblings = await prisma.item.findMany({
-        where: { name: source.name, deleted: false, id: { not: itemId }, image: { not: null } },
+        where: {
+            name: source.name,
+            deleted: false,
+            id: { not: itemId },
+            image: { not: null },
+        },
         select: { id: true, image: true },
     });
 
@@ -454,7 +482,8 @@ async function proxyWebcam(
 // exposing the BambuBuddy endpoint or API key to the browser.
 app.get("/api/bambu-stream/:bambuddyId", async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    if (!session?.user?.id) throw new HTTPException(401, { message: "Authentication required" });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
 
     const bambuddyId = Number(c.req.param("bambuddyId"));
     if (!Number.isInteger(bambuddyId) || bambuddyId <= 0) {
@@ -463,22 +492,28 @@ app.get("/api/bambu-stream/:bambuddyId", async (c) => {
 
     const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
     const apiKey = process.env.BAMBUDDY_API_KEY;
-    if (!endpoint || !apiKey) throw new HTTPException(503, { message: "BambuBuddy not configured" });
+    if (!endpoint || !apiKey)
+        throw new HTTPException(503, { message: "BambuBuddy not configured" });
 
     // Get a short-lived stream token
     let token: string;
     try {
-        const tokenRes = await fetch(`${endpoint}/api/v1/printers/camera/stream-token`, {
-            method: "POST",
-            headers: { "X-API-Key": apiKey },
-            signal: AbortSignal.timeout(10_000),
-        });
+        const tokenRes = await fetch(
+            `${endpoint}/api/v1/printers/camera/stream-token`,
+            {
+                method: "POST",
+                headers: { "X-API-Key": apiKey },
+                signal: AbortSignal.timeout(10_000),
+            },
+        );
         if (!tokenRes.ok) throw new Error(`HTTP ${tokenRes.status}`);
         const tokenData = (await tokenRes.json()) as { token?: string };
         if (!tokenData.token) throw new Error("Missing token in response");
         token = tokenData.token;
     } catch (err) {
-        throw new HTTPException(502, { message: `Failed to get stream token: ${err instanceof Error ? err.message : err}` });
+        throw new HTTPException(502, {
+            message: `Failed to get stream token: ${err instanceof Error ? err.message : err}`,
+        });
     }
 
     const fps = Math.min(30, Math.max(1, Number(c.req.query("fps") ?? "15")));
@@ -499,14 +534,20 @@ app.get("/api/bambu-stream/:bambuddyId", async (c) => {
         clearTimeout(fetchTimeout);
         if (err instanceof Error && err.name === "AbortError") {
             if (clientDisconnected) return c.body(null, 499 as any);
-            throw new HTTPException(502, { message: "BambuBuddy stream timed out" });
+            throw new HTTPException(502, {
+                message: "BambuBuddy stream timed out",
+            });
         }
-        throw new HTTPException(502, { message: "Failed to connect to BambuBuddy stream" });
+        throw new HTTPException(502, {
+            message: "Failed to connect to BambuBuddy stream",
+        });
     }
     clearTimeout(fetchTimeout);
 
     if (!upstreamRes.ok || !upstreamRes.body) {
-        throw new HTTPException(502, { message: `BambuBuddy stream returned HTTP ${upstreamRes.status}` });
+        throw new HTTPException(502, {
+            message: `BambuBuddy stream returned HTTP ${upstreamRes.status}`,
+        });
     }
 
     const resHeaders = new Headers();
@@ -613,6 +654,8 @@ if (metricsEnabled) {
 }
 
 // ─── Start BambuBuddy API polling for Prometheus metrics ─────────────────────
+// Always start the legacy poller when enabled — we may prefer the Prometheus
+// endpoint but fall back to the legacy cache if the passthrough fails.
 if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
     initBambuMetricsListener();
 }
@@ -622,12 +665,18 @@ if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
 // they appear in getPrinters / getLivePrinterStatuses before the first poller
 // cycle fires. Re-sync every 5 minutes to pick up newly registered printers.
 syncBambuPrinters().catch((err) =>
-    console.error("[startup] Bambu printer sync failed:", err instanceof Error ? err.message : err),
+    console.error(
+        "[startup] Bambu printer sync failed:",
+        err instanceof Error ? err.message : err,
+    ),
 );
 setInterval(
     () =>
         syncBambuPrinters().catch((err) =>
-            console.error("[sync] Bambu printer sync failed:", err instanceof Error ? err.message : err),
+            console.error(
+                "[sync] Bambu printer sync failed:",
+                err instanceof Error ? err.message : err,
+            ),
         ),
     5 * 60 * 1000,
 );

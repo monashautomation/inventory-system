@@ -22,6 +22,7 @@ A modern, full-stack inventory management system built with React, TypeScript, t
 ## Tech Stack
 
 ### Frontend
+
 - **React 19** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
@@ -35,6 +36,7 @@ A modern, full-stack inventory management system built with React, TypeScript, t
 - **Zod** - Schema validation
 
 ### Backend
+
 - **Hono** - Web framework
 - **tRPC** - Type-safe API layer
 - **Prisma** - ORM and database toolkit
@@ -44,6 +46,7 @@ A modern, full-stack inventory management system built with React, TypeScript, t
 - **Ollama** - Local LLM support
 
 ### Development Tools
+
 - **Bun** - Runtime and package manager
 - **Vitest** - Testing framework
 - **ESLint** - Code linting
@@ -94,6 +97,18 @@ MCP_PASSWORD="your-secure-password-here"
 
 # Optional: Bambu dispatch bridge webhook (required for BAMBU printer type dispatch)
 BAMBU_BRIDGE_URL="http://localhost:8081/bambu/dispatch"
+
+# Optional: Prometheus metrics endpoint (/metrics)
+METRICS_ENABLED=true
+METRICS_USERNAME="metrics-user"
+METRICS_PASSWORD="metrics-pass"
+METRICS_PRUSA_ENABLED=true
+METRICS_BAMBU_ENABLED=true
+
+# Bambu metrics source:
+# - legacy: mapped bambulab_* metrics from Bambuddy /status polling
+# - prometheus: pass through Bambuddy /api/v1/metrics metrics directly
+METRICS_BAMBU_SOURCE="prometheus"
 ```
 
 ### 4. Start the database
@@ -206,6 +221,7 @@ docker-compose up --build
 ```
 
 The application will be available at:
+
 - Frontend: http://localhost:4173
 - Backend: http://localhost:3000
 
@@ -214,6 +230,7 @@ The application will be available at:
 ### Code Quality
 
 The project uses:
+
 - **ESLint** for linting (configured in `eslint.config.js`)
 - **Prettier** for formatting
 - **Husky** for git hooks (pre-commit runs lint, format, and tests)
