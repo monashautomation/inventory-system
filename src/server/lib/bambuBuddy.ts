@@ -92,7 +92,7 @@ export interface BambuddyPrinterStatus {
   vt_tray: AMSTray[];
   wifi_signal: number | null;
   sdcard: boolean;
-  nozzles: Array<{ nozzle_type: string; nozzle_diameter: string }>;
+  nozzles: { nozzle_type: string; nozzle_diameter: string }[];
 }
 
 export interface ReprintOptions {

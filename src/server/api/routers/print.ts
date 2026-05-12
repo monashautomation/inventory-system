@@ -33,7 +33,7 @@ import {
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 
-type AmsTrayInfo = {
+interface AmsTrayInfo {
   trayId: number;
   trayType: string;
   traySubBrands: string;
@@ -41,7 +41,7 @@ type AmsTrayInfo = {
   trayInfoIdx: string;
   remain: number;
   isEmpty: boolean;
-};
+}
 
 const NO_AMS_TRAYS: AmsTrayInfo[] = [];
 

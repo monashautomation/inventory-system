@@ -133,7 +133,7 @@ function processApiStatus(
 
   // VT tray (external spool) — API returns an array; use first entry
   if (status.vt_tray.length > 0) {
-    processVtTray(store, status.vt_tray[0]!);
+    processVtTray(store, status.vt_tray[0]);
   }
 }
 
