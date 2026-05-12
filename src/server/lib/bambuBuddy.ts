@@ -68,6 +68,13 @@ export interface AMSUnit {
   module_type: string;
 }
 
+export interface HMSError {
+  code: string;
+  attr: number;
+  module: number;
+  severity: number;
+}
+
 export interface BambuddyPrinterStatus {
   id: number;
   name: string;
@@ -87,6 +94,7 @@ export interface BambuddyPrinterStatus {
     target_bed?: number;
     chamber?: number;
   } | null;
+  hms_errors: HMSError[];
   ams: AMSUnit[];
   ams_exists: boolean;
   vt_tray: AMSTray[];
