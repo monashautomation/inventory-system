@@ -24,7 +24,7 @@ function extractMetricNames(payload: string): Set<string> {
 
         if (trimmed.startsWith("#")) continue;
 
-        const match = trimmed.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)/);
+        const match = /^([a-zA-Z_:][a-zA-Z0-9_:]*)/.exec(trimmed);
         if (match) names.add(match[1]);
     }
 
