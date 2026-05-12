@@ -93,7 +93,11 @@ function prusaHttpGet(
         });
         res.on("end", () => {
           const status = res.statusCode ?? 0;
-          resolve({ ok: status >= 200 && status < 300, status, body });
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            body,
+          });
         });
         res.on("error", reject);
       },
@@ -264,7 +268,12 @@ async function fetchPrusaStatus(printer: {
       targetBedTemp: status.printer?.target_bed ?? null,
       chamberTemp: null,
       progress: progressValue,
-      timeRemaining: status.job?.time_remaining ?? job?.time_remaining ?? null,
+      timeRemaining:
+        status.job?.time_remaining != null
+          ? Math.ceil(status.job.time_remaining / 60)
+          : job?.time_remaining != null
+            ? Math.ceil(job.time_remaining / 60)
+            : null,
       filamentType:
         job?.file?.meta?.filament_type ?? job?.file?.meta?.material ?? null,
       fileName: job?.file?.display_name ?? job?.file?.name ?? null,
@@ -668,7 +677,11 @@ async function pollSnapshot(printer: {
       snapshotCache.set(
         printer.id,
         frame
-          ? { data: frame, contentType: "image/jpeg", fetchedAt: Date.now() }
+          ? {
+              data: frame,
+              contentType: "image/jpeg",
+              fetchedAt: Date.now(),
+            }
           : null,
       );
       return;
@@ -701,7 +714,10 @@ async function pollAllSnapshots(): Promise<void> {
     // If status cache is cold (server just started), fall back to DB
     const targets =
       printers.length > 0
-        ? printers.map((p) => ({ id: p.printerId, webcamUrl: p.webcamUrl }))
+        ? printers.map((p) => ({
+            id: p.printerId,
+            webcamUrl: p.webcamUrl,
+          }))
         : await prisma.printer
             .findMany({
               where: { webcamUrl: { not: null } },
@@ -710,7 +726,10 @@ async function pollAllSnapshots(): Promise<void> {
             .then((rows) =>
               rows
                 .filter((r) => r.webcamUrl != null)
-                .map((r) => ({ id: r.id, webcamUrl: r.webcamUrl! })),
+                .map((r) => ({
+                  id: r.id,
+                  webcamUrl: r.webcamUrl!,
+                })),
             );
 
     await Promise.allSettled(targets.map((p) => pollSnapshot(p)));

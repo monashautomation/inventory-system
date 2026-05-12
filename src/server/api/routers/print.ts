@@ -789,7 +789,11 @@ export const printRouter = router({
           targetBedTemp: status.printer?.target_bed ?? null,
           progress: progressValue,
           timeRemaining:
-            status.job?.time_remaining ?? job?.time_remaining ?? null,
+            status.job?.time_remaining != null
+              ? Math.ceil(status.job.time_remaining / 60)
+              : job?.time_remaining != null
+                ? Math.ceil(job.time_remaining / 60)
+                : null,
           timePrinting: status.job?.time_printing ?? job?.time_printing ?? null,
           fileName: job?.file?.display_name ?? job?.file?.name ?? null,
           filamentType:
@@ -1852,8 +1856,7 @@ export const printRouter = router({
             fileName =
               s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
             progress = s.progress ?? null;
-            timeRemaining =
-              s.remaining_time != null ? s.remaining_time * 60 : null;
+            timeRemaining = s.remaining_time ?? null;
           } catch {
             continue;
           }
@@ -1889,7 +1892,11 @@ export const printRouter = router({
             fileName = job?.file?.display_name ?? job?.file?.name ?? null;
             progress = status.job?.progress ?? job?.progress ?? null;
             timeRemaining =
-              status.job?.time_remaining ?? job?.time_remaining ?? null;
+              status.job?.time_remaining != null
+                ? Math.ceil(status.job.time_remaining / 60)
+                : job?.time_remaining != null
+                  ? Math.ceil(job.time_remaining / 60)
+                  : null;
           } catch {
             continue;
           }

@@ -41,13 +41,12 @@ const buildCameraUrl = (
   return base;
 };
 
-const formatDuration = (totalSeconds: number): string => {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+const formatDuration = (totalMinutes: number): string => {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
 };
 
 const statusColor = (state: string) => {
@@ -322,7 +321,8 @@ function PrinterDetail({
               Nozzle
             </span>
             <span className="font-semibold text-lg">
-              {status.nozzleTemp != null ? status.nozzleTemp.toFixed(1) : "—"}°C
+              {status.nozzleTemp != null ? status.nozzleTemp.toFixed(1) : "—"}
+              °C
             </span>
           </div>
 
@@ -331,7 +331,8 @@ function PrinterDetail({
               Bed
             </span>
             <span className="font-semibold text-lg">
-              {status.bedTemp != null ? status.bedTemp.toFixed(1) : "—"}°C
+              {status.bedTemp != null ? status.bedTemp.toFixed(1) : "—"}
+              °C
             </span>
           </div>
 
@@ -354,7 +355,9 @@ function PrinterDetail({
               <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                 <div
                   className="h-full bg-primary transition-all duration-500"
-                  style={{ width: `${status.progress ?? 0}%` }}
+                  style={{
+                    width: `${status.progress ?? 0}%`,
+                  }}
                 />
               </div>
               <span className="font-semibold text-sm">
@@ -459,7 +462,9 @@ function PrinterDetail({
                   size="sm"
                   disabled={anyCommandPending}
                   onClick={() =>
-                    pauseMutation.mutate({ printerIpAddress: status.ipAddress })
+                    pauseMutation.mutate({
+                      printerIpAddress: status.ipAddress,
+                    })
                   }
                 >
                   {pauseMutation.isPending ? (
@@ -512,7 +517,9 @@ function PrinterDetail({
                 size="sm"
                 disabled={anyCommandPending}
                 onClick={() =>
-                  cancelMutation.mutate({ printerIpAddress: status.ipAddress })
+                  cancelMutation.mutate({
+                    printerIpAddress: status.ipAddress,
+                  })
                 }
               >
                 {cancelMutation.isPending ? (
@@ -561,7 +568,9 @@ function PrinterDetail({
                       >
                         <div
                           className="h-7 w-7 rounded-full border border-border/60 shadow-sm"
-                          style={{ background: color }}
+                          style={{
+                            background: color,
+                          }}
                         />
                         <span className="text-[10px] font-semibold text-center leading-tight truncate w-full text-center">
                           {tray.tray_type ?? "—"}
