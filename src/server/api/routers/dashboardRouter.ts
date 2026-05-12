@@ -1,6 +1,6 @@
 // server/trpc/routers/dashboard.ts
 import { z } from "zod";
-import { userProcedure, router } from "@/server/trpc";
+import { userProcedure, adminProcedure, router } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 
 type ConsumptionRange = "1d" | "1w" | "1m" | "3m" | "6m" | "1yr";
@@ -222,6 +222,34 @@ export const dashboardRouter = router({
         consumed: r._sum.quantity ?? 0,
       }));
     }),
+
+  getLowStockConsumables: adminProcedure.query(async () => {
+    const consumables = await prisma.consumable.findMany({
+      where: {
+        OR: [{ available: 0 }, { minStock: { gt: 0 } }],
+      },
+      include: { item: { select: { id: true, name: true, serial: true } } },
+      orderBy: { available: "asc" },
+    });
+    return consumables
+      .filter(
+        (c) =>
+          c.available === 0 || (c.minStock > 0 && c.available <= c.minStock),
+      )
+      .slice(0, 10);
+  }),
+
+  getRequestStatusCounts: adminProcedure.query(async () => {
+    const counts = await prisma.consumableRequest.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    });
+    const result = { PENDING: 0, ORDERED: 0, RECEIVED: 0, CANCELLED: 0 };
+    for (const c of counts) {
+      result[c.status] = c._count.id;
+    }
+    return result;
+  }),
 
   getTopTags: userProcedure
     .meta({

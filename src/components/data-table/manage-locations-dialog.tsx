@@ -31,15 +31,23 @@ import type { LocationListOutput } from "@/server/schema/location.schema";
 
 type Location = LocationListOutput[number];
 
-function buildTree(locations: Location[]): Location[] {
+function buildTree(
+  locations: Location[],
+  collapsed: Set<string>,
+): (Location & { _depth: number })[] {
   const roots = locations.filter((l) => !l.parentId);
   const childrenOf = (parentId: string): Location[] =>
     locations.filter((l) => l.parentId === parentId);
 
-  const flatten = (nodes: Location[], depth: number): Location[] =>
+  const flatten = (
+    nodes: Location[],
+    depth: number,
+  ): (Location & { _depth: number })[] =>
     nodes.flatMap((node) => [
-      { ...node, _depth: depth } as Location & { _depth: number },
-      ...flatten(childrenOf(node.id), depth + 1),
+      { ...node, _depth: depth },
+      ...(collapsed.has(node.id)
+        ? []
+        : flatten(childrenOf(node.id), depth + 1)),
     ]);
 
   return flatten(roots, 0);
@@ -49,12 +57,16 @@ function LocationRow({
   location,
   depth,
   allLocations,
+  isCollapsed,
+  onToggleCollapse,
   onEdited,
   onDeleted,
 }: {
   location: Location;
   depth: number;
   allLocations: Location[];
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
   onEdited: () => void;
   onDeleted: () => void;
 }) {
@@ -217,8 +229,20 @@ function LocationRow({
         className="flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/40 group"
         style={{ paddingLeft: `${12 + depth * 20}px` }}
       >
-        {depth > 0 && (
-          <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0 -ml-1" />
+        {location.children.length > 0 ? (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="shrink-0 -ml-1 text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            <ChevronRight
+              className={`h-3 w-3 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+            />
+          </button>
+        ) : (
+          depth > 0 && (
+            <ChevronRight className="h-3 w-3 text-muted-foreground/30 shrink-0 -ml-1" />
+          )
         )}
         <span className="text-sm flex-1 truncate">{location.name}</span>
         <span className="text-xs text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -378,9 +402,18 @@ export function ManageLocationsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const listQuery = trpc.location.list.useQuery(undefined, { enabled: open });
   const locations = listQuery.data ?? [];
-  const tree = buildTree(locations);
+  const tree = buildTree(locations, collapsed);
+
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const refetch = () => void listQuery.refetch();
 
@@ -405,8 +438,10 @@ export function ManageLocationsDialog({
               <LocationRow
                 key={loc.id}
                 location={loc}
-                depth={(loc as Location & { _depth?: number })._depth ?? 0}
+                depth={loc._depth ?? 0}
                 allLocations={locations}
+                isCollapsed={collapsed.has(loc.id)}
+                onToggleCollapse={() => toggleCollapse(loc.id)}
                 onEdited={refetch}
                 onDeleted={refetch}
               />

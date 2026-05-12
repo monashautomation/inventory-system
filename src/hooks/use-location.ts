@@ -11,7 +11,10 @@ export function useLocation(parentId: string | null) {
     data: childLocations,
     isLoading: childLoading,
     error: childError,
-  } = trpc.location.getChildren.useQuery({ parentId: parentId! });
+  } = trpc.location.getChildren.useQuery(
+    { parentId: parentId! },
+    { enabled: parentId !== null },
+  );
 
   return {
     locations: parentId === null ? rootLocations : childLocations,

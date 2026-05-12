@@ -215,6 +215,8 @@ export const itemRouter = router({
         exactName: z.string().optional(),
         page: z.number().min(0).default(0),
         pageSize: z.number().min(1).max(100).default(10),
+        sortBy: z.enum(["name", "serial", "location"]).default("name"),
+        sortOrder: z.enum(["asc", "desc"]).default("asc"),
       }),
     )
     .query(async ({ input }) => {
@@ -226,6 +228,8 @@ export const itemRouter = router({
         exactName,
         page,
         pageSize,
+        sortBy,
+        sortOrder,
       } = input;
 
       // If locationId is provided, get all descendant location IDs including itself
@@ -301,6 +305,13 @@ export const itemRouter = router({
             : {}),
       };
 
+      const orderBy =
+        sortBy === "serial"
+          ? { serial: sortOrder }
+          : sortBy === "location"
+            ? { location: { name: sortOrder } }
+            : { name: sortOrder };
+
       // Fetch paginated items and total count concurrently
       const [items, totalCount] = await Promise.all([
         prisma.item.findMany({
@@ -311,6 +322,7 @@ export const itemRouter = router({
             consumable: true,
             ItemRecords: true,
           },
+          orderBy,
           skip: page * pageSize,
           take: pageSize,
         }),
@@ -334,10 +346,12 @@ export const itemRouter = router({
         filter: z.string().optional(),
         page: z.number().min(0).default(0),
         pageSize: z.number().min(1).max(100).default(10),
+        sortOrder: z.enum(["asc", "desc"]).default("asc"),
       }),
     )
     .query(async ({ input }) => {
-      const { locationId, tagGroupId, filter, page, pageSize } = input;
+      const { locationId, tagGroupId, filter, page, pageSize, sortOrder } =
+        input;
 
       let locationIds: string[] | undefined = undefined;
       if (locationId) {
@@ -400,7 +414,7 @@ export const itemRouter = router({
           where: filteredWhere,
           skip: page * pageSize,
           take: pageSize,
-          orderBy: { name: "asc" },
+          orderBy: { name: sortOrder },
         }),
         prisma.item.groupBy({
           by: ["name"],
@@ -422,7 +436,7 @@ export const itemRouter = router({
                 consumable: true,
                 ItemRecords: true,
               },
-              orderBy: { name: "asc" },
+              orderBy: { name: sortOrder },
             })
           : [];
 
