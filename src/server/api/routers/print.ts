@@ -26,6 +26,7 @@ import {
   pauseBambuddyPrint,
   resumeBambuddyPrint,
   stopBambuddyPrint,
+  stopBambuddyCameraStream,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -1027,6 +1028,13 @@ export const printRouter = router({
         });
       }
       return { success: true, message: "Print cancelled." };
+    }),
+
+  stopCameraStream: userProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      await stopBambuddyCameraStream(input.bambuddyId);
+      return { success: true };
     }),
 
   getPrinterMonitoringOptions: userProcedure
@@ -2093,6 +2101,7 @@ export const printRouter = router({
       const job = local ? jobByPrinter.get(local.id) : null;
       return {
         printerId: localId,
+        bambuddyId: bambuPrinter.id,
         printerName: bambuPrinter.name,
         printerType: "BAMBU" as const,
         ipAddress: bambuPrinter.ip_address,
@@ -2204,6 +2213,7 @@ export const printRouter = router({
         const job = jobByPrinter.get(printer.id);
         return {
           printerId: printer.id,
+          bambuddyId: null as number | null,
           printerName: printer.name,
           printerType: "PRUSA" as const,
           ipAddress: printer.ipAddress,

@@ -288,6 +288,45 @@ export async function stopBambuddyPrint(printerId: number): Promise<void> {
   await checkResponse(res, "stop print");
 }
 
+export async function getBambuddyStreamToken(): Promise<string> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/printers/camera/stream-token`, {
+    method: "POST",
+    headers: headers(apiKey),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "get stream token");
+  const data = (await res.json()) as { token?: string };
+  if (!data.token)
+    throw new Error("BambuBuddy stream-token response missing token field");
+  return data.token;
+}
+
+export function getBambuddyStreamUrl(
+  printerId: number,
+  token: string,
+  fps = 15,
+): string {
+  const { endpoint } = getConfig();
+  return `${endpoint}/api/v1/printers/${printerId}/camera/stream?token=${encodeURIComponent(token)}&fps=${fps}`;
+}
+
+export async function stopBambuddyCameraStream(
+  printerId: number,
+): Promise<void> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(
+    `${endpoint}/api/v1/printers/${printerId}/camera/stop`,
+    {
+      method: "POST",
+      headers: headers(apiKey),
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  // Ignore errors — stream may have already stopped
+  res.body?.cancel().catch(() => undefined);
+}
+
 /** Fetch status for all BambuBuddy printers in parallel. Failed individual lookups are skipped. */
 export async function listBambuddyPrinterStatuses(): Promise<
   BambuddyPrinterStatus[]

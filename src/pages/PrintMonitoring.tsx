@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video, Loader2, Wifi } from "lucide-react";
+import { Video, Loader2, Wifi, Play, Square } from "lucide-react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 
@@ -227,6 +227,18 @@ function PrinterDetail({
 
   const [cameraMode, setCameraMode] = useState<CameraMode>("snapshot");
   const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
+  const [bambuStreamActive, setBambuStreamActive] = useState(false);
+  const bambuStreamKey = useRef(0);
+
+  const stopStreamMutation = trpc.print.stopCameraStream.useMutation();
+
+  const stopBambuStream = useCallback(() => {
+    if (!bambuStreamActive) return;
+    setBambuStreamActive(false);
+    if (status.bambuddyId != null) {
+      stopStreamMutation.mutate({ bambuddyId: status.bambuddyId });
+    }
+  }, [bambuStreamActive, status.bambuddyId, stopStreamMutation]);
 
   useEffect(() => {
     if (cameraMode !== "snapshot") return;
@@ -254,7 +266,10 @@ function PrinterDetail({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          stopBambuStream();
+          onClose();
+        }
       }}
     >
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -568,7 +583,53 @@ function PrinterDetail({
           </div>
         ) : null}
 
-        {status.webcamUrl ? (
+        {status.bambuddyId != null ? (
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between gap-4">
+              <h4 className="font-semibold">Camera</h4>
+              <div className="flex items-center gap-2">
+                {bambuStreamActive ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={stopBambuStream}
+                  >
+                    <Square className="mr-2 h-3.5 w-3.5" />
+                    Stop Stream
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      bambuStreamKey.current += 1;
+                      setBambuStreamActive(true);
+                    }}
+                  >
+                    <Play className="mr-2 h-3.5 w-3.5" />
+                    Live Stream
+                  </Button>
+                )}
+              </div>
+            </div>
+            {bambuStreamActive ? (
+              <div className="overflow-hidden rounded-lg border bg-black">
+                <img
+                  key={bambuStreamKey.current}
+                  src={`/api/bambu-stream/${status.bambuddyId}`}
+                  alt={`${status.printerName} live stream`}
+                  className="h-auto w-full object-contain"
+                  onError={() => {
+                    setBambuStreamActive(false);
+                    toast.error("Stream failed. Camera may be unavailable.");
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : status.webcamUrl ? (
           <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between gap-4">
               <h4 className="font-semibold">Camera</h4>

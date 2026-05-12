@@ -449,6 +449,75 @@ async function proxyWebcam(
     return new Response(upstreamRes.body, { status: 200, headers });
 }
 
+// ─── BambuBuddy MJPEG stream proxy ───────────────────────────────────────────
+// Proxies the BambuBuddy MJPEG camera stream so clients can view it without
+// exposing the BambuBuddy endpoint or API key to the browser.
+app.get("/api/bambu-stream/:bambuddyId", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id) throw new HTTPException(401, { message: "Authentication required" });
+
+    const bambuddyId = Number(c.req.param("bambuddyId"));
+    if (!Number.isInteger(bambuddyId) || bambuddyId <= 0) {
+        throw new HTTPException(400, { message: "Invalid printer ID" });
+    }
+
+    const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
+    const apiKey = process.env.BAMBUDDY_API_KEY;
+    if (!endpoint || !apiKey) throw new HTTPException(503, { message: "BambuBuddy not configured" });
+
+    // Get a short-lived stream token
+    let token: string;
+    try {
+        const tokenRes = await fetch(`${endpoint}/api/v1/printers/camera/stream-token`, {
+            method: "POST",
+            headers: { "X-API-Key": apiKey },
+            signal: AbortSignal.timeout(10_000),
+        });
+        if (!tokenRes.ok) throw new Error(`HTTP ${tokenRes.status}`);
+        const tokenData = (await tokenRes.json()) as { token?: string };
+        if (!tokenData.token) throw new Error("Missing token in response");
+        token = tokenData.token;
+    } catch (err) {
+        throw new HTTPException(502, { message: `Failed to get stream token: ${err instanceof Error ? err.message : err}` });
+    }
+
+    const fps = Math.min(30, Math.max(1, Number(c.req.query("fps") ?? "15")));
+    const streamUrl = `${endpoint}/api/v1/printers/${bambuddyId}/camera/stream?token=${encodeURIComponent(token)}&fps=${fps}`;
+
+    const upstream = new AbortController();
+    let clientDisconnected = false;
+    c.req.raw.signal.addEventListener("abort", () => {
+        clientDisconnected = true;
+        upstream.abort();
+    });
+    const fetchTimeout = setTimeout(() => upstream.abort(), 10_000);
+
+    let upstreamRes: Response;
+    try {
+        upstreamRes = await fetch(streamUrl, { signal: upstream.signal });
+    } catch (err) {
+        clearTimeout(fetchTimeout);
+        if (err instanceof Error && err.name === "AbortError") {
+            if (clientDisconnected) return c.body(null, 499 as any);
+            throw new HTTPException(502, { message: "BambuBuddy stream timed out" });
+        }
+        throw new HTTPException(502, { message: "Failed to connect to BambuBuddy stream" });
+    }
+    clearTimeout(fetchTimeout);
+
+    if (!upstreamRes.ok || !upstreamRes.body) {
+        throw new HTTPException(502, { message: `BambuBuddy stream returned HTTP ${upstreamRes.status}` });
+    }
+
+    const resHeaders = new Headers();
+    const contentType = upstreamRes.headers.get("content-type");
+    if (contentType) resHeaders.set("Content-Type", contentType);
+    resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    resHeaders.set("X-Accel-Buffering", "no");
+
+    return new Response(upstreamRes.body, { status: 200, headers: resHeaders });
+});
+
 // MCP route
 const mcpPassword = process.env.MCP_PASSWORD;
 if (!mcpPassword) {
