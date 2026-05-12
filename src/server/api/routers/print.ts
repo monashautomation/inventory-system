@@ -17,19 +17,33 @@ import {
   buildPrintJobS3Key,
 } from "@/server/lib/s3";
 import {
-  consumeUserCancelled,
-  dispatchToBambu,
-  getBambuStatus,
-  markUserCancelled,
-  sendBambuCommand,
-} from "@/server/lib/bambu";
-import { syncBambuMqttPool } from "@/server/lib/bambuMqtt";
+  listBambuddyPrinters,
+  getBambuddyPrinterStatus,
+  resolveBambuddyPrinterId,
+  uploadArchive as uploadBambuddyArchive,
+  reprintArchive as reprintBambuddyArchive,
+  pauseBambuddyPrint,
+  resumeBambuddyPrint,
+  stopBambuddyPrint,
+} from "@/server/lib/bambuBuddy";
 import {
   getAllCachedStatuses,
   refreshPrintCamCache,
 } from "@/server/lib/printCamPoller";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
+
+type AmsTrayInfo = {
+  trayId: number;
+  trayType: string;
+  traySubBrands: string;
+  trayColor: string;
+  trayInfoIdx: string;
+  remain: number;
+  isEmpty: boolean;
+};
+
+const NO_AMS_TRAYS: AmsTrayInfo[] = [];
 
 function prusaStateMessage(state: string, progressText = ""): string {
   switch (state.toUpperCase()) {
@@ -203,13 +217,21 @@ const dispatchToPrinter = async (params: {
         storage,
         method: "PUT" as const,
       },
-      { path: `/api/v1/files/${storage}`, storage, method: "POST" as const },
+      {
+        path: `/api/v1/files/${storage}`,
+        storage,
+        method: "POST" as const,
+      },
       {
         path: `/api/files/${storage}/${encodedFilename}`,
         storage,
         method: "PUT" as const,
       },
-      { path: `/api/files/${storage}`, storage, method: "POST" as const },
+      {
+        path: `/api/files/${storage}`,
+        storage,
+        method: "POST" as const,
+      },
     ]);
 
     let resolvedStorageForStart = prusaStorageName;
@@ -229,12 +251,14 @@ const dispatchToPrinter = async (params: {
           "X-Api-Key": authToken,
         };
 
-        let body: FormData | Buffer;
+        let body: FormData | Uint8Array;
         if (candidate.method === "POST") {
           const uploadForm = new FormData();
           uploadForm.append(
             "file",
-            new Blob([fileBuffer], { type: "application/octet-stream" }),
+            new Blob([new Uint8Array(fileBuffer)], {
+              type: "application/octet-stream",
+            }),
             originalFilename,
           );
           body = uploadForm;
@@ -249,7 +273,7 @@ const dispatchToPrinter = async (params: {
             headers["Print-After-Upload"] = "1";
           }
           headers.Overwrite = "1";
-          body = fileBuffer;
+          body = new Uint8Array(fileBuffer);
         }
 
         let uploadRes: Response;
@@ -411,29 +435,14 @@ const dispatchToPrinter = async (params: {
     };
   }
 
-  // ─── Bambu dispatch (inlined, no separate bridge service) ──────────────────
+  // ─── Bambu dispatch via BambuDuddy ──────────────────────────────────────────
 
   if (mode !== "upload_and_start") {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message:
-        "Separate upload/start flow is not supported for Bambu printers in this build.",
+        "Separate upload/start flow is not supported for Bambu printers.",
     });
-  }
-
-  // Check Bambu printer readiness via cached MQTT status
-  if (serialNumber && authToken) {
-    const bambuStatus = getBambuStatus(ipAddress, authToken, serialNumber);
-    if (bambuStatus) {
-      const gcodeState = bambuStatus.gcodeState.toUpperCase();
-      const blockedBambuStates = new Set(["RUNNING", "PAUSE", "PREPARE"]);
-      if (blockedBambuStates.has(gcodeState)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Bambu printer is not ready to start a new job (state=${gcodeState}).`,
-        });
-      }
-    }
   }
 
   if (!fileBuffer) {
@@ -443,33 +452,56 @@ const dispatchToPrinter = async (params: {
     });
   }
 
-  if (!authToken) {
+  const bambuddyPrinterId = await resolveBambuddyPrinterId({
+    ipAddress,
+    serialNumber,
+  });
+
+  if (bambuddyPrinterId === null) {
     throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Missing authToken (Bambu access code).",
+      code: "NOT_FOUND",
+      message:
+        "Could not find this printer in BambuDuddy. Verify the printer is registered there.",
     });
   }
 
-  const bambuResult = await dispatchToBambu({
-    ipAddress,
-    accessCode: authToken,
-    serialNumber: serialNumber ?? "",
-    fileName: originalFilename,
-    fileBuffer,
-    useAms,
-    amsMapping,
-  });
+  // Check readiness via BambuDuddy
+  try {
+    const status = await getBambuddyPrinterStatus(bambuddyPrinterId);
+    const state = status.state?.toUpperCase() ?? "";
+    const blockedStates = new Set(["RUNNING", "PAUSE", "PREPARE", "PRINTING"]);
+    if (blockedStates.has(state)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Bambu printer is not ready to start a new job (state=${state}).`,
+      });
+    }
+  } catch (error) {
+    if (error instanceof TRPCError) throw error;
+    // Status check failure is non-fatal — proceed with dispatch
+    console.error(
+      "BambuDuddy status pre-check failed:",
+      error instanceof Error ? error.message : error,
+    );
+  }
 
-  if (!bambuResult.ok) {
+  try {
+    const archiveId = await uploadBambuddyArchive(originalFilename, fileBuffer);
+    await reprintBambuddyArchive(archiveId, bambuddyPrinterId, {
+      use_ams: useAms ?? true,
+      ams_mapping: amsMapping ?? null,
+      bed_levelling: true,
+    });
+  } catch (error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: `Bambu dispatch failed: ${bambuResult.details}`,
+      message: `Bambu dispatch via BambuDuddy failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     });
   }
 
   return {
     dispatched: true,
-    details: bambuResult.details,
+    details: "File uploaded to BambuDuddy and print dispatched.",
   };
 };
 
@@ -517,41 +549,34 @@ export const printRouter = router({
       }
 
       if (printer.type === "BAMBU") {
-        if (!printer.authToken || !printer.serialNumber) {
-          return {
-            state: "UNKNOWN",
-            stateMessage:
-              "Bambu printer requires an access code and serial number. Configure them in Printer Management.",
-            nozzleTemp: null,
-            targetNozzleTemp: null,
-            bedTemp: null,
-            targetBedTemp: null,
-            chamberTemp: null,
-            progress: null,
-            timeRemaining: null,
-            timePrinting: null,
-            fileName: null,
-            filamentType: null,
-            amsTrays: [] as {
-              trayId: number;
-              trayType: string;
-              traySubBrands: string;
-              trayColor: string;
-              trayInfoIdx: string;
-              remain: number;
-              isEmpty: boolean;
-            }[],
-          };
-        }
-
         try {
-          const bambuStatus = getBambuStatus(
-            printer.ipAddress,
-            printer.authToken,
-            printer.serialNumber,
-          );
+          const bambuddyId = await resolveBambuddyPrinterId({
+            ipAddress: printer.ipAddress,
+            serialNumber: printer.serialNumber,
+          });
 
-          if (!bambuStatus) {
+          if (bambuddyId === null) {
+            return {
+              state: "UNKNOWN",
+              stateMessage:
+                "Printer not found in BambuDuddy. Verify it is registered there.",
+              nozzleTemp: null,
+              targetNozzleTemp: null,
+              bedTemp: null,
+              targetBedTemp: null,
+              chamberTemp: null,
+              progress: null,
+              timeRemaining: null,
+              timePrinting: null,
+              fileName: null,
+              filamentType: null,
+              amsTrays: NO_AMS_TRAYS,
+            };
+          }
+
+          const s = await getBambuddyPrinterStatus(bambuddyId);
+
+          if (!s.connected) {
             return {
               state: "CONNECTING",
               stateMessage: "Connecting to Bambu printer\u2026",
@@ -565,36 +590,35 @@ export const printRouter = router({
               timePrinting: null,
               fileName: null,
               filamentType: null,
-              amsTrays: [],
+              amsTrays: NO_AMS_TRAYS,
             };
           }
 
-          const gcodeState = bambuStatus.gcodeState.toUpperCase();
+          const rawState = (s.state ?? "IDLE").toUpperCase();
           const progressText =
-            bambuStatus.progress != null
-              ? ` (${Math.round(bambuStatus.progress)}%)`
-              : "";
+            s.progress != null ? ` (${Math.round(s.progress)}%)` : "";
 
           let state: string;
           let stateMessage: string;
-          switch (gcodeState) {
+          switch (rawState) {
             case "RUNNING":
+            case "PRINTING":
               state = "PRINTING";
               stateMessage = `Printing in progress${progressText}`;
               break;
             case "PAUSE":
+            case "PAUSED":
               state = "PAUSED";
               stateMessage = "Paused";
               break;
             case "FINISH":
+            case "FINISHED":
               state = "FINISHED";
               stateMessage = "Finished";
               break;
             case "FAILED":
               state = "IDLE";
-              stateMessage = consumeUserCancelled(printer.serialNumber)
-                ? "Cancelled"
-                : "Last print failed";
+              stateMessage = "Last print failed";
               break;
             case "PREPARE":
               state = "BUSY";
@@ -602,37 +626,35 @@ export const printRouter = router({
               break;
             case "IDLE":
             default:
-              state = gcodeState === "IDLE" ? "IDLE" : gcodeState;
-              stateMessage = gcodeState === "IDLE" ? "Ready" : gcodeState;
+              state = rawState === "IDLE" ? "IDLE" : rawState;
+              stateMessage = rawState === "IDLE" ? "Ready" : rawState;
               break;
           }
 
+          const temps = s.temperatures ?? {};
           return {
             state,
             stateMessage,
-            nozzleTemp: bambuStatus.nozzleTemp,
-            targetNozzleTemp: bambuStatus.targetNozzleTemp,
-            bedTemp: bambuStatus.bedTemp,
-            targetBedTemp: bambuStatus.targetBedTemp,
-            chamberTemp: bambuStatus.chamberTemp,
-            progress: bambuStatus.progress,
-            timeRemaining:
-              bambuStatus.remainingTimeMinutes != null
-                ? bambuStatus.remainingTimeMinutes * 60
-                : null,
+            nozzleTemp: temps.nozzle ?? null,
+            targetNozzleTemp: temps.target_nozzle ?? null,
+            bedTemp: temps.bed ?? null,
+            targetBedTemp: temps.target_bed ?? null,
+            chamberTemp: temps.chamber ?? null,
+            progress: s.progress ?? null,
+            timeRemaining: s.remaining_time ?? null,
             timePrinting: null,
-            fileName: bambuStatus.fileName,
-            filamentType: bambuStatus.filamentType ?? null,
-            amsTrays: bambuStatus.amsTrays,
+            fileName: s.subtask_name ?? s.current_print ?? s.gcode_file ?? null,
+            filamentType: null,
+            amsTrays: NO_AMS_TRAYS,
           };
         } catch (error) {
           console.error(
-            "Bambu status check failed:",
+            "BambuDuddy status check failed:",
             error instanceof Error ? error.message : error,
           );
           return {
             state: "UNREACHABLE",
-            stateMessage: "Could not connect to Bambu printer.",
+            stateMessage: "Could not reach BambuDuddy.",
             nozzleTemp: null,
             targetNozzleTemp: null,
             bedTemp: null,
@@ -643,7 +665,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: null,
             filamentType: null,
-            amsTrays: [],
+            amsTrays: NO_AMS_TRAYS,
           };
         }
       }
@@ -661,7 +683,7 @@ export const printRouter = router({
           timePrinting: null,
           fileName: null,
           filamentType: null,
-          amsTrays: [],
+          amsTrays: NO_AMS_TRAYS,
           chamberTemp: null,
         };
       }
@@ -719,7 +741,7 @@ export const printRouter = router({
             timePrinting: null,
             fileName: null,
             filamentType: null,
-            amsTrays: [],
+            amsTrays: NO_AMS_TRAYS,
             chamberTemp: null,
           };
         }
@@ -749,7 +771,7 @@ export const printRouter = router({
           fileName: job?.file?.display_name ?? job?.file?.name ?? null,
           filamentType:
             job?.file?.meta?.filament_type ?? job?.file?.meta?.material ?? null,
-          amsTrays: [],
+          amsTrays: NO_AMS_TRAYS,
           chamberTemp: null,
         };
       } catch (error) {
@@ -769,7 +791,7 @@ export const printRouter = router({
           timePrinting: null,
           fileName: null,
           filamentType: null,
-          amsTrays: [],
+          amsTrays: NO_AMS_TRAYS,
           chamberTemp: null,
         };
       }
@@ -788,24 +810,22 @@ export const printRouter = router({
         });
 
       if (printer.type === "BAMBU") {
-        if (!printer.authToken || !printer.serialNumber) {
+        const bambuddyId = await resolveBambuddyPrinterId({
+          ipAddress: printer.ipAddress,
+          serialNumber: printer.serialNumber,
+        });
+        if (bambuddyId === null)
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Bambu printer missing access code or serial number.",
+            code: "NOT_FOUND",
+            message: "Printer not found in BambuDuddy.",
           });
-        }
-        const result = await sendBambuCommand(
-          printer.ipAddress,
-          printer.authToken,
-          printer.serialNumber,
-          "pause",
-        );
-        if (!result.ok)
+        await pauseBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: result.details,
+            message: `Pause failed: ${err instanceof Error ? err.message : err}`,
           });
-        return { success: true, message: result.details };
+        });
+        return { success: true, message: "Print paused." };
       }
 
       // Prusa: PUT /api/v1/job/{id}/pause
@@ -860,24 +880,22 @@ export const printRouter = router({
         });
 
       if (printer.type === "BAMBU") {
-        if (!printer.authToken || !printer.serialNumber) {
+        const bambuddyId = await resolveBambuddyPrinterId({
+          ipAddress: printer.ipAddress,
+          serialNumber: printer.serialNumber,
+        });
+        if (bambuddyId === null)
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Bambu printer missing access code or serial number.",
+            code: "NOT_FOUND",
+            message: "Printer not found in BambuDuddy.",
           });
-        }
-        const result = await sendBambuCommand(
-          printer.ipAddress,
-          printer.authToken,
-          printer.serialNumber,
-          "resume",
-        );
-        if (!result.ok)
+        await resumeBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: result.details,
+            message: `Resume failed: ${err instanceof Error ? err.message : err}`,
           });
-        return { success: true, message: result.details };
+        });
+        return { success: true, message: "Print resumed." };
       }
 
       // Prusa: PUT /api/v1/job/{id}/resume
@@ -932,28 +950,22 @@ export const printRouter = router({
         });
 
       if (printer.type === "BAMBU") {
-        if (!printer.authToken || !printer.serialNumber) {
+        const bambuddyId = await resolveBambuddyPrinterId({
+          ipAddress: printer.ipAddress,
+          serialNumber: printer.serialNumber,
+        });
+        if (bambuddyId === null)
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Bambu printer missing access code or serial number.",
+            code: "NOT_FOUND",
+            message: "Printer not found in BambuDuddy.",
           });
-        }
-        markUserCancelled(printer.serialNumber);
-        const result = await sendBambuCommand(
-          printer.ipAddress,
-          printer.authToken,
-          printer.serialNumber,
-          "stop",
-        );
-        if (!result.ok) {
-          // Undo the flag — command never reached the printer
-          consumeUserCancelled(printer.serialNumber);
+        await stopBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: result.details,
+            message: `Cancel failed: ${err instanceof Error ? err.message : err}`,
           });
-        }
-        return { success: true, message: result.details };
+        });
+        return { success: true, message: "Print cancelled." };
       }
 
       // Prusa: DELETE /api/v1/job/{id}
@@ -1073,6 +1085,28 @@ export const printRouter = router({
       };
     }),
 
+  getBambuddyPrinters: userProcedure.query(async () => {
+    const printers = await listBambuddyPrinters();
+    const statuses = await Promise.allSettled(
+      printers.map((p) => getBambuddyPrinterStatus(p.id)),
+    );
+    return printers.map((p, i) => {
+      const status = statuses[i];
+      const s = status?.status === "fulfilled" ? status.value : null;
+      return {
+        id: p.id,
+        name: p.name,
+        serialNumber: p.serial_number,
+        ipAddress: p.ip_address,
+        isActive: p.is_active,
+        connected: s?.connected ?? false,
+        state: s?.state ?? null,
+        progress: s?.progress ?? null,
+        fileName: s?.subtask_name ?? s?.current_print ?? s?.gcode_file ?? null,
+      };
+    });
+  }),
+
   createPrinter: adminProcedure
     .input(
       z.object({
@@ -1085,6 +1119,13 @@ export const printRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.type === "BAMBU") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Bambu printers are managed via BambuBuddy. Add them there, not here.",
+        });
+      }
       try {
         const result = await ctx.prisma.printer.create({
           data: {
@@ -1094,13 +1135,8 @@ export const printRouter = router({
             authToken: input.authToken,
             serialNumber: input.serialNumber,
             webcamUrl: input.webcamUrl,
-
             createdByUserId: ctx.user.id,
           },
-        });
-        // Sync MQTT pool so the new printer gets a connection immediately
-        syncBambuMqttPool().catch(() => {
-          /* empty */
         });
         return result;
       } catch (error) {
@@ -1147,10 +1183,6 @@ export const printRouter = router({
       await ctx.prisma.printer.delete({
         where: { id: input.printerId },
       });
-      // Sync MQTT pool so the removed printer's connection is closed
-      syncBambuMqttPool().catch(() => {
-        /* empty */
-      });
 
       return { deleted: true };
     }),
@@ -1181,16 +1213,19 @@ export const printRouter = router({
         });
       }
 
+      if (existing.type === "BAMBU") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Bambu printers are managed via BambuBuddy. Edit them there.",
+        });
+      }
+
       try {
-        const result = await ctx.prisma.printer.update({
+        return ctx.prisma.printer.update({
           where: { id: printerId },
           data,
         });
-        // Sync MQTT pool so changed IP/auth is picked up immediately
-        syncBambuMqttPool().catch(() => {
-          /* empty */
-        });
-        return result;
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1769,24 +1804,28 @@ export const printRouter = router({
         let timeRemaining: number | null = null;
 
         if (printer.type === "BAMBU") {
-          if (!printer.authToken || !printer.serialNumber) continue;
-          const bambuStatus = getBambuStatus(
-            printer.ipAddress,
-            printer.authToken,
-            printer.serialNumber,
-          );
-          if (!bambuStatus) continue;
-          const gcodeState = bambuStatus.gcodeState.toUpperCase();
-          if (gcodeState === "RUNNING") state = "PRINTING";
-          else if (gcodeState === "PAUSE") state = "PAUSED";
-          else if (gcodeState === "PREPARE") state = "PREPARING";
-          else continue;
-          fileName = bambuStatus.fileName;
-          progress = bambuStatus.progress;
-          timeRemaining =
-            bambuStatus.remainingTimeMinutes != null
-              ? bambuStatus.remainingTimeMinutes * 60
-              : null;
+          try {
+            const bambuddyId = await resolveBambuddyPrinterId({
+              ipAddress: printer.ipAddress,
+              serialNumber: printer.serialNumber,
+            });
+            if (!bambuddyId) continue;
+            const s = await getBambuddyPrinterStatus(bambuddyId);
+            if (!s.connected || !s.state) continue;
+            const rawState = s.state.toUpperCase();
+            if (rawState === "RUNNING" || rawState === "PRINTING")
+              state = "PRINTING";
+            else if (rawState === "PAUSE" || rawState === "PAUSED")
+              state = "PAUSED";
+            else if (rawState === "PREPARE") state = "PREPARING";
+            else continue;
+            fileName =
+              s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
+            progress = s.progress ?? null;
+            timeRemaining = s.remaining_time ?? null;
+          } catch {
+            continue;
+          }
         } else {
           // Prusa
           if (!printer.authToken) continue;
@@ -1841,7 +1880,10 @@ export const printRouter = router({
           progress,
           timeRemaining,
           startedBy: recentJob
-            ? { name: recentJob.user.name, email: recentJob.user.email }
+            ? {
+                name: recentJob.user.name,
+                email: recentJob.user.email,
+              }
             : null,
           jobStartedAt: recentJob?.createdAt ?? null,
         });
@@ -1871,7 +1913,9 @@ export const printRouter = router({
       return ctx.prisma.gcodePrintJob.findMany({
         include: {
           user: { select: { name: true, email: true } },
-          printer: { select: { name: true, type: true, ipAddress: true } },
+          printer: {
+            select: { name: true, type: true, ipAddress: true },
+          },
         },
         orderBy: { createdAt: "desc" },
         take,
@@ -1899,7 +1943,10 @@ export const printRouter = router({
     const printerIds = printers.map((p) => p.id);
     const recentJobs = printerIds.length
       ? await ctx.prisma.gcodePrintJob.findMany({
-          where: { printerId: { in: printerIds }, status: "DISPATCHED" },
+          where: {
+            printerId: { in: printerIds },
+            status: "DISPATCHED",
+          },
           orderBy: { createdAt: "desc" },
           include: { user: { select: { name: true, email: true } } },
           take: printerIds.length * 3,
@@ -1927,67 +1974,67 @@ export const printRouter = router({
         let filamentType: string | null = null;
 
         if (printer.type === "BAMBU") {
-          if (printer.authToken && printer.serialNumber) {
-            const s = getBambuStatus(
-              printer.ipAddress,
-              printer.authToken,
-              printer.serialNumber,
-            );
-            if (!s) {
-              state = "CONNECTING";
-              stateMessage = "Connecting to Bambu printer…";
+          try {
+            const bambuddyId = await resolveBambuddyPrinterId({
+              ipAddress: printer.ipAddress,
+              serialNumber: printer.serialNumber,
+            });
+            if (bambuddyId === null) {
+              stateMessage = "Printer not found in BambuDuddy.";
             } else {
-              const gcodeState = s.gcodeState.toUpperCase();
-              const pct =
-                s.progress != null ? ` (${Math.round(s.progress)}%)` : "";
-              switch (gcodeState) {
-                case "RUNNING":
-                  state = "PRINTING";
-                  stateMessage = `Printing in progress${pct}`;
-                  break;
-                case "PAUSE":
-                  state = "PAUSED";
-                  stateMessage = "Paused";
-                  break;
-                case "FINISH":
-                  state = "FINISHED";
-                  stateMessage = "Finished";
-                  break;
-                case "FAILED":
-                  state = "IDLE";
-                  stateMessage = consumeUserCancelled(printer.serialNumber)
-                    ? "Cancelled"
-                    : "Last print failed";
-                  break;
-                case "PREPARE":
-                  state = "BUSY";
-                  stateMessage = "Preparing";
-                  break;
-                case "IDLE":
-                  state = "IDLE";
-                  stateMessage = "Ready";
-                  break;
-                default:
-                  state = gcodeState;
-                  stateMessage = gcodeState;
-                  break;
+              const s = await getBambuddyPrinterStatus(bambuddyId);
+              if (!s.connected) {
+                state = "CONNECTING";
+                stateMessage = "Connecting to Bambu printer…";
+              } else {
+                const rawState = (s.state ?? "IDLE").toUpperCase();
+                const pct =
+                  s.progress != null ? ` (${Math.round(s.progress)}%)` : "";
+                switch (rawState) {
+                  case "RUNNING":
+                  case "PRINTING":
+                    state = "PRINTING";
+                    stateMessage = `Printing in progress${pct}`;
+                    break;
+                  case "PAUSE":
+                  case "PAUSED":
+                    state = "PAUSED";
+                    stateMessage = "Paused";
+                    break;
+                  case "FINISH":
+                  case "FINISHED":
+                    state = "FINISHED";
+                    stateMessage = "Finished";
+                    break;
+                  case "FAILED":
+                    state = "IDLE";
+                    stateMessage = "Last print failed";
+                    break;
+                  case "PREPARE":
+                    state = "BUSY";
+                    stateMessage = "Preparing";
+                    break;
+                  case "IDLE":
+                  default:
+                    state = rawState === "IDLE" ? "IDLE" : rawState;
+                    stateMessage = rawState === "IDLE" ? "Ready" : rawState;
+                    break;
+                }
+                const temps = s.temperatures ?? {};
+                nozzleTemp = temps.nozzle ?? null;
+                targetNozzleTemp = temps.target_nozzle ?? null;
+                bedTemp = temps.bed ?? null;
+                targetBedTemp = temps.target_bed ?? null;
+                chamberTemp = temps.chamber ?? null;
+                progress = s.progress ?? null;
+                timeRemaining = s.remaining_time ?? null;
+                fileName =
+                  s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
               }
-              nozzleTemp = s.nozzleTemp;
-              targetNozzleTemp = s.targetNozzleTemp;
-              bedTemp = s.bedTemp;
-              targetBedTemp = s.targetBedTemp;
-              chamberTemp = s.chamberTemp;
-              progress = s.progress;
-              timeRemaining =
-                s.remainingTimeMinutes != null
-                  ? s.remainingTimeMinutes * 60
-                  : null;
-              fileName = s.fileName;
-              filamentType = s.filamentType ?? null;
             }
-          } else {
-            stateMessage =
-              "Bambu printer requires an access code and serial number.";
+          } catch {
+            state = "UNREACHABLE";
+            stateMessage = "Could not reach BambuDuddy.";
           }
         } else if (printer.authToken) {
           interface PrusaStatusResponse {
@@ -2008,7 +2055,10 @@ export const printRouter = router({
             file?: {
               name?: string;
               display_name?: string;
-              meta?: { filament_type?: string; material?: string };
+              meta?: {
+                filament_type?: string;
+                material?: string;
+              };
             };
             progress?: number;
             time_remaining?: number;

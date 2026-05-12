@@ -13,13 +13,9 @@ import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
 import {
-    initBambuMqttPool,
-    shutdownBambuMqttPool,
-} from "@/server/lib/bambuMqtt";
-import { initBambuStatusListener } from "@/server/lib/bambu";
-import {
-    //initPrintCamPoller,
     getCachedSnapshot,
+    initPrintCamPoller,
+    syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
 import sharp from "sharp";
 import { uploadFile, buildItemImageKey, deleteFile, fileExists, downloadFile } from "@/server/lib/s3";
@@ -49,14 +45,12 @@ process.on("SIGTERM", () => {
     console.log(
         `[process] SIGTERM received at ${new Date().toISOString()} — shutting down gracefully`,
     );
-    shutdownBambuMqttPool();
     prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on("SIGINT", () => {
     console.log(
         `[process] SIGINT received at ${new Date().toISOString()} — shutting down gracefully`,
     );
-    shutdownBambuMqttPool();
     prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on("exit", (code) =>
@@ -549,24 +543,26 @@ if (metricsEnabled) {
     });
 }
 
-// ─── Initialize shared Bambu MQTT pool + listeners on startup ────────────────
-// The pool owns all MQTT connections; bambu.ts (status) and bambuCollector.ts
-// (metrics) register message listeners on it.
-initBambuMqttPool()
-    .then(() => {
-        // Register status listener (for getBambuStatus in print routes)
-        initBambuStatusListener();
-        // Register metrics listener (for /metrics endpoint) when metrics enabled
-        if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
-            initBambuMetricsListener();
-        }
-        // Start server-side printer status + snapshot polling for PrintCam dashboard
-        // TEMPORARILY DISABLED — suspected of saturating connections and blocking auth POST requests
-        // initPrintCamPoller();
-    })
-    .catch((err) => {
-        console.error("Failed to initialize Bambu MQTT pool:", err);
-    });
+// ─── Start BambuBuddy API polling for Prometheus metrics ─────────────────────
+if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
+    initBambuMetricsListener();
+}
+
+// ─── PrintCam poller + initial Bambu DB sync ─────────────────────────────────
+// Sync Bambu printers from BambuBuddy into local DB immediately on startup so
+// they appear in getPrinters / getLivePrinterStatuses before the first poller
+// cycle fires. Re-sync every 5 minutes to pick up newly registered printers.
+syncBambuPrinters().catch((err) =>
+    console.error("[startup] Bambu printer sync failed:", err instanceof Error ? err.message : err),
+);
+setInterval(
+    () =>
+        syncBambuPrinters().catch((err) =>
+            console.error("[sync] Bambu printer sync failed:", err instanceof Error ? err.message : err),
+        ),
+    5 * 60 * 1000,
+);
+initPrintCamPoller();
 
 export default {
     port: process.env.PORT ?? 3000,
