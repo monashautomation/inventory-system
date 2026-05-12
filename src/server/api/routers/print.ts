@@ -443,7 +443,7 @@ const dispatchToPrinter = async (params: {
     };
   }
 
-  // ─── Bambu dispatch via BambuDuddy ──────────────────────────────────────────
+  // ─── Bambu dispatch via BambBuddy ──────────────────────────────────────────
 
   if (mode !== "upload_and_start") {
     throw new TRPCError({
@@ -509,7 +509,7 @@ const dispatchToPrinter = async (params: {
 
   return {
     dispatched: true,
-    details: "File uploaded to BambuDuddy and print dispatched.",
+    details: "File uploaded to Bambuddy and print dispatched.",
   };
 };
 
@@ -567,7 +567,7 @@ export const printRouter = router({
             return {
               state: "UNKNOWN",
               stateMessage:
-                "Printer not found in BambuDuddy. Verify it is registered there.",
+                "Printer not found in Bambuddy. Verify it is registered there.",
               nozzleTemp: null,
               targetNozzleTemp: null,
               bedTemp: null,
@@ -639,12 +639,6 @@ export const printRouter = router({
               break;
           }
 
-          const hmsErrors = s.hms_errors ?? [];
-          if (hmsErrors.length > 0) {
-            state = "ATTENTION";
-            stateMessage = hmsErrorMessage(hmsErrors);
-          }
-
           const temps = s.temperatures ?? {};
           const amsTrays: AmsTrayInfo[] = (s.ams ?? []).flatMap((unit) =>
             unit.tray.map((tray) => ({
@@ -663,14 +657,13 @@ export const printRouter = router({
           return {
             state,
             stateMessage,
-            hmsErrors: describeHmsErrors(hmsErrors),
             nozzleTemp: temps.nozzle ?? null,
             targetNozzleTemp: temps.target_nozzle ?? null,
             bedTemp: temps.bed ?? null,
             targetBedTemp: temps.target_bed ?? null,
             chamberTemp: temps.chamber ?? null,
             progress: s.progress ?? null,
-            timeRemaining: s.remaining_time != null ? s.remaining_time * 60 : null,
+            timeRemaining: s.remaining_time ?? null,
             timePrinting: null,
             fileName: s.subtask_name ?? s.current_print ?? s.gcode_file ?? null,
             filamentType: null,
@@ -678,12 +671,12 @@ export const printRouter = router({
           };
         } catch (error) {
           console.error(
-            "BambuDuddy status check failed:",
+            "Bambuddy status check failed:",
             error instanceof Error ? error.message : error,
           );
           return {
             state: "UNREACHABLE",
-            stateMessage: "Could not reach BambuDuddy.",
+            stateMessage: "Could not reach Bambuddy.",
             nozzleTemp: null,
             targetNozzleTemp: null,
             bedTemp: null,
@@ -846,7 +839,7 @@ export const printRouter = router({
         if (bambuddyId === null)
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Printer not found in BambuDuddy.",
+            message: "Printer not found in Bambuddy.",
           });
         await pauseBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
@@ -916,7 +909,7 @@ export const printRouter = router({
         if (bambuddyId === null)
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Printer not found in BambuDuddy.",
+            message: "Printer not found in Bambuddy.",
           });
         await resumeBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
@@ -986,7 +979,7 @@ export const printRouter = router({
         if (bambuddyId === null)
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Printer not found in BambuDuddy.",
+            message: "Printer not found in Bambuddy.",
           });
         await stopBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
@@ -1848,12 +1841,11 @@ export const printRouter = router({
               state = "PAUSED";
             else if (rawState === "PREPARE") state = "PREPARING";
             else continue;
-            const hmsErrors = s.hms_errors ?? [];
-            if (hmsErrors.length > 0) state = "ATTENTION";
             fileName =
               s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
             progress = s.progress ?? null;
-            timeRemaining = s.remaining_time != null ? s.remaining_time * 60 : null;
+            timeRemaining =
+              s.remaining_time != null ? s.remaining_time * 60 : null;
           } catch {
             continue;
           }
@@ -1996,7 +1988,10 @@ export const printRouter = router({
 
     const recentJobs = allLocalIds.length
       ? await ctx.prisma.gcodePrintJob.findMany({
-          where: { printerId: { in: allLocalIds }, status: "DISPATCHED" },
+          where: {
+            printerId: { in: allLocalIds },
+            status: "DISPATCHED",
+          },
           orderBy: { createdAt: "desc" },
           include: { user: { select: { name: true, email: true } } },
           take: allLocalIds.length * 3,
@@ -2005,7 +2000,8 @@ export const printRouter = router({
 
     const jobByPrinter = new Map<string, (typeof recentJobs)[number]>();
     for (const job of recentJobs) {
-      if (!jobByPrinter.has(job.printerId)) jobByPrinter.set(job.printerId, job);
+      if (!jobByPrinter.has(job.printerId))
+        jobByPrinter.set(job.printerId, job);
     }
 
     // ── Bambu printers — status from bambuddy directly ──────────────────────
@@ -2071,13 +2067,6 @@ export const printRouter = router({
             stateMessage = rawState === "IDLE" ? "Ready" : rawState;
             break;
         }
-        const hmsErrors = s.hms_errors ?? [];
-        if (hmsErrors.length > 0) {
-          state = "ATTENTION";
-          stateMessage = hmsErrorMessage(hmsErrors);
-          hmsErrorList = describeHmsErrors(hmsErrors);
-        }
-
         const temps = s.temperatures ?? {};
         nozzleTemp = temps.nozzle ?? null;
         targetNozzleTemp = temps.target_nozzle ?? null;
@@ -2085,7 +2074,7 @@ export const printRouter = router({
         targetBedTemp = temps.target_bed ?? null;
         chamberTemp = temps.chamber ?? null;
         progress = s.progress ?? null;
-        timeRemaining = s.remaining_time != null ? s.remaining_time * 60 : null;
+        timeRemaining = s.remaining_time ?? null;
         fileName = s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
         layerNum = s.layer_num ?? null;
         totalLayers = s.total_layers ?? null;
@@ -2093,6 +2082,12 @@ export const printRouter = router({
         nozzles = s.nozzles ?? [];
         amsUnits = s.ams ?? [];
         amsExists = s.ams_exists ?? false;
+        const hmsErrors = s.hms_errors ?? [];
+        if (hmsErrors.length > 0) {
+          state = "ATTENTION";
+          stateMessage = hmsErrorMessage(hmsErrors);
+          hmsErrorList = describeHmsErrors(hmsErrors);
+        }
       }
 
       const job = local ? jobByPrinter.get(local.id) : null;
@@ -2192,7 +2187,8 @@ export const printRouter = router({
               bedTemp = s.printer?.temp_bed ?? null;
               targetBedTemp = s.printer?.target_bed ?? null;
               progress = s.job?.progress ?? j?.progress ?? null;
-              timeRemaining = s.job?.time_remaining ?? j?.time_remaining ?? null;
+              timeRemaining =
+                s.job?.time_remaining ?? j?.time_remaining ?? null;
               fileName = j?.file?.display_name ?? j?.file?.name ?? null;
               filamentType =
                 j?.file?.meta?.filament_type ?? j?.file?.meta?.material ?? null;
@@ -2227,10 +2223,15 @@ export const printRouter = router({
           layerNum: null as number | null,
           totalLayers: null as number | null,
           wifiSignal: null as number | null,
-          nozzles: [] as { nozzle_type: string; nozzle_diameter: string }[],
+          nozzles: [] as {
+            nozzle_type: string;
+            nozzle_diameter: string;
+          }[],
           ams: [] as AMSUnit[],
           amsExists: false,
-          startedBy: job ? { name: job.user.name, email: job.user.email } : null,
+          startedBy: job
+            ? { name: job.user.name, email: job.user.email }
+            : null,
           jobStartedAt: job?.createdAt ?? null,
           updatedAt: Date.now(),
         };
@@ -2239,7 +2240,9 @@ export const printRouter = router({
 
     return [
       ...bambuResults,
-      ...prusaResults.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])),
+      ...prusaResults.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : [],
+      ),
     ];
   }),
 });

@@ -34,7 +34,8 @@ const HMS_ERROR_MAP: Record<string, string> = {
   "07004000": "Extruder clog",
 
   // First layer inspection (module 0x0F)
-  "0f000001": "First layer inspection: abnormal — check bed leveling and adhesion",
+  "0f000001":
+    "First layer inspection: abnormal — check bed leveling and adhesion",
   "0f000002": "First layer inspection: flow anomaly",
   "0f000003": "First layer inspection: surface error",
 
@@ -68,9 +69,7 @@ export interface HmsErrorInfo {
   description: string;
 }
 
-export function describeHmsErrors(
-  errors: { code: string }[],
-): HmsErrorInfo[] {
+export function describeHmsErrors(errors: { code: string }[]): HmsErrorInfo[] {
   return errors.map((e) => ({
     code: e.code,
     description: HMS_ERROR_MAP[normalizeCode(e.code)] ?? "Unknown error",

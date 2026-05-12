@@ -267,7 +267,9 @@ function PrinterDetail({
           </DialogTitle>
         </DialogHeader>
 
-        {["ATTENTION", "UNREACHABLE", "ERROR"].includes(status.state.toUpperCase()) ? (
+        {["ATTENTION", "UNREACHABLE", "ERROR"].includes(
+          status.state.toUpperCase(),
+        ) ? (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
             {status.hmsErrors && status.hmsErrors.length > 0 ? (
               <ul className="space-y-1">
@@ -412,9 +414,7 @@ function PrinterDetail({
               </span>
               <div className="flex items-center gap-1.5">
                 <Wifi className="h-4 w-4 text-muted-foreground" />
-                <span className="font-semibold">
-                  {status.wifiSignal} dBm
-                </span>
+                <span className="font-semibold">{status.wifiSignal} dBm</span>
                 <span className="text-xs text-muted-foreground">
                   ({wifiStrengthLabel(status.wifiSignal)})
                 </span>
@@ -537,7 +537,8 @@ function PrinterDetail({
                 <div className="grid grid-cols-4 gap-2">
                   {unit.tray.map((tray) => {
                     const color = parseTrayColor(tray.tray_color);
-                    const isEmpty = color === "transparent" || tray.remain === 0;
+                    const isEmpty =
+                      color === "transparent" || tray.remain === 0;
                     return (
                       <div
                         key={tray.id}
