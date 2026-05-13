@@ -75,6 +75,8 @@ const app = new Hono();
 
 app.use(logger());
 
+app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+
 // Apply CORS middleware
 app.use(
     "/api/*",
