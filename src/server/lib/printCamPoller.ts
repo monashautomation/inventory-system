@@ -1,5 +1,9 @@
 import * as http from "node:http";
-import { getBambuStatus, consumeUserCancelled } from "@/server/lib/bambu";
+import {
+  resolveBambuddyPrinterId,
+  getBambuddyPrinterStatus,
+  listBambuddyPrinters,
+} from "@/server/lib/bambuBuddy";
 import { prisma } from "@/server/lib/prisma";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -89,7 +93,11 @@ function prusaHttpGet(
         });
         res.on("end", () => {
           const status = res.statusCode ?? 0;
-          resolve({ ok: status >= 200 && status < 300, status, body });
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            body,
+          });
         });
         res.on("error", reject);
       },
@@ -260,7 +268,12 @@ async function fetchPrusaStatus(printer: {
       targetBedTemp: status.printer?.target_bed ?? null,
       chamberTemp: null,
       progress: progressValue,
-      timeRemaining: status.job?.time_remaining ?? job?.time_remaining ?? null,
+      timeRemaining:
+        status.job?.time_remaining != null
+          ? Math.ceil(status.job.time_remaining / 60)
+          : job?.time_remaining != null
+            ? Math.ceil(job.time_remaining / 60)
+            : null,
       filamentType:
         job?.file?.meta?.filament_type ?? job?.file?.meta?.material ?? null,
       fileName: job?.file?.display_name ?? job?.file?.name ?? null,
@@ -295,7 +308,7 @@ async function fetchPrusaStatus(printer: {
   }
 }
 
-function fetchBambuStatus(printer: {
+async function fetchBambuStatus(printer: {
   id: string;
   name: string;
   type: string;
@@ -303,8 +316,42 @@ function fetchBambuStatus(printer: {
   webcamUrl: string | null;
   authToken: string | null;
   serialNumber: string | null;
-}): void {
-  if (!printer.authToken || !printer.serialNumber) {
+}): Promise<void> {
+  const unreachable = (msg: string) => {
+    statusCache.set(printer.id, {
+      printerId: printer.id,
+      printerName: printer.name,
+      printerType: printer.type,
+      ipAddress: printer.ipAddress,
+      webcamUrl: printer.webcamUrl,
+      state: "UNREACHABLE",
+      stateMessage: msg,
+      nozzleTemp: null,
+      targetNozzleTemp: null,
+      bedTemp: null,
+      targetBedTemp: null,
+      chamberTemp: null,
+      progress: null,
+      timeRemaining: null,
+      filamentType: null,
+      fileName: null,
+      ...preservedAttribution(printer.id),
+      updatedAt: Date.now(),
+    });
+  };
+
+  let bambuddyId: number | null;
+  try {
+    bambuddyId = await resolveBambuddyPrinterId({
+      ipAddress: printer.ipAddress,
+      serialNumber: printer.serialNumber,
+    });
+  } catch {
+    unreachable("Could not reach BambuBuddy.");
+    return;
+  }
+
+  if (bambuddyId === null) {
     statusCache.set(printer.id, {
       printerId: printer.id,
       printerName: printer.name,
@@ -312,7 +359,7 @@ function fetchBambuStatus(printer: {
       ipAddress: printer.ipAddress,
       webcamUrl: printer.webcamUrl,
       state: "UNKNOWN",
-      stateMessage: "Bambu printer requires an access code and serial number.",
+      stateMessage: "Printer not found in BambuBuddy.",
       nozzleTemp: null,
       targetNozzleTemp: null,
       bedTemp: null,
@@ -328,13 +375,15 @@ function fetchBambuStatus(printer: {
     return;
   }
 
-  const bambuStatus = getBambuStatus(
-    printer.ipAddress,
-    printer.authToken,
-    printer.serialNumber,
-  );
+  let s: Awaited<ReturnType<typeof getBambuddyPrinterStatus>>;
+  try {
+    s = await getBambuddyPrinterStatus(bambuddyId);
+  } catch {
+    unreachable("Could not reach BambuBuddy.");
+    return;
+  }
 
-  if (!bambuStatus) {
+  if (!s.connected) {
     statusCache.set(printer.id, {
       printerId: printer.id,
       printerName: printer.name,
@@ -358,34 +407,31 @@ function fetchBambuStatus(printer: {
     return;
   }
 
-  const gcodeState = bambuStatus.gcodeState.toUpperCase();
+  const rawState = (s.state ?? "IDLE").toUpperCase();
   const progressText =
-    bambuStatus.progress != null
-      ? ` (${Math.round(bambuStatus.progress)}%)`
-      : "";
+    s.progress != null ? ` (${Math.round(s.progress)}%)` : "";
 
   let state: string;
   let stateMessage: string;
-  switch (gcodeState) {
+  switch (rawState) {
     case "RUNNING":
+    case "PRINTING":
       state = "PRINTING";
       stateMessage = `Printing in progress${progressText}`;
       break;
     case "PAUSE":
+    case "PAUSED":
       state = "PAUSED";
       stateMessage = "Paused";
       break;
     case "FINISH":
+    case "FINISHED":
       state = "FINISHED";
       stateMessage = "Finished";
       break;
     case "FAILED":
       state = "IDLE";
-      stateMessage =
-        consumeUserCancelled(printer.serialNumber) ||
-        statusCache.get(printer.id)?.stateMessage === "Cancelled"
-          ? "Cancelled"
-          : "Last print failed";
+      stateMessage = "Last print failed";
       break;
     case "PREPARE":
       state = "BUSY";
@@ -393,11 +439,12 @@ function fetchBambuStatus(printer: {
       break;
     case "IDLE":
     default:
-      state = gcodeState === "IDLE" ? "IDLE" : gcodeState;
-      stateMessage = gcodeState === "IDLE" ? "Ready" : gcodeState;
+      state = rawState === "IDLE" ? "IDLE" : rawState;
+      stateMessage = rawState === "IDLE" ? "Ready" : rawState;
       break;
   }
 
+  const temps = s.temperatures ?? {};
   statusCache.set(printer.id, {
     printerId: printer.id,
     printerName: printer.name,
@@ -406,18 +453,15 @@ function fetchBambuStatus(printer: {
     webcamUrl: printer.webcamUrl,
     state,
     stateMessage,
-    nozzleTemp: bambuStatus.nozzleTemp,
-    targetNozzleTemp: bambuStatus.targetNozzleTemp,
-    bedTemp: bambuStatus.bedTemp,
-    targetBedTemp: bambuStatus.targetBedTemp,
-    chamberTemp: bambuStatus.chamberTemp,
-    progress: bambuStatus.progress,
-    timeRemaining:
-      bambuStatus.remainingTimeMinutes != null
-        ? bambuStatus.remainingTimeMinutes * 60
-        : null,
-    filamentType: bambuStatus.filamentType ?? null,
-    fileName: bambuStatus.fileName,
+    nozzleTemp: temps.nozzle ?? null,
+    targetNozzleTemp: temps.target_nozzle ?? null,
+    bedTemp: temps.bed ?? null,
+    targetBedTemp: temps.target_bed ?? null,
+    chamberTemp: temps.chamber ?? null,
+    progress: s.progress ?? null,
+    timeRemaining: s.remaining_time ?? null,
+    filamentType: null,
+    fileName: s.subtask_name ?? s.current_print ?? s.gcode_file ?? null,
     ...preservedAttribution(printer.id),
     updatedAt: Date.now(),
   });
@@ -433,7 +477,53 @@ let printerListFetchedAt = 0;
 let statusPollRunning = false;
 let statusPollStartedAt = 0;
 
+export async function syncBambuPrinters(): Promise<void> {
+  if (!process.env.BAMBUDDY_ENDPOINT || !process.env.BAMBUDDY_API_KEY) return;
+
+  let buddyPrinters: Awaited<ReturnType<typeof listBambuddyPrinters>>;
+  try {
+    buddyPrinters = await listBambuddyPrinters();
+  } catch {
+    return;
+  }
+  if (buddyPrinters.length === 0) return;
+
+  const systemUser =
+    (await prisma.user.findFirst({
+      where: { role: "admin" },
+      select: { id: true },
+    })) ?? (await prisma.user.findFirst({ select: { id: true } }));
+  if (!systemUser) return;
+
+  await Promise.allSettled(
+    buddyPrinters
+      .filter((p) => !!p.ip_address)
+      .map((p) =>
+        prisma.printer.upsert({
+          where: { ipAddress: p.ip_address },
+          update: {
+            name: p.name,
+            serialNumber: p.serial_number || null,
+          },
+          create: {
+            name: p.name,
+            type: "BAMBU",
+            ipAddress: p.ip_address,
+            serialNumber: p.serial_number || null,
+            createdByUserId: systemUser.id,
+          },
+        }),
+      ),
+  );
+}
+
 async function refreshPrinterListCache(): Promise<void> {
+  await syncBambuPrinters().catch((err) =>
+    console.error(
+      "[printCam] Bambu sync failed:",
+      err instanceof Error ? err.message : err,
+    ),
+  );
   const fresh = await Promise.race([
     prisma.printer.findMany(),
     new Promise<never>((_, reject) =>
@@ -468,12 +558,9 @@ async function pollAllStatuses(): Promise<void> {
     }
     if (printerListCache.length === 0) return;
 
-    // Bambu: synchronous read from MQTT cache. Prusa: HTTP with explicit timeout.
     await Promise.allSettled(
       printerListCache.map((p) =>
-        p.type === "BAMBU"
-          ? Promise.resolve(fetchBambuStatus(p))
-          : fetchPrusaStatus(p),
+        p.type === "BAMBU" ? fetchBambuStatus(p) : fetchPrusaStatus(p),
       ),
     );
   } finally {
@@ -590,7 +677,11 @@ async function pollSnapshot(printer: {
       snapshotCache.set(
         printer.id,
         frame
-          ? { data: frame, contentType: "image/jpeg", fetchedAt: Date.now() }
+          ? {
+              data: frame,
+              contentType: "image/jpeg",
+              fetchedAt: Date.now(),
+            }
           : null,
       );
       return;
@@ -623,7 +714,10 @@ async function pollAllSnapshots(): Promise<void> {
     // If status cache is cold (server just started), fall back to DB
     const targets =
       printers.length > 0
-        ? printers.map((p) => ({ id: p.printerId, webcamUrl: p.webcamUrl }))
+        ? printers.map((p) => ({
+            id: p.printerId,
+            webcamUrl: p.webcamUrl,
+          }))
         : await prisma.printer
             .findMany({
               where: { webcamUrl: { not: null } },
@@ -632,7 +726,10 @@ async function pollAllSnapshots(): Promise<void> {
             .then((rows) =>
               rows
                 .filter((r) => r.webcamUrl != null)
-                .map((r) => ({ id: r.id, webcamUrl: r.webcamUrl! })),
+                .map((r) => ({
+                  id: r.id,
+                  webcamUrl: r.webcamUrl!,
+                })),
             );
 
     await Promise.allSettled(targets.map((p) => pollSnapshot(p)));

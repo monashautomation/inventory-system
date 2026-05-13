@@ -13,19 +13,26 @@ import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
 import {
-    initBambuMqttPool,
-    shutdownBambuMqttPool,
-} from "@/server/lib/bambuMqtt";
-import { initBambuStatusListener } from "@/server/lib/bambu";
-import {
-    //initPrintCamPoller,
     getCachedSnapshot,
+    initPrintCamPoller,
+    syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
 import sharp from "sharp";
-import { uploadFile, buildItemImageKey, deleteFile, fileExists, downloadFile } from "@/server/lib/s3";
+import {
+    uploadFile,
+    buildItemImageKey,
+    deleteFile,
+    fileExists,
+    downloadFile,
+} from "@/server/lib/s3";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED_IMAGE_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+]);
 
 // Load environment variables
 config();
@@ -49,14 +56,12 @@ process.on("SIGTERM", () => {
     console.log(
         `[process] SIGTERM received at ${new Date().toISOString()} — shutting down gracefully`,
     );
-    shutdownBambuMqttPool();
     prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on("SIGINT", () => {
     console.log(
         `[process] SIGINT received at ${new Date().toISOString()} — shutting down gracefully`,
     );
-    shutdownBambuMqttPool();
     prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on("exit", (code) =>
@@ -69,6 +74,8 @@ process.on("exit", (code) =>
 const app = new Hono();
 
 app.use(logger());
+
+app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
 // Apply CORS middleware
 app.use(
@@ -90,10 +97,15 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     console.log(`[auth] ${method} ${path} started`);
     try {
         const response = await auth.handler(c.req.raw);
-        console.log(`[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`);
+        console.log(
+            `[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`,
+        );
         return response;
     } catch (error) {
-        console.error(`[auth] ${method} ${path} threw after ${Date.now() - start}ms:`, error);
+        console.error(
+            `[auth] ${method} ${path} threw after ${Date.now() - start}ms:`,
+            error,
+        );
         throw new HTTPException(500, {
             message: "Authentication processing failed",
         });
@@ -176,7 +188,9 @@ app.post("/api/items/:id/image", async (c) => {
         throw new HTTPException(400, { message: "Missing image field" });
     }
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-        throw new HTTPException(400, { message: "Unsupported image type. Use JPEG, PNG, WebP, or GIF." });
+        throw new HTTPException(400, {
+            message: "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+        });
     }
 
     const rawBytes = await file.arrayBuffer();
@@ -186,7 +200,12 @@ app.post("/api/items/:id/image", async (c) => {
 
     const webpBuffer = await sharp(Buffer.from(rawBytes))
         .rotate()
-        .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+        .resize({
+            width: 1200,
+            height: 1200,
+            fit: "inside",
+            withoutEnlargement: true,
+        })
         .webp({ quality: 80 })
         .toBuffer();
 
@@ -272,7 +291,12 @@ app.delete("/api/items/:id/image/apply-to-group", async (c) => {
     }
 
     const siblings = await prisma.item.findMany({
-        where: { name: source.name, deleted: false, id: { not: itemId }, image: { not: null } },
+        where: {
+            name: source.name,
+            deleted: false,
+            id: { not: itemId },
+            image: { not: null },
+        },
         select: { id: true, image: true },
     });
 
@@ -455,6 +479,88 @@ async function proxyWebcam(
     return new Response(upstreamRes.body, { status: 200, headers });
 }
 
+// ─── BambuBuddy MJPEG stream proxy ───────────────────────────────────────────
+// Proxies the BambuBuddy MJPEG camera stream so clients can view it without
+// exposing the BambuBuddy endpoint or API key to the browser.
+app.get("/api/bambu-stream/:bambuddyId", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
+
+    const bambuddyId = Number(c.req.param("bambuddyId"));
+    if (!Number.isInteger(bambuddyId) || bambuddyId <= 0) {
+        throw new HTTPException(400, { message: "Invalid printer ID" });
+    }
+
+    const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
+    const apiKey = process.env.BAMBUDDY_API_KEY;
+    if (!endpoint || !apiKey)
+        throw new HTTPException(503, { message: "BambuBuddy not configured" });
+
+    // Get a short-lived stream token
+    let token: string;
+    try {
+        const tokenRes = await fetch(
+            `${endpoint}/api/v1/printers/camera/stream-token`,
+            {
+                method: "POST",
+                headers: { "X-API-Key": apiKey },
+                signal: AbortSignal.timeout(10_000),
+            },
+        );
+        if (!tokenRes.ok) throw new Error(`HTTP ${tokenRes.status}`);
+        const tokenData = (await tokenRes.json()) as { token?: string };
+        if (!tokenData.token) throw new Error("Missing token in response");
+        token = tokenData.token;
+    } catch (err) {
+        throw new HTTPException(502, {
+            message: `Failed to get stream token: ${err instanceof Error ? err.message : err}`,
+        });
+    }
+
+    const fps = Math.min(30, Math.max(1, Number(c.req.query("fps") ?? "15")));
+    const streamUrl = `${endpoint}/api/v1/printers/${bambuddyId}/camera/stream?token=${encodeURIComponent(token)}&fps=${fps}`;
+
+    const upstream = new AbortController();
+    let clientDisconnected = false;
+    c.req.raw.signal.addEventListener("abort", () => {
+        clientDisconnected = true;
+        upstream.abort();
+    });
+    const fetchTimeout = setTimeout(() => upstream.abort(), 10_000);
+
+    let upstreamRes: Response;
+    try {
+        upstreamRes = await fetch(streamUrl, { signal: upstream.signal });
+    } catch (err) {
+        clearTimeout(fetchTimeout);
+        if (err instanceof Error && err.name === "AbortError") {
+            if (clientDisconnected) return c.body(null, 499 as any);
+            throw new HTTPException(502, {
+                message: "BambuBuddy stream timed out",
+            });
+        }
+        throw new HTTPException(502, {
+            message: "Failed to connect to BambuBuddy stream",
+        });
+    }
+    clearTimeout(fetchTimeout);
+
+    if (!upstreamRes.ok || !upstreamRes.body) {
+        throw new HTTPException(502, {
+            message: `BambuBuddy stream returned HTTP ${upstreamRes.status}`,
+        });
+    }
+
+    const resHeaders = new Headers();
+    const contentType = upstreamRes.headers.get("content-type");
+    if (contentType) resHeaders.set("Content-Type", contentType);
+    resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    resHeaders.set("X-Accel-Buffering", "no");
+
+    return new Response(upstreamRes.body, { status: 200, headers: resHeaders });
+});
+
 // MCP route
 const mcpPassword = process.env.MCP_PASSWORD;
 if (!mcpPassword) {
@@ -549,24 +655,34 @@ if (metricsEnabled) {
     });
 }
 
-// ─── Initialize shared Bambu MQTT pool + listeners on startup ────────────────
-// The pool owns all MQTT connections; bambu.ts (status) and bambuCollector.ts
-// (metrics) register message listeners on it.
-initBambuMqttPool()
-    .then(() => {
-        // Register status listener (for getBambuStatus in print routes)
-        initBambuStatusListener();
-        // Register metrics listener (for /metrics endpoint) when metrics enabled
-        if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
-            initBambuMetricsListener();
-        }
-        // Start server-side printer status + snapshot polling for PrintCam dashboard
-        // TEMPORARILY DISABLED — suspected of saturating connections and blocking auth POST requests
-        // initPrintCamPoller();
-    })
-    .catch((err) => {
-        console.error("Failed to initialize Bambu MQTT pool:", err);
-    });
+// ─── Start BambuBuddy API polling for Prometheus metrics ─────────────────────
+// Always start the legacy poller when enabled — we may prefer the Prometheus
+// endpoint but fall back to the legacy cache if the passthrough fails.
+if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
+    initBambuMetricsListener();
+}
+
+// ─── PrintCam poller + initial Bambu DB sync ─────────────────────────────────
+// Sync Bambu printers from BambuBuddy into local DB immediately on startup so
+// they appear in getPrinters / getLivePrinterStatuses before the first poller
+// cycle fires. Re-sync every 5 minutes to pick up newly registered printers.
+syncBambuPrinters().catch((err) =>
+    console.error(
+        "[startup] Bambu printer sync failed:",
+        err instanceof Error ? err.message : err,
+    ),
+);
+setInterval(
+    () =>
+        syncBambuPrinters().catch((err) =>
+            console.error(
+                "[sync] Bambu printer sync failed:",
+                err instanceof Error ? err.message : err,
+            ),
+        ),
+    5 * 60 * 1000,
+);
+initPrintCamPoller();
 
 export default {
     port: process.env.PORT ?? 3000,
