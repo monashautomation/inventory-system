@@ -13,8 +13,6 @@ import "./index.css";
 import SuperJSON from "superjson";
 import { getBaseUrl } from "./lib/utils";
 import { loadToken } from "./lib/kiosk-crypto";
-import type { AppRouter } from "@/server/api/routers/_app";
-
 function redirectToLogin() {
   if (!window.location.pathname.startsWith("/login")) {
     window.location.href = "/login";
@@ -23,8 +21,8 @@ function redirectToLogin() {
 
 function isUnauthorized(error: unknown): boolean {
   return (
-    error instanceof TRPCClientError<AppRouter> &&
-    error.data?.code === "UNAUTHORIZED"
+    error instanceof TRPCClientError &&
+    (error.data as { code?: string } | undefined)?.code === "UNAUTHORIZED"
   );
 }
 
