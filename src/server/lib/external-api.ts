@@ -39,15 +39,29 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
     };
   }
 
-  const res = await fetch(
-    `${STUDENT_API_BASE}/members/${encodeURIComponent(studentId)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${STUDENT_API_KEY}`,
-        "Content-Type": "application/json",
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `${STUDENT_API_BASE}/members/${encodeURIComponent(studentId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${STUDENT_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
       },
-    },
-  );
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Student API timeout after 30s");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     if (res.status === 404) {
@@ -57,6 +71,10 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
       err.code = "MEMBER_NOT_FOUND";
       throw err;
     }
+    const body = await res.text().catch(() => "<unreadable>");
+    console.error(
+      `[Student API] ${res.status} ${res.statusText} — studentId=${studentId} body=${body}`,
+    );
     throw new Error(`Student API error: ${res.status} ${res.statusText}`);
   }
 

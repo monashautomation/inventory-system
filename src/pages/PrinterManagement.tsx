@@ -72,7 +72,6 @@ function PrinterFormFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="PRUSA">Prusa</SelectItem>
-            <SelectItem value="BAMBU">Bambu</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -88,23 +87,11 @@ function PrinterFormFields({
       <div className="space-y-2">
         <Label>Auth Token / API Key</Label>
         <Input
-          placeholder={
-            form.type === "PRUSA" ? "PrusaLink API key" : "Bambu access code"
-          }
+          placeholder="PrusaLink API key"
           value={form.authToken}
           onChange={(e) => onChange({ authToken: e.target.value })}
         />
       </div>
-      {form.type === "BAMBU" ? (
-        <div className="space-y-2">
-          <Label>Serial Number</Label>
-          <Input
-            placeholder="Bambu serial number"
-            value={form.serialNumber}
-            onChange={(e) => onChange({ serialNumber: e.target.value })}
-          />
-        </div>
-      ) : null}
       <div className="space-y-2">
         <Label>Webcam URL</Label>
         <Input
@@ -284,7 +271,12 @@ export default function PrinterManagement() {
   const isAdmin = session?.user.role === "admin";
 
   const printersQuery = trpc.print.getPrinters.useQuery();
-  const printers = printersQuery.data ?? [];
+  const prusaPrinters = (printersQuery.data ?? []).filter(
+    (p) => p.type === "PRUSA",
+  );
+
+  const bambuQuery = trpc.print.getBambuddyPrinters.useQuery();
+  const bambuPrinters = bambuQuery.data ?? [];
 
   const deleteMutation = trpc.print.deletePrinter.useMutation({
     onSuccess: () => {
@@ -306,96 +298,178 @@ export default function PrinterManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Printer Management</h1>
-          <p className="text-muted-foreground">
-            Add, edit, or remove printers from the system.
-          </p>
+    <div className="p-6 space-y-8">
+      {/* ── Prusa printers ── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Printer Management</h1>
+            <p className="text-muted-foreground">
+              Manage Prusa printers. Bambu printers are read-only — configure
+              them in BambuBuddy.
+            </p>
+          </div>
+          <AddPrinterDialog onSuccess={() => void printersQuery.refetch()} />
         </div>
-        <AddPrinterDialog onSuccess={() => void printersQuery.refetch()} />
+
+        {prusaPrinters.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No Prusa printers configured yet. Click &quot;Add Printer&quot; to
+              get started.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {prusaPrinters.map((printer) => (
+              <Card key={printer.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{printer.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Prusa &middot; {printer.ipAddress}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">Auth Token</span>
+                    <span className="truncate">
+                      {printer.authToken ? "••••••••" : "—"}
+                    </span>
+                    <span className="text-muted-foreground">Webcam</span>
+                    <span className="truncate">
+                      {printer.webcamUrl ? (
+                        <a
+                          href={printer.webcamUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-500 hover:underline"
+                        >
+                          Open
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 pt-2 border-t">
+                    <EditPrinterDialog
+                      printer={printer}
+                      onSuccess={() => void printersQuery.refetch()}
+                    />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete printer "${printer.name}"? This cannot be undone.`,
+                          )
+                        ) {
+                          deleteMutation.mutate({ printerId: printer.id });
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-1 h-4 w-4" />
+                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
-      {printers.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No printers configured yet. Click &quot;Add Printer&quot; to get
-            started.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {printers.map((printer) => (
-            <Card key={printer.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{printer.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {printer.type} &middot; {printer.ipAddress}
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                  <span className="text-muted-foreground">Auth Token</span>
-                  <span className="truncate">
-                    {printer.authToken ? "••••••••" : "—"}
-                  </span>
-                  {printer.type === "BAMBU" ? (
-                    <>
-                      <span className="text-muted-foreground">Serial</span>
-                      <span className="truncate">
-                        {printer.serialNumber ?? "—"}
-                      </span>
-                    </>
-                  ) : null}
-                  <span className="text-muted-foreground">Webcam</span>
-                  <span className="truncate">
-                    {printer.webcamUrl ? (
-                      <a
-                        href={printer.webcamUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-500 hover:underline"
-                      >
-                        Open
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </span>
-                </div>
-                <div className="flex gap-2 pt-2 border-t">
-                  <EditPrinterDialog
-                    printer={printer}
-                    onSuccess={() => void printersQuery.refetch()}
-                  />
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete printer "${printer.name}"? This cannot be undone.`,
-                        )
-                      ) {
-                        deleteMutation.mutate({ printerId: printer.id });
-                      }
-                    }}
-                  >
-                    <Trash2 className="mr-1 h-4 w-4" />
-                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      {/* ── Bambu printers (read-only, from BambuBuddy API) ── */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Bambu Printers</h2>
+          <p className="text-sm text-muted-foreground">
+            Managed by BambuBuddy. Edit printer configuration there.
+          </p>
         </div>
-      )}
+
+        {bambuQuery.isLoading ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Loading…
+            </CardContent>
+          </Card>
+        ) : bambuQuery.isError ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Could not reach BambuBuddy. Check <code>BAMBUDDY_ENDPOINT</code>{" "}
+              and <code>BAMBUDDY_API_KEY</code>.
+            </CardContent>
+          </Card>
+        ) : bambuPrinters.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No printers found in BambuBuddy.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {bambuPrinters.map((printer) => (
+              <Card key={printer.id} className="opacity-90">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{printer.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Bambu &middot; {printer.ipAddress}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        printer.connected
+                          ? "bg-green-100 text-green-700"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {printer.connected ? "Online" : "Offline"}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">Serial</span>
+                    <span className="truncate font-mono text-xs">
+                      {printer.serialNumber || "—"}
+                    </span>
+                    <span className="text-muted-foreground">State</span>
+                    <span className="truncate capitalize">
+                      {printer.state ?? "—"}
+                    </span>
+                    {printer.progress != null && (
+                      <>
+                        <span className="text-muted-foreground">Progress</span>
+                        <span>{Math.round(printer.progress)}%</span>
+                      </>
+                    )}
+                    {printer.fileName && (
+                      <>
+                        <span className="text-muted-foreground">File</span>
+                        <span className="truncate text-xs">
+                          {printer.fileName}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1 border-t">
+                    Read-only — configure in BambuBuddy
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

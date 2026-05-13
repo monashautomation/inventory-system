@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video, Loader2 } from "lucide-react";
-import type { CachedPrinterStatus } from "@/server/lib/printCamPoller";
+import { Video, Loader2, Wifi, Play, Square } from "lucide-react";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/api/routers/_app";
+
+type PrinterStatus =
+  inferRouterOutputs<AppRouter>["print"]["getLivePrinterStatuses"][number];
 
 type CameraMode = "stream" | "snapshot";
 
@@ -37,13 +41,12 @@ const buildCameraUrl = (
   return base;
 };
 
-const formatDuration = (totalSeconds: number): string => {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+const formatDuration = (totalMinutes: number): string => {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
 };
 
 const statusColor = (state: string) => {
@@ -70,7 +73,7 @@ function PrinterCard({
   status,
   onClick,
 }: {
-  status: CachedPrinterStatus;
+  status: PrinterStatus;
   onClick: () => void;
 }) {
   return (
@@ -146,6 +149,11 @@ function PrinterCard({
               style={{ width: `${status.progress ?? 0}%` }}
             />
           </div>
+          {status.layerNum != null && status.totalLayers != null ? (
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              Layer {status.layerNum} / {status.totalLayers}
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-auto space-y-1.5">
@@ -179,13 +187,26 @@ function PrinterCard({
   );
 }
 
+// Bambu sends tray_color as RRGGBBAA (8 hex chars) or RRGGBB (6 hex chars)
+const parseTrayColor = (hex: string | null): string => {
+  if (!hex || hex.length < 6) return "transparent";
+  return `#${hex.slice(0, 6)}`;
+};
+
+const wifiStrengthLabel = (dbm: number): string => {
+  if (dbm >= -50) return "Excellent";
+  if (dbm >= -65) return "Good";
+  if (dbm >= -75) return "Fair";
+  return "Weak";
+};
+
 // ─── Printer detail dialog ────────────────────────────────────────────────────
 
 function PrinterDetail({
   status,
   onClose,
 }: {
-  status: CachedPrinterStatus;
+  status: PrinterStatus;
   onClose: () => void;
 }) {
   const pauseMutation = trpc.print.pausePrint.useMutation({
@@ -205,6 +226,18 @@ function PrinterDetail({
 
   const [cameraMode, setCameraMode] = useState<CameraMode>("snapshot");
   const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
+  const [bambuStreamActive, setBambuStreamActive] = useState(false);
+  const bambuStreamKey = useRef(0);
+
+  const stopStreamMutation = trpc.print.stopCameraStream.useMutation();
+
+  const stopBambuStream = useCallback(() => {
+    if (!bambuStreamActive) return;
+    setBambuStreamActive(false);
+    if (status.bambuddyId != null) {
+      stopStreamMutation.mutate({ bambuddyId: status.bambuddyId });
+    }
+  }, [bambuStreamActive, status.bambuddyId, stopStreamMutation]);
 
   useEffect(() => {
     if (cameraMode !== "snapshot") return;
@@ -232,7 +265,10 @@ function PrinterDetail({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          stopBambuStream();
+          onClose();
+        }
       }}
     >
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -244,6 +280,28 @@ function PrinterDetail({
             </span>
           </DialogTitle>
         </DialogHeader>
+
+        {["ATTENTION", "UNREACHABLE", "ERROR"].includes(
+          status.state.toUpperCase(),
+        ) ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+            {status.hmsErrors && status.hmsErrors.length > 0 ? (
+              <ul className="space-y-1">
+                {status.hmsErrors.map((e, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="font-semibold shrink-0">{e.code}</span>
+                    <span>{e.description}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex items-start gap-2">
+                <span className="font-semibold shrink-0">Error:</span>
+                <span>{status.stateMessage}</span>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
@@ -263,11 +321,7 @@ function PrinterDetail({
               Nozzle
             </span>
             <span className="font-semibold text-lg">
-              {status.nozzleTemp != null ? status.nozzleTemp.toFixed(1) : "—"}°C
-              {" / "}
-              {status.targetNozzleTemp != null
-                ? status.targetNozzleTemp.toFixed(1)
-                : "—"}
+              {status.nozzleTemp != null ? status.nozzleTemp.toFixed(1) : "—"}
               °C
             </span>
           </div>
@@ -277,11 +331,7 @@ function PrinterDetail({
               Bed
             </span>
             <span className="font-semibold text-lg">
-              {status.bedTemp != null ? status.bedTemp.toFixed(1) : "—"}°C
-              {" / "}
-              {status.targetBedTemp != null
-                ? status.targetBedTemp.toFixed(1)
-                : "—"}
+              {status.bedTemp != null ? status.bedTemp.toFixed(1) : "—"}
               °C
             </span>
           </div>
@@ -305,7 +355,9 @@ function PrinterDetail({
               <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                 <div
                   className="h-full bg-primary transition-all duration-500"
-                  style={{ width: `${status.progress ?? 0}%` }}
+                  style={{
+                    width: `${status.progress ?? 0}%`,
+                  }}
                 />
               </div>
               <span className="font-semibold text-sm">
@@ -346,6 +398,48 @@ function PrinterDetail({
             <span className="font-semibold">{status.filamentType ?? "—"}</span>
           </div>
 
+          {status.layerNum != null && status.totalLayers != null ? (
+            <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Layers
+              </span>
+              <span className="font-semibold text-lg tabular-nums">
+                {status.layerNum}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  / {status.totalLayers}
+                </span>
+              </span>
+            </div>
+          ) : null}
+
+          {status.nozzles.length > 0 ? (
+            <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Nozzle
+              </span>
+              <span className="font-semibold">
+                {status.nozzles
+                  .map((n) => `${n.nozzle_diameter}mm ${n.nozzle_type}`)
+                  .join(", ")}
+              </span>
+            </div>
+          ) : null}
+
+          {status.wifiSignal != null ? (
+            <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                WiFi
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Wifi className="h-4 w-4 text-muted-foreground" />
+                <span className="font-semibold">{status.wifiSignal} dBm</span>
+                <span className="text-xs text-muted-foreground">
+                  ({wifiStrengthLabel(status.wifiSignal)})
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-1 rounded-lg border p-3 bg-card">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Printed By
@@ -368,7 +462,9 @@ function PrinterDetail({
                   size="sm"
                   disabled={anyCommandPending}
                   onClick={() =>
-                    pauseMutation.mutate({ printerIpAddress: status.ipAddress })
+                    pauseMutation.mutate({
+                      printerIpAddress: status.ipAddress,
+                    })
                   }
                 >
                   {pauseMutation.isPending ? (
@@ -421,7 +517,9 @@ function PrinterDetail({
                 size="sm"
                 disabled={anyCommandPending}
                 onClick={() =>
-                  cancelMutation.mutate({ printerIpAddress: status.ipAddress })
+                  cancelMutation.mutate({
+                    printerIpAddress: status.ipAddress,
+                  })
                 }
               >
                 {cancelMutation.isPending ? (
@@ -442,7 +540,105 @@ function PrinterDetail({
           </div>
         ) : null}
 
-        {status.webcamUrl ? (
+        {status.amsExists && status.ams.length > 0 ? (
+          <div className="space-y-3 border-t pt-4">
+            <h4 className="font-semibold">AMS</h4>
+            {status.ams.map((unit) => (
+              <div key={unit.id} className="space-y-2">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Unit {unit.id + 1}
+                  </span>
+                  {unit.humidity != null ? (
+                    <span>Humidity: {unit.humidity}%</span>
+                  ) : null}
+                  {unit.temp != null ? (
+                    <span>Temp: {unit.temp.toFixed(1)}°C</span>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {unit.tray.map((tray) => {
+                    const color = parseTrayColor(tray.tray_color);
+                    const isEmpty =
+                      color === "transparent" || tray.remain === 0;
+                    return (
+                      <div
+                        key={tray.id}
+                        className={`flex flex-col items-center gap-1 rounded-lg border p-2 ${isEmpty ? "opacity-40" : ""}`}
+                      >
+                        <div
+                          className="h-7 w-7 rounded-full border border-border/60 shadow-sm"
+                          style={{
+                            background: color,
+                          }}
+                        />
+                        <span className="text-[10px] font-semibold text-center leading-tight truncate w-full text-center">
+                          {tray.tray_type ?? "—"}
+                        </span>
+                        {tray.tray_sub_brands ? (
+                          <span className="text-[9px] text-muted-foreground truncate w-full text-center leading-tight">
+                            {tray.tray_sub_brands}
+                          </span>
+                        ) : null}
+                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                          {isEmpty ? "Empty" : `${tray.remain}%`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {status.bambuddyId != null ? (
+          <div className="space-y-3 border-t pt-4">
+            <div className="flex items-center justify-between gap-4">
+              <h4 className="font-semibold">Camera</h4>
+              <div className="flex items-center gap-2">
+                {bambuStreamActive ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={stopBambuStream}
+                  >
+                    <Square className="mr-2 h-3.5 w-3.5" />
+                    Stop Stream
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      bambuStreamKey.current += 1;
+                      setBambuStreamActive(true);
+                    }}
+                  >
+                    <Play className="mr-2 h-3.5 w-3.5" />
+                    Live Stream
+                  </Button>
+                )}
+              </div>
+            </div>
+            {bambuStreamActive ? (
+              <div className="overflow-hidden rounded-lg border bg-black">
+                <img
+                  key={bambuStreamKey.current}
+                  src={`/api/bambu-stream/${status.bambuddyId}`}
+                  alt={`${status.printerName} live stream`}
+                  className="h-auto w-full object-contain"
+                  onError={() => {
+                    setBambuStreamActive(false);
+                    toast.error("Stream failed. Camera may be unavailable.");
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : status.webcamUrl ? (
           <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between gap-4">
               <h4 className="font-semibold">Camera</h4>
