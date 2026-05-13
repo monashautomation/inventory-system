@@ -30,31 +30,13 @@ export interface CachedPrinterStatus {
   updatedAt: number;
 }
 
-export interface CachedSnapshot {
-  data: Buffer;
-  contentType: string;
-  fetchedAt: number;
-}
-
 // ─── In-memory caches ────────────────────────────────────────────────────────
 
 // keyed by printerId
 const statusCache = new Map<string, CachedPrinterStatus>();
-// keyed by printerId; null = live MJPEG (can't cache); undefined (missing) = not yet polled
-const snapshotCache = new Map<string, CachedSnapshot | null>();
 
 export function getAllCachedStatuses(): CachedPrinterStatus[] {
   return Array.from(statusCache.values());
-}
-
-export function getCachedSnapshot(
-  printerId: string,
-): CachedSnapshot | null | undefined {
-  return snapshotCache.get(printerId);
-}
-
-export function getCachedWebcamUrl(printerId: string): string | null {
-  return statusCache.get(printerId)?.webcamUrl ?? null;
 }
 
 // ─── Prusa HTTP helper (no connection pooling) ────────────────────────────────
@@ -608,136 +590,6 @@ async function pollAttribution(): Promise<void> {
   }
 }
 
-// ─── Snapshot polling ─────────────────────────────────────────────────────────
-
-const SNAPSHOT_TIMEOUT_MS = 8_000;
-
-// Extract the first JPEG frame from an MJPEG multipart stream.
-// Scans up to MAX_SCAN bytes for FF D8 FF (SOI) … FF D9 (EOI) markers.
-// The AbortController from fetchWithTimeout ensures the read terminates.
-async function extractMjpegFrame(
-  body: ReadableStream<Uint8Array>,
-): Promise<Buffer | null> {
-  const MAX_SCAN = 512 * 1024;
-  const reader = body.getReader();
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (totalBytes < MAX_SCAN) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = Buffer.from(value);
-      chunks.push(chunk);
-      totalBytes += chunk.length;
-
-      const combined = Buffer.concat(chunks);
-      const soi = combined.indexOf(Buffer.from([0xff, 0xd8, 0xff]));
-      if (soi < 0) continue;
-      const eoi = combined.indexOf(Buffer.from([0xff, 0xd9]), soi + 2);
-      if (eoi < 0) continue;
-      return combined.subarray(soi, eoi + 2);
-    }
-    return null;
-  } finally {
-    await reader.cancel().catch(() => {
-      /* empty */
-    });
-  }
-}
-
-async function pollSnapshot(printer: {
-  id: string;
-  webcamUrl: string;
-}): Promise<void> {
-  let url = printer.webcamUrl;
-  if (url.includes("action=stream")) {
-    url = url.replace("action=stream", "action=snapshot");
-  }
-  url += (url.includes("?") ? "&" : "?") + `_t=${Date.now()}`;
-
-  // Single AbortController covers the entire operation — headers AND body reads.
-  // fetchWithTimeout clears its timer after headers arrive, leaving MJPEG body
-  // reads and arrayBuffer() uncovered. A hanging body read would keep
-  // snapshotPollRunning=true indefinitely, silently blocking all future polls.
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), SNAPSHOT_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, {
-      signal: ac.signal,
-      headers: { Accept: "*/*", "Cache-Control": "no-cache" },
-    });
-    if (!res.ok || !res.body) return;
-
-    const contentType = res.headers.get("content-type") ?? "";
-
-    if (contentType.includes("multipart")) {
-      const frame = await extractMjpegFrame(res.body);
-      snapshotCache.set(
-        printer.id,
-        frame
-          ? {
-              data: frame,
-              contentType: "image/jpeg",
-              fetchedAt: Date.now(),
-            }
-          : null,
-      );
-      return;
-    }
-
-    const data = Buffer.from(await res.arrayBuffer());
-    snapshotCache.set(printer.id, {
-      data,
-      contentType: contentType || "image/jpeg",
-      fetchedAt: Date.now(),
-    });
-  } catch {
-    // Leave existing cache entry intact on transient failure
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Read webcam URLs from the status cache instead of hitting Prisma again
-let snapshotPollRunning = false;
-
-async function pollAllSnapshots(): Promise<void> {
-  if (snapshotPollRunning) return;
-  snapshotPollRunning = true;
-  try {
-    const printers = getAllCachedStatuses().filter(
-      (s) => s.webcamUrl != null,
-    ) as (CachedPrinterStatus & { webcamUrl: string })[];
-
-    // If status cache is cold (server just started), fall back to DB
-    const targets =
-      printers.length > 0
-        ? printers.map((p) => ({
-            id: p.printerId,
-            webcamUrl: p.webcamUrl,
-          }))
-        : await prisma.printer
-            .findMany({
-              where: { webcamUrl: { not: null } },
-              select: { id: true, webcamUrl: true },
-            })
-            .then((rows) =>
-              rows
-                .filter((r) => r.webcamUrl != null)
-                .map((r) => ({
-                  id: r.id,
-                  webcamUrl: r.webcamUrl!,
-                })),
-            );
-
-    await Promise.allSettled(targets.map((p) => pollSnapshot(p)));
-  } finally {
-    snapshotPollRunning = false;
-  }
-}
-
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 let started = false;
@@ -747,18 +599,10 @@ export function initPrintCamPoller(): void {
   started = true;
 
   void pollAllStatuses();
-  void pollAllSnapshots();
-
   setInterval(() => void pollAllStatuses(), 10_000);
-  setInterval(() => void pollAllSnapshots(), 5_000);
-  // Attribution runs less frequently; isolated so DB hangs can't block status
   setInterval(() => void pollAttribution(), 30_000);
 }
 
 export async function refreshPrintCamCache(): Promise<void> {
-  await Promise.allSettled([
-    pollAllStatuses(),
-    pollAllSnapshots(),
-    pollAttribution(),
-  ]);
+  await Promise.allSettled([pollAllStatuses(), pollAttribution()]);
 }

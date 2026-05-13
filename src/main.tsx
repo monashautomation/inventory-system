@@ -1,5 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
+import { TRPCClientError } from "@trpc/client";
 import { trpc } from "./client/trpc";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -8,12 +13,40 @@ import "./index.css";
 import SuperJSON from "superjson";
 import { getBaseUrl } from "./lib/utils";
 import { loadToken } from "./lib/kiosk-crypto";
+import type { AppRouter } from "@/server/api/routers/_app";
+
+function redirectToLogin() {
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return (
+    error instanceof TRPCClientError<AppRouter> &&
+    error.data?.code === "UNAUTHORIZED"
+  );
+}
 
 function makeQueryClient() {
   return new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (isUnauthorized(error)) redirectToLogin();
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: 60 * 1000,
+        retry: (failureCount, error) => {
+          if (isUnauthorized(error)) return false;
+          return failureCount < 3;
+        },
+      },
+      mutations: {
+        onError: (error) => {
+          if (isUnauthorized(error)) redirectToLogin();
+        },
       },
     },
   });

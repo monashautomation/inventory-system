@@ -13,7 +13,6 @@ import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
 import {
-    getCachedSnapshot,
     initPrintCamPoller,
     syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
@@ -370,27 +369,6 @@ app.get("/api/webcam/:printerId", async (c) => {
 
     const printerId = c.req.param("printerId");
     const mode = c.req.query("mode");
-
-    // cached_snapshot: serve ONLY from in-memory snapshot cache.
-    // Never fall through to a live upstream fetch — that would hold a connection
-    // open for up to 8 s per printer and starve tRPC requests under Vite's proxy.
-    // null  → MJPEG stream (can't snapshot server-side; client shows placeholder)
-    // undefined → poller hasn't run yet; client will retry on next tick
-    if (mode === "cached_snapshot") {
-        const cached = getCachedSnapshot(printerId);
-        if (cached) {
-            const headers = new Headers({
-                "Content-Type": cached.contentType,
-                "Content-Length": String(cached.data.length),
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "X-Cache": "HIT",
-            });
-            return new Response(cached.data, { status: 200, headers });
-        }
-        // Cache miss or MJPEG — return 204 so the browser frees the connection
-        // immediately.  The client img onError handler will show a placeholder.
-        return new Response(null, { status: 204 });
-    }
 
     let webcamUrl: string;
     let printerLabel: string;
