@@ -127,7 +127,7 @@ export const kioskRouter = router({
           duration: z.enum(AFTER_HOURS_DURATIONS),
           reason: z.enum(AFTER_HOURS_REASONS),
           customReason: z.string().min(1).max(200).optional(),
-          supervisorId: z.string().uuid().optional(),
+          supervisorId: z.string().min(1).optional(),
         })
         .refine(
           (data) =>
@@ -204,8 +204,8 @@ export const kioskRouter = router({
       const endTimeText = timeFormatter.format(endTime).toLowerCase();
 
       const text = [
-        "@Keenan",
-        `Who: @${escapeDiscordMarkdown(studentInfo.discordId)}`,
+        "<@Keenan>",
+        `Who: <@${studentInfo.discordId}>`,
         `Day: ${date}`,
         `Time: ${startTimeText} - ${endTimeText}`,
         `Activity: ${input.reason === "Other" ? escapeDiscordMarkdown(input.customReason!) : input.reason}`,
