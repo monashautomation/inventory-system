@@ -111,16 +111,16 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
 export async function postDiscordMessage(
   payload: DiscordMessagePayload,
 ): Promise<void> {
-  const DISCORD_API_BASE = process.env.DISCORD_API_BASE ?? "";
+  const STUDENT_API_BASE = process.env.STUDENT_API_BASE ?? "";
   const STUDENT_API_KEY = process.env.STUDENT_API_KEY ?? "";
 
-  if (!DISCORD_API_BASE) {
+  if (!STUDENT_API_BASE) {
     if (
       process.env.NODE_ENV !== "development" &&
       process.env.NODE_ENV !== "test"
     ) {
       throw new Error(
-        "DISCORD_API_BASE is required in non-development environments",
+        "STUDENT_API_BASE is required in non-development environments",
       );
     }
     console.log("[Discord stub] channel:", payload.channel);
@@ -128,13 +128,13 @@ export async function postDiscordMessage(
     return;
   }
 
-  const res = await fetch(`${DISCORD_API_BASE}/message`, {
+  const res = await fetch(`${STUDENT_API_BASE}/afterhours`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${STUDENT_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ message: payload.text }),
   });
 
   if (!res.ok) {

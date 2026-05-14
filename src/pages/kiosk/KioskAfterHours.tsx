@@ -70,7 +70,7 @@ export default function KioskAfterHours() {
       duration: "",
       reason: "",
       customReason: "",
-      supervisorId: undefined,
+      supervisorId: "__none__",
     },
   });
 
@@ -83,7 +83,10 @@ export default function KioskAfterHours() {
       duration: values.duration as Parameters<typeof log.mutate>[0]["duration"],
       reason: values.reason as Parameters<typeof log.mutate>[0]["reason"],
       customReason: values.reason === "Other" ? values.customReason : undefined,
-      supervisorId: values.supervisorId ?? undefined,
+      supervisorId:
+        values.supervisorId && values.supervisorId !== "__none__"
+          ? values.supervisorId
+          : undefined,
     });
   };
 
@@ -203,12 +206,13 @@ export default function KioskAfterHours() {
               render={({ field }) => (
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value ?? ""}
+                  value={field.value ?? "__none__"}
                 >
                   <SelectTrigger className="h-12">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
                     {supervisors?.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
