@@ -35,6 +35,10 @@ import {
   getAllCachedStatuses,
   refreshPrintCamCache,
 } from "@/server/lib/printCamPoller";
+import {
+  prusaStatusResponseSchema,
+  prusaJobResponseSchema,
+} from "@/server/lib/prusaSchemas";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
 
@@ -164,10 +168,6 @@ const dispatchToPrinter = async (params: {
       });
     }
 
-    interface PrusaStatusResponse {
-      storage?: { name?: string; read_only?: boolean };
-      printer?: { state?: string };
-    }
     const getPrusaStatus = async () => {
       const statusRes = await fetch(`http://${ipAddress}/api/v1/status`, {
         headers: {
@@ -180,7 +180,16 @@ const dispatchToPrinter = async (params: {
           message: `Prusa status check failed (${statusRes.status}): ${sanitizeDbText(await statusRes.text())}`,
         });
       }
-      return (await statusRes.json()) as PrusaStatusResponse;
+      const parsed = prusaStatusResponseSchema.safeParse(
+        await statusRes.json(),
+      );
+      if (!parsed.success) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Prusa returned an unexpected status response format.",
+        });
+      }
+      return parsed.data;
     };
 
     // PrusaLink storage names differ by printer/firmware (e.g. "local" vs "usb").
@@ -711,34 +720,6 @@ export const printRouter = router({
         };
       }
 
-      interface PrusaStatusResponse {
-        printer?: {
-          state?: string;
-          temp_nozzle?: number;
-          target_nozzle?: number;
-          temp_bed?: number;
-          target_bed?: number;
-        };
-        job?: {
-          id?: number;
-          progress?: number;
-          time_remaining?: number;
-          time_printing?: number;
-        };
-      }
-      interface PrusaJobResponse {
-        id?: number;
-        state?: string;
-        progress?: number;
-        time_remaining?: number;
-        time_printing?: number;
-        file?: {
-          name?: string;
-          display_name?: string;
-          meta?: { filament_type?: string; material?: string };
-        };
-      }
-
       try {
         const [statusRes, jobRes] = await Promise.all([
           fetch(`http://${printer.ipAddress}/api/v1/status`, {
@@ -769,11 +750,52 @@ export const printRouter = router({
           };
         }
 
-        const status = (await statusRes.json()) as PrusaStatusResponse;
-        const job =
-          jobRes.status === 204
-            ? null
-            : ((await jobRes.json()) as PrusaJobResponse);
+        const statusParsed = prusaStatusResponseSchema.safeParse(
+          await statusRes.json(),
+        );
+        if (!statusParsed.success) {
+          return {
+            state: "UNREACHABLE",
+            stateMessage: "Printer returned unexpected status format.",
+            nozzleTemp: null,
+            targetNozzleTemp: null,
+            bedTemp: null,
+            targetBedTemp: null,
+            progress: null,
+            timeRemaining: null,
+            timePrinting: null,
+            fileName: null,
+            filamentType: null,
+            amsTrays: NO_AMS_TRAYS,
+            chamberTemp: null,
+          };
+        }
+        const status = statusParsed.data;
+
+        let job = null;
+        if (jobRes.status !== 204) {
+          const jobParsed = prusaJobResponseSchema.safeParse(
+            await jobRes.json(),
+          );
+          if (!jobParsed.success) {
+            return {
+              state: "UNREACHABLE",
+              stateMessage: "Printer returned unexpected job format.",
+              nozzleTemp: null,
+              targetNozzleTemp: null,
+              bedTemp: null,
+              targetBedTemp: null,
+              progress: null,
+              timeRemaining: null,
+              timePrinting: null,
+              fileName: null,
+              filamentType: null,
+              amsTrays: NO_AMS_TRAYS,
+              chamberTemp: null,
+            };
+          }
+          job = jobParsed.data;
+        }
 
         const state = status.printer?.state?.trim() ?? "UNKNOWN";
         const progressValue = status.job?.progress ?? job?.progress ?? null;
@@ -871,14 +893,14 @@ export const printRouter = router({
           message: "No active print job to pause.",
         });
       }
-      const job = (await jobRes.json()) as { id?: number };
-      if (!job.id)
+      const jobParsed = prusaJobResponseSchema.safeParse(await jobRes.json());
+      if (!jobParsed.success || !jobParsed.data.id)
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "No active print job.",
         });
       const res = await fetch(
-        `http://${printer.ipAddress}/api/v1/job/${job.id}/pause`,
+        `http://${printer.ipAddress}/api/v1/job/${jobParsed.data.id}/pause`,
         {
           method: "PUT",
           headers: { "X-Api-Key": printer.authToken },
@@ -941,14 +963,14 @@ export const printRouter = router({
           message: "No active print job to resume.",
         });
       }
-      const job = (await jobRes.json()) as { id?: number };
-      if (!job.id)
+      const jobParsed = prusaJobResponseSchema.safeParse(await jobRes.json());
+      if (!jobParsed.success || !jobParsed.data.id)
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "No active print job.",
         });
       const res = await fetch(
-        `http://${printer.ipAddress}/api/v1/job/${job.id}/resume`,
+        `http://${printer.ipAddress}/api/v1/job/${jobParsed.data.id}/resume`,
         {
           method: "PUT",
           headers: { "X-Api-Key": printer.authToken },
@@ -1011,14 +1033,14 @@ export const printRouter = router({
           message: "No active print job to cancel.",
         });
       }
-      const job = (await jobRes.json()) as { id?: number };
-      if (!job.id)
+      const jobParsed = prusaJobResponseSchema.safeParse(await jobRes.json());
+      if (!jobParsed.success || !jobParsed.data.id)
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "No active print job.",
         });
       const res = await fetch(
-        `http://${printer.ipAddress}/api/v1/job/${job.id}`,
+        `http://${printer.ipAddress}/api/v1/job/${jobParsed.data.id}`,
         {
           method: "DELETE",
           headers: { "X-Api-Key": printer.authToken },
@@ -1809,16 +1831,6 @@ export const printRouter = router({
     .query(async ({ ctx }) => {
       const printers = await ctx.prisma.printer.findMany();
 
-      interface PrusaActiveStatus {
-        printer?: { state?: string };
-        job?: { progress?: number; time_remaining?: number };
-      }
-      interface PrusaActiveJob {
-        file?: { name?: string; display_name?: string };
-        progress?: number;
-        time_remaining?: number;
-      }
-
       interface ActivePrintEntry {
         printerName: string;
         printerType: string;
@@ -1878,7 +1890,12 @@ export const printRouter = router({
             ]);
             if (!statusRes.ok) continue;
 
-            const status = (await statusRes.json()) as PrusaActiveStatus;
+            const statusParsed = prusaStatusResponseSchema.safeParse(
+              await statusRes.json(),
+            );
+            if (!statusParsed.success) continue;
+            const status = statusParsed.data;
+
             const printerState =
               status.printer?.state?.trim()?.toUpperCase() ?? "UNKNOWN";
 
@@ -1886,10 +1903,14 @@ export const printRouter = router({
             else if (printerState === "PAUSED") state = "PAUSED";
             else continue;
 
-            const job =
-              jobRes.status === 204
-                ? null
-                : ((await jobRes.json()) as PrusaActiveJob);
+            let job = null;
+            if (jobRes.status !== 204) {
+              const jobParsed = prusaJobResponseSchema.safeParse(
+                await jobRes.json(),
+              );
+              if (!jobParsed.success) continue;
+              job = jobParsed.data;
+            }
 
             fileName = job?.file?.display_name ?? job?.file?.name ?? null;
             progress = status.job?.progress ?? job?.progress ?? null;
@@ -2140,26 +2161,6 @@ export const printRouter = router({
     });
 
     // ── Prusa printers — status from local API ───────────────────────────────
-    interface PrusaStatusResponse {
-      printer?: {
-        state?: string;
-        temp_nozzle?: number;
-        target_nozzle?: number;
-        temp_bed?: number;
-        target_bed?: number;
-      };
-      job?: { progress?: number; time_remaining?: number };
-    }
-    interface PrusaJobResponse {
-      file?: {
-        name?: string;
-        display_name?: string;
-        meta?: { filament_type?: string; material?: string };
-      };
-      progress?: number;
-      time_remaining?: number;
-    }
-
     const prusaResults = await Promise.allSettled(
       prusaPrinters.map(async (printer) => {
         let state = "UNKNOWN";
@@ -2189,27 +2190,40 @@ export const printRouter = router({
               state = "UNREACHABLE";
               stateMessage = `Status check failed (HTTP ${statusRes.status}).`;
             } else {
-              const s = (await statusRes.json()) as PrusaStatusResponse;
-              const j =
-                jobRes.status === 204
-                  ? null
-                  : ((await jobRes.json()) as PrusaJobResponse);
-              state = s.printer?.state?.trim() ?? "UNKNOWN";
-              const pct =
-                (s.job?.progress ?? j?.progress) != null
-                  ? ` (${Math.round((s.job?.progress ?? j?.progress)!)}%)`
-                  : "";
-              stateMessage = prusaStateMessage(state, pct);
-              nozzleTemp = s.printer?.temp_nozzle ?? null;
-              targetNozzleTemp = s.printer?.target_nozzle ?? null;
-              bedTemp = s.printer?.temp_bed ?? null;
-              targetBedTemp = s.printer?.target_bed ?? null;
-              progress = s.job?.progress ?? j?.progress ?? null;
-              timeRemaining =
-                s.job?.time_remaining ?? j?.time_remaining ?? null;
-              fileName = j?.file?.display_name ?? j?.file?.name ?? null;
-              filamentType =
-                j?.file?.meta?.filament_type ?? j?.file?.meta?.material ?? null;
+              const sParsed = prusaStatusResponseSchema.safeParse(
+                await statusRes.json(),
+              );
+              if (!sParsed.success) {
+                state = "UNREACHABLE";
+                stateMessage = "Printer returned unexpected status format.";
+              } else {
+                const s = sParsed.data;
+                let j = null;
+                if (jobRes.status !== 204) {
+                  const jParsed = prusaJobResponseSchema.safeParse(
+                    await jobRes.json(),
+                  );
+                  if (jParsed.success) j = jParsed.data;
+                }
+                state = s.printer?.state?.trim() ?? "UNKNOWN";
+                const pct =
+                  (s.job?.progress ?? j?.progress) != null
+                    ? ` (${Math.round((s.job?.progress ?? j?.progress)!)}%)`
+                    : "";
+                stateMessage = prusaStateMessage(state, pct);
+                nozzleTemp = s.printer?.temp_nozzle ?? null;
+                targetNozzleTemp = s.printer?.target_nozzle ?? null;
+                bedTemp = s.printer?.temp_bed ?? null;
+                targetBedTemp = s.printer?.target_bed ?? null;
+                progress = s.job?.progress ?? j?.progress ?? null;
+                timeRemaining =
+                  s.job?.time_remaining ?? j?.time_remaining ?? null;
+                fileName = j?.file?.display_name ?? j?.file?.name ?? null;
+                filamentType =
+                  j?.file?.meta?.filament_type ??
+                  j?.file?.meta?.material ??
+                  null;
+              }
             }
           } catch {
             state = "UNREACHABLE";

@@ -5,6 +5,10 @@ import {
   listBambuddyPrinters,
 } from "@/server/lib/bambuBuddy";
 import { prisma } from "@/server/lib/prisma";
+import {
+  prusaStatusResponseSchema,
+  prusaJobResponseSchema,
+} from "@/server/lib/prusaSchemas";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -165,26 +169,6 @@ async function fetchPrusaStatus(printer: {
     return;
   }
 
-  interface PrusaStatusResponse {
-    printer?: {
-      state?: string;
-      temp_nozzle?: number;
-      target_nozzle?: number;
-      temp_bed?: number;
-      target_bed?: number;
-    };
-    job?: { progress?: number; time_remaining?: number };
-  }
-  interface PrusaJobResponse {
-    progress?: number;
-    time_remaining?: number;
-    file?: {
-      name?: string;
-      display_name?: string;
-      meta?: { filament_type?: string; material?: string };
-    };
-  }
-
   try {
     const [statusResult, jobResult] = await Promise.all([
       prusaHttpGet(
@@ -225,11 +209,32 @@ async function fetchPrusaStatus(printer: {
       return;
     }
 
-    const status = JSON.parse(statusResult.body) as PrusaStatusResponse;
-    const job =
-      jobResult.status === 204
-        ? null
-        : (JSON.parse(jobResult.body) as PrusaJobResponse);
+    const statusParsed = prusaStatusResponseSchema.safeParse(
+      JSON.parse(statusResult.body),
+    );
+    if (!statusParsed.success) {
+      console.error(
+        `Prusa status response invalid for ${printer.ipAddress}:`,
+        statusParsed.error.issues,
+      );
+      return;
+    }
+    const status = statusParsed.data;
+
+    let job = null;
+    if (jobResult.status !== 204) {
+      const jobParsed = prusaJobResponseSchema.safeParse(
+        JSON.parse(jobResult.body),
+      );
+      if (!jobParsed.success) {
+        console.error(
+          `Prusa job response invalid for ${printer.ipAddress}:`,
+          jobParsed.error.issues,
+        );
+        return;
+      }
+      job = jobParsed.data;
+    }
 
     const state = status.printer?.state?.trim() ?? "UNKNOWN";
     const progressValue = status.job?.progress ?? job?.progress ?? null;
