@@ -1556,7 +1556,7 @@ export const printRouter = router({
             amsMapping: input.amsMapping,
           });
 
-          return await ctx.prisma.gcodePrintJob.update({
+          const reusedJob = await ctx.prisma.gcodePrintJob.update({
             where: { id: newJob.id },
             data: {
               status: "DISPATCHED",
@@ -1564,6 +1564,7 @@ export const printRouter = router({
                 `Re-used existing file. ${dispatchResult.details ?? ""}`.trim(),
             },
           });
+          return { ...reusedJob, s3Warning: false };
         } catch (error) {
           const message = sanitizeDbText(
             error instanceof Error ? error.message : "Unknown dispatch error",
@@ -1657,7 +1658,7 @@ export const printRouter = router({
         });
       }
 
-      return ctx.prisma.gcodePrintJob.create({
+      const job = await ctx.prisma.gcodePrintJob.create({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
@@ -1670,6 +1671,7 @@ export const printRouter = router({
           dispatchResponse: dispatchResult.value.details,
         },
       });
+      return { ...job, s3Warning: !s3Succeeded };
     }),
 
   reprintJob: userProcedure
