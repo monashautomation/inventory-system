@@ -1,5 +1,5 @@
 // ─── BambuLab Metrics Collector ──────────────────────────────────────────────
-// Polls the BambuBuddy HTTP API on a fixed interval and caches the results
+// Polls the BamBuddy HTTP API on a fixed interval and caches the results
 // so collectBambuMetrics() can serve Prometheus text synchronously.
 
 import {
@@ -8,7 +8,7 @@ import {
     type BambuddyPrinterStatus,
     type AMSUnit,
     type AMSTray,
-} from "@/server/lib/bambuBuddy";
+} from "@/server/lib/bambuddy";
 import { formatGauge } from "./format";
 import { logger as rootLogger } from "@/server/lib/logger";
 
@@ -31,7 +31,7 @@ interface BambuMetricsEntry {
 }
 
 // ─── Module-level cache ─────────────────────────────────────────────────────
-// keyed by BambuBuddy printer ID (as string)
+// keyed by BamBuddy printer ID (as string)
 
 const metricsCache = new Map<string, BambuMetricsEntry>();
 
@@ -314,7 +314,7 @@ async function pollMetrics(): Promise<void> {
             processApiStatus(entry.store, status);
         }
 
-        // Remove printers no longer in BambuBuddy
+        // Remove printers no longer in BamBuddy
         for (const key of metricsCache.keys()) {
             if (!activeIds.has(key)) metricsCache.delete(key);
         }
@@ -324,7 +324,7 @@ async function pollMetrics(): Promise<void> {
 }
 
 /**
- * Start periodic BambuBuddy API polling for Prometheus metrics.
+ * Start periodic BamBuddy API polling for Prometheus metrics.
  * Call once at startup when Bambu metrics are enabled.
  */
 export function initBambuMetricsListener(): void {

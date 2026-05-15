@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { OutageBanner } from "@/components/OutageBanner";
 
 function isAfterHoursNow(): boolean {
   const h = new Date().getHours();
@@ -70,6 +71,7 @@ export default function KioskLanding() {
 
   return (
     <>
+      <OutageBanner />
       <AlertDialog
         open={showNotRegisteredDialog}
         onOpenChange={setShowNotRegisteredDialog}

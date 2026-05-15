@@ -14,6 +14,11 @@ import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
 import {
+    handleStatusJson,
+    handleComponentsJson,
+    handleUnresolvedIncidents,
+} from "./health";
+import {
     initPrintCamPoller,
     syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
@@ -61,7 +66,14 @@ const app = new Hono();
 
 app.use(honoLogger());
 
-app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+app.get("/health", (c) =>
+    c.json({ status: "ok", timestamp: new Date().toISOString() }),
+);
+
+// ─── Statuspage-compatible health API ─────────────────────────────────────────
+app.get("/api/v2/status.json", () => handleStatusJson());
+app.get("/api/v2/components.json", () => handleComponentsJson());
+app.get("/api/v2/incidents/unresolved.json", () => handleUnresolvedIncidents());
 
 // Apply CORS middleware
 app.use(
@@ -83,10 +95,16 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     logger.debug({ method, path }, "auth request started");
     try {
         const response = await auth.handler(c.req.raw);
-        logger.debug({ method, path, status: response.status, ms: Date.now() - start }, "auth request completed");
+        logger.debug(
+            { method, path, status: response.status, ms: Date.now() - start },
+            "auth request completed",
+        );
         return response;
     } catch (error) {
-        logger.error({ method, path, ms: Date.now() - start, err: error }, "auth request threw");
+        logger.error(
+            { method, path, ms: Date.now() - start, err: error },
+            "auth request threw",
+        );
         throw new HTTPException(500, {
             message: "Authentication processing failed",
         });
@@ -115,9 +133,6 @@ app.onError((err, c) => {
     logger.error({ err }, "Unexpected error");
     return c.json({ error: "Internal server error" }, 500);
 });
-
-// Health check endpoint
-app.get("/health", (c) => c.json({ status: "ok" }));
 
 // ─── Item image proxy ─────────────────────────────────────────────────────────
 app.get("/api/items/:id/image", async (c) => {
@@ -439,9 +454,9 @@ async function proxyWebcam(
     return new Response(upstreamRes.body, { status: 200, headers });
 }
 
-// ─── BambuBuddy MJPEG stream proxy ───────────────────────────────────────────
-// Proxies the BambuBuddy MJPEG camera stream so clients can view it without
-// exposing the BambuBuddy endpoint or API key to the browser.
+// ─── BamBuddy MJPEG stream proxy ───────────────────────────────────────────
+// Proxies the BamBuddy MJPEG camera stream so clients can view it without
+// exposing the BamBuddy endpoint or API key to the browser.
 app.get("/api/bambu-stream/:bambuddyId", async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session?.user?.id)
@@ -455,7 +470,7 @@ app.get("/api/bambu-stream/:bambuddyId", async (c) => {
     const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
     const apiKey = process.env.BAMBUDDY_API_KEY;
     if (!endpoint || !apiKey)
-        throw new HTTPException(503, { message: "BambuBuddy not configured" });
+        throw new HTTPException(503, { message: "BamBuddy not configured" });
 
     // Get a short-lived stream token
     let token: string;
@@ -497,18 +512,18 @@ app.get("/api/bambu-stream/:bambuddyId", async (c) => {
         if (err instanceof Error && err.name === "AbortError") {
             if (clientDisconnected) return c.body(null, 499 as any);
             throw new HTTPException(502, {
-                message: "BambuBuddy stream timed out",
+                message: "BamBuddy stream timed out",
             });
         }
         throw new HTTPException(502, {
-            message: "Failed to connect to BambuBuddy stream",
+            message: "Failed to connect to BamBuddy stream",
         });
     }
     clearTimeout(fetchTimeout);
 
     if (!upstreamRes.ok || !upstreamRes.body) {
         throw new HTTPException(502, {
-            message: `BambuBuddy stream returned HTTP ${upstreamRes.status}`,
+            message: `BamBuddy stream returned HTTP ${upstreamRes.status}`,
         });
     }
 
@@ -615,7 +630,7 @@ if (metricsEnabled) {
     });
 }
 
-// ─── Start BambuBuddy API polling for Prometheus metrics ─────────────────────
+// ─── Start BamBuddy API polling for Prometheus metrics ─────────────────────
 // Always start the legacy poller when enabled — we may prefer the Prometheus
 // endpoint but fall back to the legacy cache if the passthrough fails.
 if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
@@ -623,7 +638,7 @@ if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
 }
 
 // ─── PrintCam poller + initial Bambu DB sync ─────────────────────────────────
-// Sync Bambu printers from BambuBuddy into local DB immediately on startup so
+// Sync Bambu printers from BamBuddy into local DB immediately on startup so
 // they appear in getPrinters / getLivePrinterStatuses before the first poller
 // cycle fires. Re-sync every 5 minutes to pick up newly registered printers.
 syncBambuPrinters().catch((err) =>
