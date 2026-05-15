@@ -67,14 +67,14 @@ export function OutageBanner() {
 
   const dominantType = alerts.reduce<AlertType>(
     (acc, a) => (PRIORITY[a.type] > PRIORITY[acc] ? a.type : acc),
-    alerts[0]!.type,
+    alerts[0].type,
   );
 
   const { banner } = STYLES[dominantType];
   const bannerClass = `w-full border-b py-2.5 ${banner}`;
 
   if (alerts.length === 1) {
-    const { Icon, item, label } = STYLES[alerts[0]!.type];
+    const { Icon, item, label } = STYLES[alerts[0].type];
     return (
       <div className={bannerClass}>
         <div
@@ -84,7 +84,7 @@ export function OutageBanner() {
           <span className="text-xs font-bold uppercase tracking-wider opacity-70">
             {label}
           </span>
-          <span>{alerts[0]!.label}</span>
+          <span>{alerts[0].label}</span>
         </div>
       </div>
     );

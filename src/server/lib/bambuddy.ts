@@ -299,7 +299,7 @@ export async function getBambuddyStreamToken(): Promise<string> {
   await checkResponse(res, "get stream token");
   const data = (await res.json()) as { token?: string };
   if (!data.token)
-    throw new Error("BambuBuddy stream-token response missing token field");
+    throw new Error("BamBuddy stream-token response missing token field");
   return data.token;
 }
 
@@ -339,7 +339,7 @@ export async function getBambuddyPrometheusMetrics(): Promise<string> {
   return res.text();
 }
 
-/** Fetch status for all BambuBuddy printers in parallel. Failed individual lookups are skipped. */
+/** Fetch status for all BamBuddy printers in parallel. Failed individual lookups are skipped. */
 export async function listBambuddyPrinterStatuses(): Promise<
   BambuddyPrinterStatus[]
 > {

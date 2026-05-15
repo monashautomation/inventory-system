@@ -3,7 +3,7 @@ import {
   resolveBambuddyPrinterId,
   getBambuddyPrinterStatus,
   listBambuddyPrinters,
-} from "@/server/lib/bambuBuddy";
+} from "@/server/lib/bambuddy";
 import { prisma } from "@/server/lib/prisma";
 import {
   prusaStatusResponseSchema,
@@ -337,7 +337,7 @@ async function fetchBambuStatus(printer: {
       serialNumber: printer.serialNumber,
     });
   } catch {
-    unreachable("Could not reach BambuBuddy.");
+    unreachable("Could not reach BamBuddy.");
     return;
   }
 
@@ -349,7 +349,7 @@ async function fetchBambuStatus(printer: {
       ipAddress: printer.ipAddress,
       webcamUrl: printer.webcamUrl,
       state: "UNKNOWN",
-      stateMessage: "Printer not found in BambuBuddy.",
+      stateMessage: "Printer not found in BamBuddy.",
       nozzleTemp: null,
       targetNozzleTemp: null,
       bedTemp: null,
@@ -369,7 +369,7 @@ async function fetchBambuStatus(printer: {
   try {
     s = await getBambuddyPrinterStatus(bambuddyId);
   } catch {
-    unreachable("Could not reach BambuBuddy.");
+    unreachable("Could not reach BamBuddy.");
     return;
   }
 

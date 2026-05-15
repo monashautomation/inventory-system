@@ -18,10 +18,7 @@ interface ComponentResult {
     description: string;
 }
 
-async function withTimeout<T>(
-    promise: Promise<T>,
-    ms: number,
-): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     return Promise.race([
         promise,
         new Promise<never>((_, reject) =>
@@ -33,9 +30,21 @@ async function withTimeout<T>(
 async function checkDatabase(): Promise<ComponentResult> {
     try {
         await withTimeout(prisma.$queryRaw`SELECT 1`, CHECK_TIMEOUT_MS);
-        return { id: "database", name: "Database", status: "operational", group: false, description: "" };
+        return {
+            id: "database",
+            name: "Database",
+            status: "operational",
+            group: false,
+            description: "",
+        };
     } catch {
-        return { id: "database", name: "Database", status: "major_outage", group: false, description: "Connection failed" };
+        return {
+            id: "database",
+            name: "Database",
+            status: "major_outage",
+            group: false,
+            description: "Connection failed",
+        };
     }
 }
 
@@ -44,7 +53,13 @@ async function checkBambBuddy(): Promise<ComponentResult> {
     const apiKey = process.env.BAMBUDDY_API_KEY;
 
     if (!endpoint || !apiKey) {
-        return { id: "bambuddy", name: "BambuBuddy", status: "degraded_performance", group: false, description: "Not configured" };
+        return {
+            id: "bambuddy",
+            name: "BamBuddy",
+            status: "degraded_performance",
+            group: false,
+            description: "Not configured",
+        };
     }
 
     try {
@@ -56,9 +71,21 @@ async function checkBambBuddy(): Promise<ComponentResult> {
             CHECK_TIMEOUT_MS,
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return { id: "bambuddy", name: "BambBuddy", status: "operational", group: false, description: "" };
+        return {
+            id: "bambuddy",
+            name: "BambBuddy",
+            status: "operational",
+            group: false,
+            description: "",
+        };
     } catch {
-        return { id: "bambuddy", name: "BambBuddy", status: "major_outage", group: false, description: "Unreachable" };
+        return {
+            id: "bambuddy",
+            name: "BambBuddy",
+            status: "major_outage",
+            group: false,
+            description: "Unreachable",
+        };
     }
 }
 
@@ -67,7 +94,13 @@ async function checkStudentApi(): Promise<ComponentResult> {
     const key = process.env.STUDENT_API_KEY;
 
     if (!base) {
-        return { id: "student-api", name: "Student API", status: "degraded_performance", group: false, description: "Not configured" };
+        return {
+            id: "student-api",
+            name: "Student API",
+            status: "degraded_performance",
+            group: false,
+            description: "Not configured",
+        };
     }
 
     try {
@@ -79,9 +112,21 @@ async function checkStudentApi(): Promise<ComponentResult> {
             CHECK_TIMEOUT_MS,
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return { id: "student-api", name: "Student API", status: "operational", group: false, description: "" };
+        return {
+            id: "student-api",
+            name: "Student API",
+            status: "operational",
+            group: false,
+            description: "",
+        };
     } catch {
-        return { id: "student-api", name: "Student API", status: "major_outage", group: false, description: "Unreachable" };
+        return {
+            id: "student-api",
+            name: "Student API",
+            status: "major_outage",
+            group: false,
+            description: "Unreachable",
+        };
     }
 }
 
@@ -96,13 +141,28 @@ async function checkS3(): Promise<ComponentResult> {
             CHECK_TIMEOUT_MS,
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return { id: "s3-storage", name: "S3 Storage", status: "operational", group: false, description: "" };
+        return {
+            id: "s3-storage",
+            name: "S3 Storage",
+            status: "operational",
+            group: false,
+            description: "",
+        };
     } catch {
-        return { id: "s3-storage", name: "S3 Storage", status: "major_outage", group: false, description: "Unreachable" };
+        return {
+            id: "s3-storage",
+            name: "S3 Storage",
+            status: "major_outage",
+            group: false,
+            description: "Unreachable",
+        };
     }
 }
 
-function deriveIndicator(components: ComponentResult[]): { indicator: Indicator; description: string } {
+function deriveIndicator(components: ComponentResult[]): {
+    indicator: Indicator;
+    description: string;
+} {
     const down = components.filter(
         (c) => c.status === "major_outage" || c.status === "partial_outage",
     ).length;
@@ -111,10 +171,14 @@ function deriveIndicator(components: ComponentResult[]): { indicator: Indicator;
     ).length;
     const total = components.length;
 
-    if (down === 0 && degraded === 0) return { indicator: "none", description: "All Systems Operational" };
-    if (down === total) return { indicator: "critical", description: "Major System Outage" };
-    if (down >= Math.ceil(total / 2)) return { indicator: "major", description: "Partial System Outage" };
-    if (down > 0) return { indicator: "minor", description: "Minor Service Disruption" };
+    if (down === 0 && degraded === 0)
+        return { indicator: "none", description: "All Systems Operational" };
+    if (down === total)
+        return { indicator: "critical", description: "Major System Outage" };
+    if (down >= Math.ceil(total / 2))
+        return { indicator: "major", description: "Partial System Outage" };
+    if (down > 0)
+        return { indicator: "minor", description: "Minor Service Disruption" };
     return { indicator: "minor", description: "Degraded Performance" };
 }
 
@@ -156,9 +220,13 @@ export async function handleUnresolvedIncidents(): Promise<Response> {
 
 function statusLabel(s: ComponentStatus): string {
     switch (s) {
-        case "degraded_performance": return "Degraded Performance";
-        case "partial_outage": return "Partial Outage";
-        case "major_outage": return "Major Outage";
-        default: return "Operational";
+        case "degraded_performance":
+            return "Degraded Performance";
+        case "partial_outage":
+            return "Partial Outage";
+        case "major_outage":
+            return "Major Outage";
+        default:
+            return "Operational";
     }
 }
