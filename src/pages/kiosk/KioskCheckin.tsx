@@ -14,6 +14,7 @@ import {
   PackageCheck,
   QrCode,
 } from "lucide-react";
+import logoText from "@/assets/Logo_Text_Horizontal.png";
 import { QRScanner } from "@/components/ui/qr-scanner";
 
 export default function KioskCheckin() {
@@ -111,6 +112,11 @@ export default function KioskCheckin() {
           <PackageCheck className="w-5 h-5 text-primary" />
           <h1 className="text-lg font-semibold">Check In Items</h1>
         </div>
+        <img
+          src={logoText}
+          alt="Monash Automation"
+          className="h-7 w-auto ml-auto"
+        />
       </div>
 
       <div className="flex-1 p-8 space-y-4">

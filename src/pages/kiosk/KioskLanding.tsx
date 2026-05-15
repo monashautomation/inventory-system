@@ -14,7 +14,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, CreditCard } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 function isAfterHoursNow(): boolean {
   const h = new Date().getHours();
@@ -123,9 +124,7 @@ export default function KioskLanding() {
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center space-y-2">
             <div className="flex justify-center mb-6">
-              <div className="rounded-full bg-primary/10 p-6">
-                <CreditCard className="w-12 h-12 text-primary" />
-              </div>
+              <img src={logo} alt="Monash Automation" className="h-16 w-auto" />
             </div>
             <h1 className="text-3xl font-bold">Kiosk Terminal</h1>
             <p className="text-muted-foreground text-sm">

@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import logoText from "@/assets/Logo_Text_Horizontal.png";
 import { BrowserMultiFormatReader } from "@zxing/library";
 
 interface ScannedItem {
@@ -199,6 +200,11 @@ export default function KioskCheckout() {
           <PackagePlus className="w-5 h-5 text-primary shrink-0" />
           <h1 className="text-base font-semibold truncate">Check Out Items</h1>
         </div>
+        <img
+          src={logoText}
+          alt="Monash Automation"
+          className="h-7 w-auto ml-auto shrink-0"
+        />
         {items.length > 0 && (
           <Badge variant="secondary" className="ml-auto shrink-0">
             {items.length} item{items.length !== 1 ? "s" : ""}
