@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import superjson from "superjson";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { ZodError } from "zod";
@@ -74,8 +75,11 @@ export const kioskProcedure = t.procedure.use(({ ctx, next }) => {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
   } else {
-    const token = ctx.req.headers.get("x-kiosk-token");
-    if (token !== secret) {
+    const token = ctx.req.headers.get("x-kiosk-token") ?? "";
+    const secretBuf = Buffer.from(secret);
+    const tokenBuf = Buffer.from(token.padEnd(secret.length, "\0").slice(0, secret.length));
+    const lengthMatch = token.length === secret.length;
+    if (!lengthMatch || !crypto.timingSafeEqual(tokenBuf, secretBuf)) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
   }
