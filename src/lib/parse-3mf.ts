@@ -100,17 +100,15 @@ export function parse3mf(buffer: ArrayBuffer): ThreeMfFilamentInfo {
  * - `; filament used [g] = 5.23,3.12` (count commas + 1)
  * - `; filament: 1,2,3,4` (count entries)
  *
- * Only reads the first ~200 lines (header section) for performance.
+ * Reads until the first real G-code command (non-comment line starting with G/M/T).
  */
 function extractFilamentCountFromGcode(gcodeData: Uint8Array): number {
-  // Only decode the first chunk — filament metadata is always in the header
-  const headerBytes = gcodeData.slice(0, 8192);
-  const header = new TextDecoder().decode(headerBytes);
+  const header = new TextDecoder().decode(gcodeData);
   const lines = header.split("\n");
 
   let maxCount = 1;
 
-  for (const line of lines.slice(0, 200)) {
+  for (const line of lines) {
     const trimmed = line.trim();
 
     // Stop reading once we hit actual gcode commands (non-comment)

@@ -6,6 +6,9 @@ import { z } from "zod";
 import { router, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import type { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "router:chat" });
 
 interface ToolCall {
   id: string;
@@ -198,9 +201,9 @@ You have access to tools for:
   async init(): Promise<void> {
     try {
       await this.mcpClient.connect(this.transport);
-      console.log("MCP client connected successfully");
+      logger.info("MCP client connected successfully");
     } catch (error) {
-      console.error("Failed to initialize MCP client:", error);
+      logger.error({ err: error }, "Failed to initialize MCP client");
       throw new Error("MCP client initialization failed");
     }
   }
@@ -273,7 +276,10 @@ You have access to tools for:
               });
               return JSON.stringify(result);
             } catch (error) {
-              console.error(`MCP tool call failed for ${mcpTool.name}:`, error);
+              logger.error(
+                { tool: mcpTool.name, err: error },
+                "MCP tool call failed",
+              );
               return JSON.stringify({
                 error: `Tool call failed: ${error instanceof Error ? error.message : "Unknown error"}`,
               });
@@ -343,7 +349,10 @@ You have access to tools for:
               result: toolResult,
             };
           } catch (error) {
-            console.error(`Execution failed for tool ${toolCall.name}:`, error);
+            logger.error(
+              { tool: toolCall.name, err: error },
+              "Tool execution failed",
+            );
             return {
               id: formattedToolCalls[index].id,
               result: {
@@ -378,7 +387,7 @@ You have access to tools for:
       // Final clean before sending back to the user
       return result.content;
     } catch (error) {
-      console.error("Error generating response:", error);
+      logger.error({ err: error }, "Error generating response");
       throw new Error(
         `Failed to generate response: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -396,14 +405,16 @@ You have access to tools for:
 
 // Initialize AI provider
 const aiProvider = new OllamaMcpProvider();
-initializeAIProvider().catch(console.error);
+initializeAIProvider().catch((err) =>
+  logger.error({ err }, "AI Provider initialization failed"),
+);
 
 async function initializeAIProvider() {
   try {
     await aiProvider.init();
-    console.log("AI Provider initialized successfully");
+    logger.info("AI Provider initialized successfully");
   } catch (error) {
-    console.error("Failed to initialize AI Provider:", error);
+    logger.error({ err: error }, "Failed to initialize AI Provider");
   }
 }
 

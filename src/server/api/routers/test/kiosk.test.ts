@@ -104,10 +104,14 @@ describe("kiosk router", () => {
   });
 
   describe("logAfterHours", () => {
-    it("posts Discord message with all details when supervisor provided", async () => {
+    it("posts Discord message with all details when supervisor has no studentNumber", async () => {
       const studentInfo = makeStudentInfo();
       const dbUser = createUser({ email: studentInfo.email });
-      const supervisor = createUser({ name: "Dr. Smith", role: "admin" });
+      const supervisor = createUser({
+        name: "Dr. Smith",
+        role: "admin",
+        studentNumber: null,
+      });
 
       vi.mocked(externalApi.getStudentInfo).mockResolvedValueOnce(studentInfo);
       prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
@@ -128,6 +132,78 @@ describe("kiosk router", () => {
       expect(call.text).toContain(studentInfo.discordId);
       expect(call.text).toContain("Project Work");
       expect(call.text).toContain("Dr. Smith");
+      expect(call.text).not.toContain("Supervisor: <@");
+    });
+
+    it("tags supervisor by Discord mention when supervisor has studentNumber", async () => {
+      const studentInfo = makeStudentInfo();
+      const dbUser = createUser({ email: studentInfo.email });
+      const supervisorStudentNumber = faker.string.numeric(8);
+      const supervisorDiscordId = faker.string.numeric(18);
+      const supervisor = createUser({
+        name: "Dr. Smith",
+        role: "admin",
+        studentNumber: supervisorStudentNumber,
+      });
+      const supervisorStudentInfo = makeStudentInfo({
+        studentId: supervisorStudentNumber,
+        discordId: supervisorDiscordId,
+      });
+
+      vi.mocked(externalApi.getStudentInfo)
+        .mockResolvedValueOnce(studentInfo)
+        .mockResolvedValueOnce(supervisorStudentInfo);
+      prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
+      prismaMock.user.findUnique.mockResolvedValueOnce(supervisor);
+      vi.mocked(externalApi.postDiscordMessage).mockResolvedValueOnce(
+        undefined,
+      );
+
+      const result = await caller.logAfterHours({
+        studentId: studentInfo.studentId,
+        duration: "1 hour",
+        reason: "Project Work",
+        supervisorId: supervisor.id,
+      });
+
+      expect(result.ok).toBe(true);
+      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
+      expect(call.text).toContain(`<@${supervisorDiscordId}>`);
+      expect(call.text).not.toContain("Dr. Smith");
+      expect(vi.mocked(externalApi.getStudentInfo)).toHaveBeenCalledWith(
+        supervisorStudentNumber,
+      );
+    });
+
+    it("falls back to plaintext supervisor name when studentNumber lookup fails", async () => {
+      const studentInfo = makeStudentInfo();
+      const dbUser = createUser({ email: studentInfo.email });
+      const supervisor = createUser({
+        name: "Dr. Smith",
+        role: "admin",
+        studentNumber: faker.string.numeric(8),
+      });
+
+      vi.mocked(externalApi.getStudentInfo)
+        .mockResolvedValueOnce(studentInfo)
+        .mockRejectedValueOnce(new Error("Student API error: 503"));
+      prismaMock.user.findFirst.mockResolvedValueOnce(dbUser);
+      prismaMock.user.findUnique.mockResolvedValueOnce(supervisor);
+      vi.mocked(externalApi.postDiscordMessage).mockResolvedValueOnce(
+        undefined,
+      );
+
+      const result = await caller.logAfterHours({
+        studentId: studentInfo.studentId,
+        duration: "1 hour",
+        reason: "Project Work",
+        supervisorId: supervisor.id,
+      });
+
+      expect(result.ok).toBe(true);
+      const call = vi.mocked(externalApi.postDiscordMessage).mock.calls[0][0];
+      expect(call.text).toContain("Dr. Smith");
+      expect(call.text).not.toContain("Supervisor: <@");
     });
 
     it("uses 'None declared' when no supervisor provided", async () => {

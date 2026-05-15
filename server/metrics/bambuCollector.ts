@@ -10,6 +10,9 @@ import {
     type AMSTray,
 } from "@/server/lib/bambuBuddy";
 import { formatGauge } from "./format";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "bambu-metrics" });
 
 // ─── Per-printer metric store ───────────────────────────────────────────────
 
@@ -316,10 +319,7 @@ async function pollMetrics(): Promise<void> {
             if (!activeIds.has(key)) metricsCache.delete(key);
         }
     } catch (err) {
-        console.error(
-            "[bambu-metrics] Poll failed:",
-            err instanceof Error ? err.message : err,
-        );
+        logger.error({ err }, "Poll failed");
     }
 }
 
@@ -334,7 +334,7 @@ export function initBambuMetricsListener(): void {
         () => void pollMetrics(),
         METRICS_POLL_INTERVAL_MS,
     );
-    console.log("[bambu-metrics] API polling started");
+    logger.info("API polling started");
 }
 
 /** Stop polling and clear cached data. */
@@ -350,7 +350,7 @@ export function shutdownBambuMetricsListener(): void {
 
 export function collectBambuMetrics(): string {
     if (metricsCache.size === 0) {
-        console.log("[bambu-metrics] Cache empty — no printers reporting yet");
+        logger.debug("Cache empty — no printers reporting yet");
         return "";
     }
 

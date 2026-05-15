@@ -4,22 +4,16 @@ import { describe, it, vi, expect, afterEach, beforeEach } from "vitest";
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-// Must mock console before import too
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 
 beforeEach(() => {
   delete process.env.STUDENT_API_BASE;
-  delete process.env.DISCORD_API_BASE;
   delete process.env.STUDENT_API_KEY;
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   delete process.env.STUDENT_API_BASE;
-  delete process.env.DISCORD_API_BASE;
   delete process.env.STUDENT_API_KEY;
 });
 
@@ -105,18 +99,13 @@ describe("getStudentInfo", () => {
 
 describe("postDiscordMessage", () => {
   describe("stub mode (no DISCORD_API_BASE)", () => {
-    it("logs to console instead of calling API", async () => {
+    it("skips API call in stub mode", async () => {
       await postDiscordMessage({
         channel: "test-channel",
         text: "hello",
       });
 
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[Discord stub] channel:",
-        "test-channel",
-      );
-      expect(consoleSpy).toHaveBeenCalledWith("[Discord stub] text:", "hello");
     });
 
     it("resolves without error", async () => {
@@ -126,9 +115,9 @@ describe("postDiscordMessage", () => {
     });
   });
 
-  describe("real API mode (DISCORD_API_BASE set)", () => {
+  describe("real API mode (STUDENT_API_BASE set)", () => {
     it("POSTs to correct URL with correct payload", async () => {
-      process.env.DISCORD_API_BASE = "https://discord-api.example.com";
+      process.env.STUDENT_API_BASE = "https://discord-api.example.com";
       process.env.STUDENT_API_KEY = "discord-key";
 
       fetchMock.mockResolvedValueOnce({ ok: true });
@@ -139,23 +128,20 @@ describe("postDiscordMessage", () => {
       });
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://discord-api.example.com/message",
+        "https://discord-api.example.com/afterhours",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
             Authorization: "Bearer discord-key",
             "Content-Type": "application/json",
           }),
-          body: JSON.stringify({
-            channel: "after-hours",
-            text: "test message",
-          }),
+          body: JSON.stringify({ message: "test message" }),
         }),
       );
     });
 
     it("throws on non-OK response", async () => {
-      process.env.DISCORD_API_BASE = "https://discord-api.example.com";
+      process.env.STUDENT_API_BASE = "https://discord-api.example.com";
 
       fetchMock.mockResolvedValueOnce({
         ok: false,
