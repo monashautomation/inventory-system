@@ -1,4 +1,7 @@
 import { router, userProcedure, adminProcedure } from "@/server/trpc";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "router:print" });
 import { describeHmsErrors, hmsErrorSummary } from "@/server/lib/hmsErrors";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -210,10 +213,7 @@ const dispatchToPrinter = async (params: {
         prusaStorageName = storageName;
       }
     } catch (error) {
-      console.error(
-        "Prusa status probe failed:",
-        error instanceof Error ? error.message : error,
-      );
+      logger.error({ err: error }, "Prusa status probe failed");
       // Ignore status probe failures; upload attempt below will surface the real error.
     }
 
@@ -440,10 +440,7 @@ const dispatchToPrinter = async (params: {
         await new Promise((resolve) => setTimeout(resolve, 750));
       }
     } catch (error) {
-      console.error(
-        "Post-start status poll failed:",
-        error instanceof Error ? error.message : error,
-      );
+      logger.error({ err: error }, "Post-start status poll failed");
       // Non-fatal: upload+start already succeeded.
     }
 
@@ -497,10 +494,7 @@ const dispatchToPrinter = async (params: {
   } catch (error) {
     if (error instanceof TRPCError) throw error;
     // Status check failure is non-fatal — proceed with dispatch
-    console.error(
-      "BambuDuddy status pre-check failed:",
-      error instanceof Error ? error.message : error,
-    );
+    logger.error({ err: error }, "BambuBuddy status pre-check failed");
   }
 
   try {
@@ -680,10 +674,7 @@ export const printRouter = router({
             amsTrays,
           };
         } catch (error) {
-          console.error(
-            "Bambuddy status check failed:",
-            error instanceof Error ? error.message : error,
-          );
+          logger.error({ err: error }, "Bambuddy status check failed");
           return {
             state: "UNREACHABLE",
             stateMessage: "Could not reach Bambuddy.",
@@ -824,10 +815,7 @@ export const printRouter = router({
           chamberTemp: null,
         };
       } catch (error) {
-        console.error(
-          "Prusa status/job fetch failed:",
-          error instanceof Error ? error.message : error,
-        );
+        logger.error({ err: error }, "Prusa status/job fetch failed");
         return {
           state: "UNREACHABLE",
           stateMessage: "Could not reach printer.",
@@ -1644,11 +1632,9 @@ export const printRouter = router({
 
       const s3Succeeded = s3Result.status === "fulfilled";
       if (!s3Succeeded) {
-        console.error(
-          "S3 upload failed (print will proceed without reprint support):",
-          s3Result.reason instanceof Error
-            ? s3Result.reason.message
-            : s3Result.reason,
+        logger.error(
+          { err: s3Result.reason },
+          "S3 upload failed (print will proceed without reprint support)",
         );
       }
 
@@ -1658,8 +1644,15 @@ export const printRouter = router({
             ? dispatchResult.reason.message
             : "Unknown dispatch error",
         );
-        console.error(
-          `[print] DISPATCH_FAILED user=${ctx.user.id} printer=${printer.name} (${printer.ipAddress}) file=${input.fileName}: ${message}`,
+        logger.error(
+          {
+            userId: ctx.user.id,
+            printer: printer.name,
+            ip: printer.ipAddress,
+            file: input.fileName,
+            message,
+          },
+          "DISPATCH_FAILED",
         );
         await ctx.prisma.gcodePrintJob.create({
           data: {
@@ -1801,8 +1794,15 @@ export const printRouter = router({
         const message = sanitizeDbText(
           error instanceof Error ? error.message : "Unknown dispatch error",
         );
-        console.error(
-          `[print] REPRINT_DISPATCH_FAILED user=${ctx.user.id} printer=${printer.name} (${printer.ipAddress}) file=${originalJob.originalFilename}: ${message}`,
+        logger.error(
+          {
+            userId: ctx.user.id,
+            printer: printer.name,
+            ip: printer.ipAddress,
+            file: originalJob.originalFilename,
+            message,
+          },
+          "REPRINT_DISPATCH_FAILED",
         );
         await ctx.prisma.gcodePrintJob.update({
           where: { id: newJob.id },

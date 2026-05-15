@@ -4,6 +4,9 @@
 
 import { prisma } from "@/server/lib/prisma";
 import { formatGauge } from "./format";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "prusa-metrics" });
 
 // ─── PrusaLink API response types ───────────────────────────────────────────
 
@@ -150,13 +153,12 @@ async function fetchEndpoint<T>(
     });
     clearTimeout(timeout);
     if (!res.ok) {
-      console.error(`[prusa-metrics] ${url} returned HTTP ${res.status}`);
+      logger.error({ url, status: res.status }, "HTTP error");
       return null;
     }
     return (await res.json()) as T;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[prusa-metrics] ${url} — ${msg}`);
+    logger.error({ url, err: error }, "Fetch failed");
     return null;
   }
 }
@@ -442,7 +444,7 @@ export async function collectPrusaMetrics(): Promise<string> {
     if (result.status === "fulfilled") {
       allSamples.push(...result.value);
     } else {
-      console.error("[prusa-metrics] Scrape failed:", result.reason);
+      logger.error({ err: result.reason }, "Scrape failed");
     }
   }
 

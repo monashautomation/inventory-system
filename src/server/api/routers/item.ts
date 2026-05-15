@@ -1,4 +1,7 @@
 import { router, userProcedure, adminProcedure } from "@/server/trpc";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "router:item" });
 import { prisma } from "@/server/lib/prisma";
 import { getLocationTreeIds } from "@/server/lib/locationTree";
 import { z } from "zod";
@@ -569,8 +572,9 @@ export const itemRouter = router({
         // Make request to the printer server
         let response;
         try {
-          console.log(
-            `Printing via: ${process.env.PRINTER_URL ?? "http://localhost:6767/printer"}`,
+          logger.debug(
+            { url: process.env.PRINTER_URL ?? "http://localhost:6767/printer" },
+            "Printing via printer server",
           );
           response = await fetch(
             process.env.PRINTER_URL ?? "http://localhost:6767/printer",
@@ -592,7 +596,7 @@ export const itemRouter = router({
             },
           );
         } catch (e) {
-          console.log(e);
+          logger.error({ err: e }, "Cannot reach printer server");
           return {
             ok: false as const,
             error: `Cannot reach printer server`,
@@ -601,7 +605,10 @@ export const itemRouter = router({
         // Check HTTP status
         if (!response.ok) {
           const body = await response.text();
-          console.log(`Printer server ${response.status} body:`, body);
+          logger.error(
+            { status: response.status, body },
+            "Printer server error",
+          );
           return {
             ok: false as const,
             error: `Printer server error: ${response.status}`,

@@ -7,6 +7,7 @@ import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { prisma } from "./lib/prisma";
 import { auth } from "./auth";
 import { type McpMeta } from "trpc-to-mcp";
+import { logger } from "./lib/logger";
 
 // Create the tRPC context, compatible with Hono and tRPC
 export const createContext = async (
@@ -29,9 +30,7 @@ export const createContext = async (
     authSession?.user?.email ??
     source ??
     "anonymous";
-  console.log(
-    `[${new Date().toISOString()}] >>> tRPC Request from ${username}`,
-  );
+  logger.debug({ username }, "tRPC request");
 
   return {
     req: opts.req, // Use tRPC's req for compatibility

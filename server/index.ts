@@ -7,7 +7,8 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/lib/prisma";
 import { createContext } from "@/server/trpc";
 import { HTTPException } from "hono/http-exception";
-import { logger } from "hono/logger";
+import { logger as honoLogger } from "hono/logger";
+import { logger } from "@/server/lib/logger";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
@@ -39,40 +40,26 @@ config();
 // ─── Process exit diagnostics ────────────────────────────────────────────────
 // Log WHY the process is dying so we can debug container restarts.
 process.on("uncaughtException", (err) => {
-    console.error(
-        `[FATAL] Uncaught exception at ${new Date().toISOString()}:`,
-        err,
-    );
+    logger.fatal({ err }, "Uncaught exception");
     process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
-    console.error(
-        `[FATAL] Unhandled rejection at ${new Date().toISOString()}:`,
-        reason,
-    );
+    logger.fatal({ reason }, "Unhandled rejection");
 });
 process.on("SIGTERM", () => {
-    console.log(
-        `[process] SIGTERM received at ${new Date().toISOString()} — shutting down gracefully`,
-    );
+    logger.info("SIGTERM received — shutting down gracefully");
     prisma.$disconnect().finally(() => process.exit(0));
 });
 process.on("SIGINT", () => {
-    console.log(
-        `[process] SIGINT received at ${new Date().toISOString()} — shutting down gracefully`,
-    );
+    logger.info("SIGINT received — shutting down gracefully");
     prisma.$disconnect().finally(() => process.exit(0));
 });
-process.on("exit", (code) =>
-    console.log(
-        `[process] Exiting with code ${code} at ${new Date().toISOString()}`,
-    ),
-);
+process.on("exit", (code) => logger.info({ code }, "Process exiting"));
 
 // Initialize Hono app
 const app = new Hono();
 
-app.use(logger());
+app.use(honoLogger());
 
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
@@ -93,18 +80,13 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     const method = c.req.method;
     const path = new URL(c.req.url).pathname;
     const start = Date.now();
-    console.log(`[auth] ${method} ${path} started`);
+    logger.debug({ method, path }, "auth request started");
     try {
         const response = await auth.handler(c.req.raw);
-        console.log(
-            `[auth] ${method} ${path} completed in ${Date.now() - start}ms → ${response.status}`,
-        );
+        logger.debug({ method, path, status: response.status, ms: Date.now() - start }, "auth request completed");
         return response;
     } catch (error) {
-        console.error(
-            `[auth] ${method} ${path} threw after ${Date.now() - start}ms:`,
-            error,
-        );
+        logger.error({ method, path, ms: Date.now() - start, err: error }, "auth request threw");
         throw new HTTPException(500, {
             message: "Authentication processing failed",
         });
@@ -119,7 +101,7 @@ app.use(
         router: appRouter,
         createContext,
         onError: ({ error, path }) => {
-            console.error(`tRPC error on ${path}:`, error);
+            logger.error({ path, err: error }, "tRPC error");
         },
     }),
 );
@@ -130,7 +112,7 @@ app.onError((err, c) => {
     if (err instanceof HTTPException) {
         return c.json({ error: err.message }, err.status);
     }
-    console.error("Unexpected error:", err);
+    logger.error({ err }, "Unexpected error");
     return c.json({ error: "Internal server error" }, 500);
 });
 
@@ -426,7 +408,7 @@ async function proxyWebcam(
                 message: "Printer webcam timed out",
             });
         }
-        console.error(`Webcam proxy failed for ${label}:`, error);
+        logger.error({ label, err: error }, "Webcam proxy failed");
         throw new HTTPException(502, {
             message: "Failed to connect to printer webcam",
         });
@@ -592,7 +574,7 @@ app.all("/mcp", async (c) => {
         await mcpServer.connect(transport);
         return transport.handleRequest(c);
     } catch (error) {
-        console.error("MCP route error:", error);
+        logger.error({ err: error }, "MCP route error");
         throw new HTTPException(500, { message: "MCP processing failed" });
     }
 });
@@ -625,7 +607,7 @@ if (metricsEnabled) {
                 "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
             });
         } catch (error) {
-            console.error("Metrics endpoint error:", error);
+            logger.error({ err: error }, "Metrics endpoint error");
             throw new HTTPException(500, {
                 message: "Failed to collect metrics",
             });
@@ -645,18 +627,12 @@ if (metricsEnabled && process.env.METRICS_BAMBU_ENABLED !== "false") {
 // they appear in getPrinters / getLivePrinterStatuses before the first poller
 // cycle fires. Re-sync every 5 minutes to pick up newly registered printers.
 syncBambuPrinters().catch((err) =>
-    console.error(
-        "[startup] Bambu printer sync failed:",
-        err instanceof Error ? err.message : err,
-    ),
+    logger.error({ err }, "Bambu printer sync failed on startup"),
 );
 setInterval(
     () =>
         syncBambuPrinters().catch((err) =>
-            console.error(
-                "[sync] Bambu printer sync failed:",
-                err instanceof Error ? err.message : err,
-            ),
+            logger.error({ err }, "Bambu printer sync failed"),
         ),
     5 * 60 * 1000,
 );

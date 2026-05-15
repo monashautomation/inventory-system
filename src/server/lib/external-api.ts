@@ -5,6 +5,10 @@
  * Discord API: POST /api/discord/message     → { channel, text }
  */
 
+import { logger as rootLogger } from "./logger";
+
+const logger = rootLogger.child({ module: "external-api" });
+
 export interface StudentInfo {
   studentId: string;
   name: string;
@@ -72,8 +76,9 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
       throw err;
     }
     const body = await res.text().catch(() => "<unreadable>");
-    console.error(
-      `[Student API] ${res.status} ${res.statusText} — studentId=${studentId} body=${body}`,
+    logger.error(
+      { status: res.status, statusText: res.statusText, studentId, body },
+      "Student API error",
     );
     throw new Error(`Student API error: ${res.status} ${res.statusText}`);
   }
@@ -123,8 +128,10 @@ export async function postDiscordMessage(
         "STUDENT_API_BASE is required in non-development environments",
       );
     }
-    console.log("[Discord stub] channel:", payload.channel);
-    console.log("[Discord stub] text:", payload.text);
+    logger.debug(
+      { channel: payload.channel, text: payload.text },
+      "Discord stub",
+    );
     return;
   }
 

@@ -4,10 +4,6 @@ import { describe, it, vi, expect, afterEach, beforeEach } from "vitest";
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-// Must mock console before import too
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 
 beforeEach(() => {
@@ -103,18 +99,13 @@ describe("getStudentInfo", () => {
 
 describe("postDiscordMessage", () => {
   describe("stub mode (no DISCORD_API_BASE)", () => {
-    it("logs to console instead of calling API", async () => {
+    it("skips API call in stub mode", async () => {
       await postDiscordMessage({
         channel: "test-channel",
         text: "hello",
       });
 
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[Discord stub] channel:",
-        "test-channel",
-      );
-      expect(consoleSpy).toHaveBeenCalledWith("[Discord stub] text:", "hello");
     });
 
     it("resolves without error", async () => {

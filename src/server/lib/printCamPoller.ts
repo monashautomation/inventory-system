@@ -9,6 +9,9 @@ import {
   prusaStatusResponseSchema,
   prusaJobResponseSchema,
 } from "@/server/lib/prusaSchemas";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "printCam" });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -213,9 +216,9 @@ async function fetchPrusaStatus(printer: {
       JSON.parse(statusResult.body),
     );
     if (!statusParsed.success) {
-      console.error(
-        `Prusa status response invalid for ${printer.ipAddress}:`,
-        statusParsed.error.issues,
+      logger.error(
+        { ip: printer.ipAddress, issues: statusParsed.error.issues },
+        "Prusa status response invalid",
       );
       return;
     }
@@ -227,9 +230,9 @@ async function fetchPrusaStatus(printer: {
         JSON.parse(jobResult.body),
       );
       if (!jobParsed.success) {
-        console.error(
-          `Prusa job response invalid for ${printer.ipAddress}:`,
-          jobParsed.error.issues,
+        logger.error(
+          { ip: printer.ipAddress, issues: jobParsed.error.issues },
+          "Prusa job response invalid",
         );
         return;
       }
@@ -268,9 +271,9 @@ async function fetchPrusaStatus(printer: {
       updatedAt: Date.now(),
     });
   } catch (err) {
-    console.error(
-      `[printCam] Prusa poll failed for ${printer.name} (${printer.ipAddress}):`,
-      err instanceof Error ? err.message : err,
+    logger.error(
+      { printer: printer.name, ip: printer.ipAddress, err },
+      "Prusa poll failed",
     );
     statusCache.set(printer.id, {
       printerId: printer.id,
@@ -506,10 +509,7 @@ export async function syncBambuPrinters(): Promise<void> {
 
 async function refreshPrinterListCache(): Promise<void> {
   await syncBambuPrinters().catch((err) =>
-    console.error(
-      "[printCam] Bambu sync failed:",
-      err instanceof Error ? err.message : err,
-    ),
+    logger.error({ err }, "Bambu sync failed"),
   );
   const fresh = await Promise.race([
     prisma.printer.findMany(),
@@ -528,7 +528,7 @@ async function pollAllStatuses(): Promise<void> {
   // Safety: reset a poll cycle that has been stuck longer than expected
   if (statusPollRunning) {
     if (Date.now() - statusPollStartedAt < STATUS_POLL_STUCK_MS) return;
-    console.warn("[printCam] Poll cycle stuck — forcing reset");
+    logger.warn("Poll cycle stuck — forcing reset");
     statusPollRunning = false;
   }
   statusPollRunning = true;
@@ -540,7 +540,7 @@ async function pollAllStatuses(): Promise<void> {
       Date.now() - printerListFetchedAt > PRINTER_LIST_TTL_MS
     ) {
       await refreshPrinterListCache().catch((err) => {
-        console.error("[printCam] Printer list refresh failed:", err);
+        logger.error({ err }, "Printer list refresh failed");
       });
     }
     if (printerListCache.length === 0) return;
