@@ -1,5 +1,6 @@
 import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
+import { getLocationTreeIds } from "@/server/lib/locationTree";
 import { z } from "zod";
 import { createItemInput, updateItemInput } from "@/server/schema/item.schema";
 import { itemCheckout } from "../utils/item/item.checkout";
@@ -232,19 +233,9 @@ export const itemRouter = router({
         sortOrder,
       } = input;
 
-      // If locationId is provided, get all descendant location IDs including itself
       let locationIds: string[] | undefined = undefined;
       if (locationId) {
-        const locations = await prisma.$queryRaw<{ id: string }[]>`
-        WITH RECURSIVE location_tree AS (
-          SELECT id FROM "Location" WHERE id = ${locationId}
-          UNION ALL
-          SELECT l.id FROM "Location" l
-          INNER JOIN location_tree lt ON l."parentId" = lt.id
-        )
-        SELECT id FROM location_tree
-      `;
-        locationIds = locations.map((loc) => loc.id);
+        locationIds = await getLocationTreeIds(locationId);
       }
 
       // If tagGroupId is provided, get all tags directly from it
@@ -355,16 +346,7 @@ export const itemRouter = router({
 
       let locationIds: string[] | undefined = undefined;
       if (locationId) {
-        const locations = await prisma.$queryRaw<{ id: string }[]>`
-        WITH RECURSIVE location_tree AS (
-          SELECT id FROM "Location" WHERE id = ${locationId}
-          UNION ALL
-          SELECT l.id FROM "Location" l
-          INNER JOIN location_tree lt ON l."parentId" = lt.id
-        )
-        SELECT id FROM location_tree
-      `;
-        locationIds = locations.map((loc) => loc.id);
+        locationIds = await getLocationTreeIds(locationId);
       }
 
       let tagIds: string[] | undefined = undefined;

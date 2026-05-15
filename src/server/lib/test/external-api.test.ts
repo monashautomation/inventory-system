@@ -12,14 +12,12 @@ import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
 
 beforeEach(() => {
   delete process.env.STUDENT_API_BASE;
-  delete process.env.DISCORD_API_BASE;
   delete process.env.STUDENT_API_KEY;
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   delete process.env.STUDENT_API_BASE;
-  delete process.env.DISCORD_API_BASE;
   delete process.env.STUDENT_API_KEY;
 });
 
@@ -126,9 +124,9 @@ describe("postDiscordMessage", () => {
     });
   });
 
-  describe("real API mode (DISCORD_API_BASE set)", () => {
+  describe("real API mode (STUDENT_API_BASE set)", () => {
     it("POSTs to correct URL with correct payload", async () => {
-      process.env.DISCORD_API_BASE = "https://discord-api.example.com";
+      process.env.STUDENT_API_BASE = "https://discord-api.example.com";
       process.env.STUDENT_API_KEY = "discord-key";
 
       fetchMock.mockResolvedValueOnce({ ok: true });
@@ -139,23 +137,20 @@ describe("postDiscordMessage", () => {
       });
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "https://discord-api.example.com/message",
+        "https://discord-api.example.com/afterhours",
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
             Authorization: "Bearer discord-key",
             "Content-Type": "application/json",
           }),
-          body: JSON.stringify({
-            channel: "after-hours",
-            text: "test message",
-          }),
+          body: JSON.stringify({ message: "test message" }),
         }),
       );
     });
 
     it("throws on non-OK response", async () => {
-      process.env.DISCORD_API_BASE = "https://discord-api.example.com";
+      process.env.STUDENT_API_BASE = "https://discord-api.example.com";
 
       fetchMock.mockResolvedValueOnce({
         ok: false,
