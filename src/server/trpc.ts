@@ -77,7 +77,9 @@ export const kioskProcedure = t.procedure.use(({ ctx, next }) => {
   } else {
     const token = ctx.req.headers.get("x-kiosk-token") ?? "";
     const secretBuf = Buffer.from(secret);
-    const tokenBuf = Buffer.from(token.padEnd(secret.length, "\0").slice(0, secret.length));
+    const tokenBuf = Buffer.from(
+      token.padEnd(secret.length, "\0").slice(0, secret.length),
+    );
     const lengthMatch = token.length === secret.length;
     if (!lengthMatch || !crypto.timingSafeEqual(tokenBuf, secretBuf)) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
