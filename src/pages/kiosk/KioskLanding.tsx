@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { useKiosk } from "@/contexts/kiosk-context";
@@ -16,10 +16,21 @@ import {
 import { toast } from "sonner";
 import { Loader2, CreditCard } from "lucide-react";
 
+function isAfterHoursNow(): boolean {
+  const h = new Date().getHours();
+  return h >= 18 || h < 8;
+}
+
 export default function KioskLanding() {
   const [studentId, setStudentId] = useState("");
   const [showNotionDialog, setShowNotionDialog] = useState(false);
   const [showNotRegisteredDialog, setShowNotRegisteredDialog] = useState(false);
+  const [afterHours, setAfterHours] = useState(isAfterHoursNow);
+
+  useEffect(() => {
+    const id = setInterval(() => setAfterHours(isAfterHoursNow()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const { setSession } = useKiosk();
   const navigate = useNavigate();
 
@@ -99,6 +110,15 @@ export default function KioskLanding() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {afterHours && (
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-yellow-400/15 border border-yellow-400/40 px-4 py-2 text-yellow-700 dark:text-yellow-300 text-sm font-medium shadow-sm">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-400" />
+          </span>
+          After Hours
+        </div>
+      )}
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center space-y-2">
