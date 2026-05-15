@@ -106,7 +106,6 @@ export const kioskRouter = router({
 
   getSupervisors: kioskProcedure.query(async () => {
     return prisma.user.findMany({
-      where: { role: { in: ["admin", "moderator"] } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
@@ -153,13 +152,12 @@ export const kioskRouter = router({
       if (input.supervisorId) {
         const supervisor = await prisma.user.findUnique({
           where: { id: input.supervisorId },
-          select: { name: true, role: true, studentNumber: true },
+          select: { name: true, studentNumber: true },
         });
-        if (!supervisor || !["admin", "moderator"].includes(supervisor.role)) {
+        if (!supervisor) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message:
-              "Selected supervisor is no longer a valid admin or moderator",
+            message: "Selected supervisor no longer exists",
           });
         }
         if (supervisor.studentNumber) {
