@@ -111,7 +111,7 @@ export function AddAssetForm({
           <FormControl>
             <NumberInput
               min={1}
-              max={20}
+              max={100}
               value={quantity}
               onValueChange={(v) => {
                 const next = v ?? 1;

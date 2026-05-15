@@ -33,7 +33,7 @@ import {
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
-} from "@/server/lib/bambuBuddy";
+} from "@/server/lib/bambuddy";
 import {
   getAllCachedStatuses,
   refreshPrintCamCache,
@@ -494,7 +494,7 @@ const dispatchToPrinter = async (params: {
   } catch (error) {
     if (error instanceof TRPCError) throw error;
     // Status check failure is non-fatal — proceed with dispatch
-    logger.error({ err: error }, "BambuBuddy status pre-check failed");
+    logger.error({ err: error }, "BamBuddy status pre-check failed");
   }
 
   try {
@@ -1167,7 +1167,7 @@ export const printRouter = router({
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
-            "Bambu printers are managed via BambuBuddy. Add them there, not here.",
+            "Bambu printers are managed via BamBuddy. Add them there, not here.",
         });
       }
       try {
@@ -1260,8 +1260,7 @@ export const printRouter = router({
       if (existing.type === "BAMBU") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message:
-            "Bambu printers are managed via BambuBuddy. Edit them there.",
+          message: "Bambu printers are managed via BamBuddy. Edit them there.",
         });
       }
 
@@ -2069,7 +2068,7 @@ export const printRouter = router({
 
       if (s === null) {
         state = "UNREACHABLE";
-        stateMessage = "Could not reach BambuBuddy.";
+        stateMessage = "Could not reach BamBuddy.";
       } else if (!s.connected) {
         state = "CONNECTING";
         stateMessage = "Connecting to Bambu printer…";

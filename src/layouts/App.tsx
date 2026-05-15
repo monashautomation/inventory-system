@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { OutageBanner } from "@/components/OutageBanner";
 
 interface Location {
   id: string;
@@ -71,32 +72,35 @@ export default function Layout() {
   }, [locationId]);
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <main className="m-4 w-full">
-        <div className="flex flex-row items-center gap-2">
-          {!hideSidebarTrigger && <SidebarTrigger />}
-          <Breadcrumb>
-            <BreadcrumbList>
-              {breadcrumbTrail?.map((loc, idx) => (
-                <div key={loc.id} className="flex items-center">
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    {idx === breadcrumbTrail.length - 1 ? (
-                      <BreadcrumbPage>{loc.name}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink asChild>
-                        <Link to={`/${loc.id}`}>{loc.name}</Link>
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                </div>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-        <Outlet />
-      </main>
-    </SidebarProvider>
+    <div className="flex min-h-screen flex-col">
+      <OutageBanner />
+      <SidebarProvider>
+        <AppSidebar />
+        <main className="m-4 w-full">
+          <div className="flex flex-row items-center gap-2">
+            {!hideSidebarTrigger && <SidebarTrigger />}
+            <Breadcrumb>
+              <BreadcrumbList>
+                {breadcrumbTrail?.map((loc, idx) => (
+                  <div key={loc.id} className="flex items-center">
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      {idx === breadcrumbTrail.length - 1 ? (
+                        <BreadcrumbPage>{loc.name}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink asChild>
+                          <Link to={`/${loc.id}`}>{loc.name}</Link>
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </div>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+          <Outlet />
+        </main>
+      </SidebarProvider>
+    </div>
   );
 }

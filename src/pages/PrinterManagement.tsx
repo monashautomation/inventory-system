@@ -306,7 +306,7 @@ export default function PrinterManagement() {
             <h1 className="text-3xl font-bold">Printer Management</h1>
             <p className="text-muted-foreground">
               Manage Prusa printers. Bambu printers are read-only — configure
-              them in BambuBuddy.
+              them in BamBuddy.
             </p>
           </div>
           <AddPrinterDialog onSuccess={() => void printersQuery.refetch()} />
@@ -370,7 +370,9 @@ export default function PrinterManagement() {
                             `Delete printer "${printer.name}"? This cannot be undone.`,
                           )
                         ) {
-                          deleteMutation.mutate({ printerId: printer.id });
+                          deleteMutation.mutate({
+                            printerId: printer.id,
+                          });
                         }
                       }}
                     >
@@ -385,12 +387,12 @@ export default function PrinterManagement() {
         )}
       </div>
 
-      {/* ── Bambu printers (read-only, from BambuBuddy API) ── */}
+      {/* ── Bambu printers (read-only, from BamBuddy API) ── */}
       <div className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold">Bambu Printers</h2>
           <p className="text-sm text-muted-foreground">
-            Managed by BambuBuddy. Edit printer configuration there.
+            Managed by BamBuddy. Edit printer configuration there.
           </p>
         </div>
 
@@ -403,14 +405,14 @@ export default function PrinterManagement() {
         ) : bambuQuery.isError ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              Could not reach BambuBuddy. Check <code>BAMBUDDY_ENDPOINT</code>{" "}
-              and <code>BAMBUDDY_API_KEY</code>.
+              Could not reach BamBuddy. Check <code>BAMBUDDY_ENDPOINT</code> and{" "}
+              <code>BAMBUDDY_API_KEY</code>.
             </CardContent>
           </Card>
         ) : bambuPrinters.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              No printers found in BambuBuddy.
+              No printers found in BamBuddy.
             </CardContent>
           </Card>
         ) : (
@@ -462,7 +464,7 @@ export default function PrinterManagement() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground pt-1 border-t">
-                    Read-only — configure in BambuBuddy
+                    Read-only — configure in BamBuddy
                   </p>
                 </CardContent>
               </Card>
