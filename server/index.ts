@@ -14,6 +14,11 @@ import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
 import {
+    handleStatusJson,
+    handleComponentsJson,
+    handleUnresolvedIncidents,
+} from "./health";
+import {
     initPrintCamPoller,
     syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
@@ -62,6 +67,11 @@ const app = new Hono();
 app.use(honoLogger());
 
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+
+// ─── Statuspage-compatible health API ─────────────────────────────────────────
+app.get("/api/v2/status.json", () => handleStatusJson());
+app.get("/api/v2/components.json", () => handleComponentsJson());
+app.get("/api/v2/incidents/unresolved.json", () => handleUnresolvedIncidents());
 
 // Apply CORS middleware
 app.use(
@@ -115,9 +125,6 @@ app.onError((err, c) => {
     logger.error({ err }, "Unexpected error");
     return c.json({ error: "Internal server error" }, 500);
 });
-
-// Health check endpoint
-app.get("/health", (c) => c.json({ status: "ok" }));
 
 // ─── Item image proxy ─────────────────────────────────────────────────────────
 app.get("/api/items/:id/image", async (c) => {
