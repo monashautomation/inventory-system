@@ -7,6 +7,9 @@ import {
     collectBambuMetrics,
     collectBambuPrometheusMetrics,
 } from "./metrics/bambuCollector";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "metrics" });
 
 function extractMetricNames(payload: string): Set<string> {
     const names = new Set<string>();
@@ -40,9 +43,7 @@ export async function collectMetrics(): Promise<string> {
     ).toLowerCase();
     const useBambuddyPrometheus = bambuSource === "prometheus";
 
-    console.log(
-        `[metrics] Scrape started — prusa=${prusaEnabled}, bambu=${bambuEnabled}, bambuSource=${bambuSource}`,
-    );
+    logger.debug({ prusaEnabled, bambuEnabled, bambuSource }, "Scrape started");
 
     const sections: Promise<string>[] = [];
 
@@ -51,9 +52,7 @@ export async function collectMetrics(): Promise<string> {
         const prusaStart = Date.now();
         sections.push(
             collectPrusaMetrics().then((result) => {
-                console.log(
-                    `[metrics] Prusa collected in ${Date.now() - prusaStart}ms — ${result.length} chars`,
-                );
+                logger.debug({ ms: Date.now() - prusaStart, chars: result.length }, "Prusa collected");
                 return result;
             }),
         );
@@ -63,9 +62,7 @@ export async function collectMetrics(): Promise<string> {
     const invStart = Date.now();
     sections.push(
         collectInventoryMetrics().then((result) => {
-            console.log(
-                `[metrics] Inventory collected in ${Date.now() - invStart}ms — ${result.length} chars`,
-            );
+            logger.debug({ ms: Date.now() - invStart, chars: result.length }, "Inventory collected");
             return result;
         }),
     );
@@ -77,7 +74,7 @@ export async function collectMetrics(): Promise<string> {
         if (result.status === "fulfilled" && result.value) {
             output.push(result.value.trimEnd());
         } else if (result.status === "rejected") {
-            console.error("[metrics] Collection error:", result.reason);
+            logger.error({ err: result.reason }, "Collection error");
             output.push(
                 `# ERROR: Metrics collection failed - ${result.reason}`,
             );
@@ -105,36 +102,30 @@ export async function collectMetrics(): Promise<string> {
                             bambuOutput = prometheusPayload;
                         } else {
                             // Collision — fall back to legacy collector so /metrics remains valid.
-                            console.warn(
-                                `[metrics] Bambuddy Prometheus metrics collision detected (${collisions.join(", ")}), falling back to legacy collector`,
-                            );
+                            logger.warn({ collisions }, "Bambuddy Prometheus metrics collision, falling back to legacy collector");
                             bambuOutput = collectBambuMetrics();
                         }
                     } else {
                         // Empty response — fall back to legacy collector.
-                        console.warn("[metrics] Bambuddy Prometheus payload empty, falling back to legacy collector");
+                        logger.warn("Bambuddy Prometheus payload empty, falling back to legacy collector");
                         bambuOutput = collectBambuMetrics();
                     }
                 } catch (error) {
-                    console.error("[metrics] Bambuddy Prometheus fetch failed, falling back to legacy collector:", error);
+                    logger.error({ err: error }, "Bambuddy Prometheus fetch failed, falling back to legacy collector");
                     bambuOutput = collectBambuMetrics();
                 }
             } else {
                 bambuOutput = collectBambuMetrics();
             }
 
-        console.log(
-            `[metrics] Bambu collected in ${Date.now() - bambuStart}ms — ${bambuOutput.length} chars`,
-        );
+        logger.debug({ ms: Date.now() - bambuStart, chars: bambuOutput.length }, "Bambu collected");
         if (bambuOutput) {
             output.push(bambuOutput.trimEnd());
         }
     }
 
     const total = output.join("\n\n") + "\n";
-    console.log(
-        `[metrics] Scrape complete in ${Date.now() - start}ms — ${total.length} chars total`,
-    );
+    logger.debug({ ms: Date.now() - start, chars: total.length }, "Scrape complete");
     return total;
 }
 

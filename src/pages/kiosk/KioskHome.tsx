@@ -4,6 +4,7 @@ import { useKiosk } from "@/contexts/kiosk-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LogOut, Clock, PackageCheck, PackagePlus } from "lucide-react";
+import logoText from "@/assets/Logo_Text_Horizontal.png";
 
 const actions = [
   {
@@ -39,13 +40,18 @@ export default function KioskHome() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <div className="border-b px-8 py-4 flex items-center justify-between">
+      <div className="border-b px-8 py-4 relative flex items-center justify-between">
         <div>
           <p className="text-lg font-semibold">{session.student.name}</p>
           <p className="text-sm text-muted-foreground">
             {session.student.email}
           </p>
         </div>
+        <img
+          src={logoText}
+          alt="Monash Automation"
+          className="h-8 w-auto absolute left-1/2 -translate-x-1/2"
+        />
         <Button variant="ghost" size="sm" onClick={logout}>
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out

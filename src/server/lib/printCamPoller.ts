@@ -5,6 +5,13 @@ import {
   listBambuddyPrinters,
 } from "@/server/lib/bambuBuddy";
 import { prisma } from "@/server/lib/prisma";
+import {
+  prusaStatusResponseSchema,
+  prusaJobResponseSchema,
+} from "@/server/lib/prusaSchemas";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "printCam" });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -165,26 +172,6 @@ async function fetchPrusaStatus(printer: {
     return;
   }
 
-  interface PrusaStatusResponse {
-    printer?: {
-      state?: string;
-      temp_nozzle?: number;
-      target_nozzle?: number;
-      temp_bed?: number;
-      target_bed?: number;
-    };
-    job?: { progress?: number; time_remaining?: number };
-  }
-  interface PrusaJobResponse {
-    progress?: number;
-    time_remaining?: number;
-    file?: {
-      name?: string;
-      display_name?: string;
-      meta?: { filament_type?: string; material?: string };
-    };
-  }
-
   try {
     const [statusResult, jobResult] = await Promise.all([
       prusaHttpGet(
@@ -225,11 +212,32 @@ async function fetchPrusaStatus(printer: {
       return;
     }
 
-    const status = JSON.parse(statusResult.body) as PrusaStatusResponse;
-    const job =
-      jobResult.status === 204
-        ? null
-        : (JSON.parse(jobResult.body) as PrusaJobResponse);
+    const statusParsed = prusaStatusResponseSchema.safeParse(
+      JSON.parse(statusResult.body),
+    );
+    if (!statusParsed.success) {
+      logger.error(
+        { ip: printer.ipAddress, issues: statusParsed.error.issues },
+        "Prusa status response invalid",
+      );
+      return;
+    }
+    const status = statusParsed.data;
+
+    let job = null;
+    if (jobResult.status !== 204) {
+      const jobParsed = prusaJobResponseSchema.safeParse(
+        JSON.parse(jobResult.body),
+      );
+      if (!jobParsed.success) {
+        logger.error(
+          { ip: printer.ipAddress, issues: jobParsed.error.issues },
+          "Prusa job response invalid",
+        );
+        return;
+      }
+      job = jobParsed.data;
+    }
 
     const state = status.printer?.state?.trim() ?? "UNKNOWN";
     const progressValue = status.job?.progress ?? job?.progress ?? null;
@@ -263,9 +271,9 @@ async function fetchPrusaStatus(printer: {
       updatedAt: Date.now(),
     });
   } catch (err) {
-    console.error(
-      `[printCam] Prusa poll failed for ${printer.name} (${printer.ipAddress}):`,
-      err instanceof Error ? err.message : err,
+    logger.error(
+      { printer: printer.name, ip: printer.ipAddress, err },
+      "Prusa poll failed",
     );
     statusCache.set(printer.id, {
       printerId: printer.id,
@@ -501,10 +509,7 @@ export async function syncBambuPrinters(): Promise<void> {
 
 async function refreshPrinterListCache(): Promise<void> {
   await syncBambuPrinters().catch((err) =>
-    console.error(
-      "[printCam] Bambu sync failed:",
-      err instanceof Error ? err.message : err,
-    ),
+    logger.error({ err }, "Bambu sync failed"),
   );
   const fresh = await Promise.race([
     prisma.printer.findMany(),
@@ -523,7 +528,7 @@ async function pollAllStatuses(): Promise<void> {
   // Safety: reset a poll cycle that has been stuck longer than expected
   if (statusPollRunning) {
     if (Date.now() - statusPollStartedAt < STATUS_POLL_STUCK_MS) return;
-    console.warn("[printCam] Poll cycle stuck — forcing reset");
+    logger.warn("Poll cycle stuck — forcing reset");
     statusPollRunning = false;
   }
   statusPollRunning = true;
@@ -535,7 +540,7 @@ async function pollAllStatuses(): Promise<void> {
       Date.now() - printerListFetchedAt > PRINTER_LIST_TTL_MS
     ) {
       await refreshPrinterListCache().catch((err) => {
-        console.error("[printCam] Printer list refresh failed:", err);
+        logger.error({ err }, "Printer list refresh failed");
       });
     }
     if (printerListCache.length === 0) return;

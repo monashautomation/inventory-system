@@ -2,6 +2,9 @@ import { router, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { getBaseUrl } from "@/lib/utils";
+import { logger as rootLogger } from "@/server/lib/logger";
+
+const logger = rootLogger.child({ module: "router:qr" });
 
 export const qrRouter = router({
   generateUrl: userProcedure
@@ -58,9 +61,8 @@ export const qrRouter = router({
           ItemRecords: true,
         },
       });
-      console.log(item);
       if (item) {
-        console.log("Item sent");
+        logger.debug({ itemId: item.id }, "Item found");
         return item;
       } else
         return {

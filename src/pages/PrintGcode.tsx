@@ -40,6 +40,11 @@ export default function PrintGcode() {
       toast.success(
         result.dispatchResponse ?? "File uploaded and print started.",
       );
+      if (result.s3Warning) {
+        toast.warning(
+          "Print started, but the file could not be backed up. Reprinting this job will require re-uploading the file.",
+        );
+      }
       void handleFileSelected(null);
       void jobsQuery.refetch();
     },
