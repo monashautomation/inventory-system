@@ -149,11 +149,11 @@ export const kioskRouter = router({
         });
       }
 
-      let supervisorName = "None declared";
+      let supervisorMention = "None declared";
       if (input.supervisorId) {
         const supervisor = await prisma.user.findUnique({
           where: { id: input.supervisorId },
-          select: { name: true, role: true },
+          select: { name: true, role: true, studentNumber: true },
         });
         if (!supervisor || !["admin", "moderator"].includes(supervisor.role)) {
           throw new TRPCError({
@@ -162,7 +162,18 @@ export const kioskRouter = router({
               "Selected supervisor is no longer a valid admin or moderator",
           });
         }
-        supervisorName = supervisor.name;
+        if (supervisor.studentNumber) {
+          try {
+            const supervisorInfo = await getStudentInfo(
+              supervisor.studentNumber,
+            );
+            supervisorMention = `<@${supervisorInfo.discordId}>`;
+          } catch {
+            supervisorMention = escapeDiscordMarkdown(supervisor.name);
+          }
+        } else {
+          supervisorMention = escapeDiscordMarkdown(supervisor.name);
+        }
       }
 
       const date = new Intl.DateTimeFormat("en-AU", {
@@ -209,9 +220,7 @@ export const kioskRouter = router({
         `Day: ${date}`,
         `Time: ${startTimeText} - ${endTimeText}`,
         `Activity: ${input.reason === "Other" ? escapeDiscordMarkdown(input.customReason!) : input.reason}`,
-        ...(input.supervisorId
-          ? [`Supervisor: ${escapeDiscordMarkdown(supervisorName)}`]
-          : []),
+        ...(input.supervisorId ? [`Supervisor: ${supervisorMention}`] : []),
       ].join("\n");
 
       await postDiscordMessage({
