@@ -414,104 +414,106 @@ export default function Dashboard() {
     });
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        {session?.user.name && (
-          <p className="text-muted-foreground">
-            Welcome back, {session.user.name}.
-          </p>
+    <div className="min-h-screen bg-background">
+      <div className="p-6 md:p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          {session?.user.name && (
+            <p className="text-muted-foreground">
+              Welcome back, {session.user.name}.
+            </p>
+          )}
+        </div>
+
+        {/* User stat cards */}
+        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+          <StatCard
+            title="My Pending Requests"
+            value={myPending?.count ?? 0}
+            icon={ShoppingBag}
+            highlight={myPending?.count ? "text-amber-500" : undefined}
+          />
+          <StatCard
+            title="My Active Loans"
+            value={loans?.length ?? 0}
+            icon={Package}
+          />
+          <StatCard
+            title="Unread Notifications"
+            value={unread?.count ?? 0}
+            icon={Bell}
+            highlight={unread?.count ? "text-blue-500" : undefined}
+          />
+        </div>
+
+        {/* User cards */}
+        <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <MyRequestsCard />
+          <MyLoansCard />
+        </div>
+
+        {/* Admin section */}
+        {isAdmin && (
+          <>
+            <div className="mb-6 flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                Admin Overview
+              </span>
+              <Separator className="flex-1" />
+            </div>
+
+            <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatCard
+                title="Pending Requests"
+                value={statusCounts?.PENDING ?? 0}
+                icon={Clock}
+                highlight={statusCounts?.PENDING ? "text-amber-500" : undefined}
+              />
+              <StatCard
+                title="Ordered"
+                value={statusCounts?.ORDERED ?? 0}
+                icon={ShoppingBag}
+                highlight="text-blue-500"
+              />
+              <StatCard
+                title="Total Items"
+                value={inventoryStats?.total ?? 0}
+                icon={Archive}
+              />
+              <StatCard
+                title="Consumable Units"
+                value={inventoryStats?.available ?? 0}
+                icon={PackageSearch}
+              />
+            </div>
+
+            <div className="mb-4 grid gap-4 md:grid-cols-2">
+              <AdminPendingRequestsCard />
+              <LowStockCard />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <AuditLogCard />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">
+                    Inventory by Location
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartBarDynamic
+                    data={inventoryByLocation ?? []}
+                    dataKey="itemCount"
+                    nameKey="locationName"
+                    color="#10b981"
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </>
         )}
       </div>
-
-      {/* User stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
-        <StatCard
-          title="My Pending Requests"
-          value={myPending?.count ?? 0}
-          icon={ShoppingBag}
-          highlight={myPending?.count ? "text-amber-500" : undefined}
-        />
-        <StatCard
-          title="My Active Loans"
-          value={loans?.length ?? 0}
-          icon={Package}
-        />
-        <StatCard
-          title="Unread Notifications"
-          value={unread?.count ?? 0}
-          icon={Bell}
-          highlight={unread?.count ? "text-blue-500" : undefined}
-        />
-      </div>
-
-      {/* User cards */}
-      <div className="mb-8 grid gap-4 md:grid-cols-2">
-        <MyRequestsCard />
-        <MyLoansCard />
-      </div>
-
-      {/* Admin section */}
-      {isAdmin && (
-        <>
-          <div className="mb-6 flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              Admin Overview
-            </span>
-            <Separator className="flex-1" />
-          </div>
-
-          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard
-              title="Pending Requests"
-              value={statusCounts?.PENDING ?? 0}
-              icon={Clock}
-              highlight={statusCounts?.PENDING ? "text-amber-500" : undefined}
-            />
-            <StatCard
-              title="Ordered"
-              value={statusCounts?.ORDERED ?? 0}
-              icon={ShoppingBag}
-              highlight="text-blue-500"
-            />
-            <StatCard
-              title="Total Items"
-              value={inventoryStats?.total ?? 0}
-              icon={Archive}
-            />
-            <StatCard
-              title="Consumable Units"
-              value={inventoryStats?.available ?? 0}
-              icon={PackageSearch}
-            />
-          </div>
-
-          <div className="mb-4 grid gap-4 md:grid-cols-2">
-            <AdminPendingRequestsCard />
-            <LowStockCard />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <AuditLogCard />
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Inventory by Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartBarDynamic
-                  data={inventoryByLocation ?? []}
-                  dataKey="itemCount"
-                  nameKey="locationName"
-                  color="#10b981"
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
     </div>
   );
 }
