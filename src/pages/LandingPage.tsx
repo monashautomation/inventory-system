@@ -10,7 +10,6 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import landingimage from "../assets/landingimage.svg";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -38,14 +37,6 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
-          </div>
-
-          <div className="flex justify-center">
-            <img
-              src={landingimage}
-              alt="Inventory Management Hero"
-              className="w-full max-w-lg h-auto"
-            />
           </div>
         </div>
       </div>
