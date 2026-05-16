@@ -4,7 +4,8 @@ import { useKiosk } from "@/contexts/kiosk-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LogOut, Clock, PackageCheck, PackagePlus } from "lucide-react";
-import logoText from "@/assets/Logo_Text_Horizontal.png";
+import logoTextDark from "@/assets/Horizontal White & Blue.svg";
+import logoTextLight from "@/assets/Horizontal Black & Blue.svg";
 
 const actions = [
   {
@@ -48,9 +49,14 @@ export default function KioskHome() {
           </p>
         </div>
         <img
-          src={logoText}
+          src={logoTextLight}
           alt="Monash Automation"
-          className="h-8 w-auto absolute left-1/2 -translate-x-1/2"
+          className="h-8 w-auto absolute left-1/2 -translate-x-1/2 dark:hidden"
+        />
+        <img
+          src={logoTextDark}
+          alt="Monash Automation"
+          className="h-8 w-auto absolute left-1/2 -translate-x-1/2 hidden dark:block"
         />
         <Button variant="ghost" size="sm" onClick={logout}>
           <LogOut className="w-4 h-4 mr-2" />

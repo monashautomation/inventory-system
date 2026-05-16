@@ -38,14 +38,6 @@ export default function Landing() {
               </Button>
             </div>
           </div>
-
-          <div className="flex justify-center">
-            <img
-              src="/landinghero.svg"
-              alt="Inventory Management Hero"
-              className="w-full max-w-lg h-auto"
-            />
-          </div>
         </div>
       </div>
 

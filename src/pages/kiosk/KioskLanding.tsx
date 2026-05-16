@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import logo from "@/assets/logo.png";
+import logoLight from "@/assets/Horizontal Black & Blue.svg";
+import logoDark from "@/assets/Horizontal White & Blue.svg";
 import { OutageBanner } from "@/components/OutageBanner";
 
 function isAfterHoursNow(): boolean {
@@ -122,48 +123,59 @@ export default function KioskLanding() {
           After Hours
         </div>
       )}
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
-        <div className="w-full max-w-sm space-y-8">
-          <div className="text-center space-y-2">
-            <div className="flex justify-center mb-6">
-              <img src={logo} alt="Monash Automation" className="h-16 w-auto" />
+      <div className="min-h-screen bg-background flex flex-col p-8">
+        <div className="flex justify-center pt-8">
+          <img
+            src={logoLight}
+            alt="Monash Automation"
+            className="h-12 w-auto dark:hidden"
+          />
+          <img
+            src={logoDark}
+            alt="Monash Automation"
+            className="h-12 w-auto hidden dark:block"
+          />
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-full max-w-sm space-y-8">
+            <div className="text-center space-y-2">
+              <h1 className="text-3xl font-bold">Kiosk Terminal</h1>
+              <p className="text-muted-foreground text-sm">
+                Tap your card or enter your student ID
+              </p>
             </div>
-            <h1 className="text-3xl font-bold">Kiosk Terminal</h1>
-            <p className="text-muted-foreground text-sm">
-              Tap your card or enter your student ID
-            </p>
-          </div>
 
-          {/* TODO: replace input with NFC tap event listener when hardware available */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              autoFocus
-              placeholder="Student ID"
-              value={studentId}
-              onChange={(e) => {
-                const digits = e.target.value.replace(/\D/g, "");
-                setStudentId(digits);
-              }}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="text-center text-lg h-14"
-              disabled={lookup.isPending}
-            />
-            <Button
-              type="submit"
-              className="w-full h-12 text-base"
-              disabled={!studentId.trim() || lookup.isPending}
-            >
-              {lookup.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Looking up...
-                </>
-              ) : (
-                "Continue"
-              )}
-            </Button>
-          </form>
+            {/* TODO: replace input with NFC tap event listener when hardware available */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Input
+                autoFocus
+                placeholder="Student ID"
+                value={studentId}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "");
+                  setStudentId(digits);
+                }}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="text-center text-lg h-14"
+                disabled={lookup.isPending}
+              />
+              <Button
+                type="submit"
+                className="w-full h-12 text-base"
+                disabled={!studentId.trim() || lookup.isPending}
+              >
+                {lookup.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Looking up...
+                  </>
+                ) : (
+                  "Continue"
+                )}
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
     </>

@@ -14,7 +14,7 @@ import {
   PackageCheck,
   QrCode,
 } from "lucide-react";
-import logoText from "@/assets/Logo_Text_Horizontal.png";
+import logoText from "@/assets/Horizontal White & Blue.svg";
 import { QRScanner } from "@/components/ui/qr-scanner";
 
 export default function KioskCheckin() {

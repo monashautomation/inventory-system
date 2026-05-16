@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Clock } from "lucide-react";
-import logoText from "@/assets/Logo_Text_Horizontal.png";
+import logoTextDark from "@/assets/Horizontal White & Blue.svg";
+import logoTextLight from "@/assets/Horizontal Black & Blue.svg";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -108,9 +109,14 @@ export default function KioskAfterHours() {
           <h1 className="text-lg font-semibold">Log After Hours Access</h1>
         </div>
         <img
-          src={logoText}
+          src={logoTextLight}
           alt="Monash Automation"
-          className="h-7 w-auto ml-auto"
+          className="h-7 w-auto ml-auto dark:hidden"
+        />
+        <img
+          src={logoTextDark}
+          alt="Monash Automation"
+          className="h-7 w-auto ml-auto hidden dark:block"
         />
       </div>
 
