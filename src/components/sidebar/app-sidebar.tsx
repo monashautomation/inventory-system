@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logoHorizontalDark from "@/assets/Horizontal White & Blue.svg";
+import logoHorizontalLight from "@/assets/Horizontal Black & Blue.svg";
 
 import {
   Box,
@@ -74,7 +76,18 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarContent className="min-h-full">
         <SidebarGroup className="min-h-full">
-          <SidebarGroupLabel>Inventory System</SidebarGroupLabel>
+          <div className="px-2 py-2">
+            <img
+              src={logoHorizontalLight}
+              alt="Monash Automation"
+              className="h-7 w-auto dark:hidden"
+            />
+            <img
+              src={logoHorizontalDark}
+              alt="Monash Automation"
+              className="h-7 w-auto hidden dark:block"
+            />
+          </div>
           <div className="flex flex-col justify-between grow">
             <SidebarGroupContent>
               <SidebarMenu>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
-import logoHorizontal from "@/assets/Logo_Text_Horizontal.png";
+import logoHorizontal from "@/assets/Horizontal White & Blue.svg";
 
 interface PrinterCamData {
   printerId: string;
