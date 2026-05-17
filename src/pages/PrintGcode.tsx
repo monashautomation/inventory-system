@@ -1,4 +1,5 @@
-import { type FormEvent, useState, useRef, useCallback } from "react";
+import { type FormEvent, useState, useRef, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { parse3mf, type ThreeMfFilamentInfo } from "@/lib/parse-3mf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ const readFileAsBase64 = (file: File): Promise<string> =>
   });
 
 export default function PrintGcode() {
+  const navigate = useNavigate();
   const printersQuery = trpc.print.getPrinters.useQuery();
   const jobsQuery = trpc.print.listMyPrintJobs.useQuery();
 
@@ -149,12 +151,18 @@ export default function PrintGcode() {
     !!statusQuery.data &&
     BLOCKED_PRINTER_STATES.has(statusQuery.data.state.toUpperCase());
 
-  const printerOptions = printersQuery.data ?? [];
+  const printerOptions = (printersQuery.data ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
   const selectedPrinter =
     printerOptions.find((printer) => printer.ipAddress === selectedPrinterIp) ??
     null;
   const isBambu = selectedPrinter?.type === "BAMBU";
   isBambuRef.current = isBambu;
+
+  useEffect(() => {
+    if (isBambu) {
+      void navigate("/print-queue?open=upload");
+    }
+  }, [isBambu, navigate]);
 
   // AMS tray data from live printer status (excludes external spool tray 254)
   const amsTrays = (statusQuery.data?.amsTrays ?? []).filter(

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { PrintQueuePanel } from "@/components/print-queue/PrintQueuePanel";
@@ -17,9 +18,20 @@ const STATUS_TABS = [
 type TabValue = (typeof STATUS_TABS)[number]["value"];
 
 export default function PrintQueue() {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openParam = searchParams.get("open");
+  const [initialArchiveSource] = useState<"upload" | undefined>(
+    openParam === "upload" ? "upload" : undefined,
+  );
+  const [modalOpen, setModalOpen] = useState(openParam === "upload");
   const [activeTab, setActiveTab] = useState<TabValue>(undefined);
   const utils = trpc.useUtils();
+
+  useEffect(() => {
+    if (openParam === "upload") {
+      setSearchParams({}, { replace: true });
+    }
+  }, [openParam, setSearchParams]);
 
   function handleQueued() {
     void utils.printQueue.listQueue.invalidate();
@@ -64,6 +76,7 @@ export default function PrintQueue() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onQueued={handleQueued}
+        initialArchiveSource={initialArchiveSource}
       />
     </div>
   );

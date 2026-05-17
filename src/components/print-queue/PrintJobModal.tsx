@@ -51,6 +51,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onQueued: () => void;
+  initialArchiveSource?: ArchiveSource;
 }
 
 function ColorSwatch({
@@ -85,12 +86,13 @@ function StepIndicator({ current, steps }: { current: Step; steps: Step[] }) {
   );
 }
 
-export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
+export function PrintJobModal({ open, onOpenChange, onQueued, initialArchiveSource }: Props) {
   const [step, setStep] = useState<Step>("archive");
-  const [archiveSource, setArchiveSource] = useState<ArchiveSource>("existing");
+  const [archiveSource, setArchiveSource] = useState<ArchiveSource>(initialArchiveSource ?? "existing");
   const [archiveId, setArchiveId] = useState<number | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [targetingMode, setTargetingMode] = useState<TargetingMode>("any");
@@ -219,10 +221,11 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
   useEffect(() => {
     if (!open) {
       setStep("archive");
-      setArchiveSource("existing");
+      setArchiveSource(initialArchiveSource ?? "existing");
       setArchiveId(null);
       setUploadFile(null);
       setUploading(false);
+      setIsDraggingFile(false);
       setTargetingMode("any");
       setSelectedModel("");
       setSelectedPrinterId(null);
@@ -546,13 +549,37 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
                   }}
                 />
                 {!uploadFile ? (
-                  <button
-                    className="w-full border-2 border-dashed border-border rounded-md p-8 text-center text-sm text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+                  <div
+                    className={`w-full border-2 border-dashed rounded-md p-8 text-center text-sm transition-colors cursor-pointer ${
+                      isDraggingFile
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+                    }`}
                     onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDraggingFile(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDraggingFile(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDraggingFile(false);
+                      const f = e.dataTransfer.files[0] ?? null;
+                      if (f) {
+                        setUploadFile(f);
+                        setArchiveId(null);
+                      }
+                    }}
                   >
                     <Upload className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    Click to select a .3mf file
-                  </button>
+                    {isDraggingFile ? "Drop to upload" : "Drag & drop or click to select a .3mf file"}
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 min-w-0">
                     <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
