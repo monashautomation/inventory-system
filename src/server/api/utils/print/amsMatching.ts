@@ -7,6 +7,7 @@ export interface AmsSlot {
   trayType: string | null;
   trayColor: string | null;
   trayIdName: string | null;
+  traySubBrands: string | null;
   remain: number;
 }
 
@@ -14,6 +15,7 @@ export interface FilamentConstraint {
   slotIndex: number;
   type?: string | null;
   colorHex?: string | null;
+  colorName?: string | null;
 }
 
 export interface SlotMatch {
@@ -32,6 +34,7 @@ export function buildAmsSlots(amsUnits: AMSUnit[]): AmsSlot[] {
       trayType: tray.tray_type ?? null,
       trayColor: tray.tray_color ?? null,
       trayIdName: tray.tray_id_name ?? null,
+      traySubBrands: tray.tray_sub_brands ?? null,
       remain: tray.remain,
     })),
   );

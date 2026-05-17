@@ -115,9 +115,7 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
     trpc.printQueue.listPrinters.useQuery(undefined, { enabled: open });
 
   const printerModels = [
-    ...new Set(
-      (printers ?? []).filter((p) => p.model).map((p) => p.model as string),
-    ),
+    ...new Set((printers ?? []).filter((p) => p.model).map((p) => p.model!)),
   ];
 
   const { data: filamentReqs, isLoading: reqsLoading } =
@@ -306,8 +304,10 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
         const sel = slotSelections.get(i);
         return {
           slotIndex: i,
+          slotId: req.slot_id,
           type: req.type,
           colorHex: sel?.mode === "color" ? (sel.colorHex ?? null) : null,
+          colorName: sel?.mode === "color" ? (sel.colorName ?? null) : null,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
@@ -813,11 +813,17 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
                                             .tray_color ?? "")
                                         : ((opt as (typeof printerColors)[0])
                                             .trayColor ?? "");
-                                      const name = isMultiPrinter
+                                      const subBrands = isMultiPrinter
+                                        ? (opt as (typeof multiColors)[0])
+                                            .tray_sub_brands
+                                        : (opt as (typeof printerColors)[0])
+                                            .traySubBrands;
+                                      const idName = isMultiPrinter
                                         ? (opt as (typeof multiColors)[0])
                                             .tray_id_name
                                         : (opt as (typeof printerColors)[0])
                                             .trayIdName;
+                                      const name = subBrands ?? idName;
                                       const remain = isMultiPrinter
                                         ? (opt as (typeof multiColors)[0])
                                             .remain
@@ -855,8 +861,15 @@ export function PrintJobModal({ open, onOpenChange, onQueued }: Props) {
                                           ) : (
                                             <span className="w-4 h-4 rounded-sm border border-dashed border-border shrink-0" />
                                           )}
-                                          <span className="flex-1 text-left truncate min-w-0">
-                                            {name ?? type}
+                                          <span className="flex-1 text-left min-w-0 overflow-hidden">
+                                            <span className="block truncate">
+                                              {name ?? type}
+                                            </span>
+                                            {subBrands && idName && (
+                                              <span className="block truncate text-xs opacity-50 font-mono">
+                                                {idName}
+                                              </span>
+                                            )}
                                           </span>
                                           <span className="opacity-60 shrink-0 text-xs">
                                             {remain}%

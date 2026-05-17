@@ -27,8 +27,10 @@ const logger = rootLogger.child({ module: "router:printQueue" });
 
 const filamentConstraintSchema = z.object({
   slotIndex: z.number().int().min(0),
+  slotId: z.number().int().positive().nullable().optional(),
   type: z.string().nullable().optional(),
   colorHex: z.string().nullable().optional(),
+  colorName: z.string().nullable().optional(),
 });
 
 const targetingSchema = z.discriminatedUnion("mode", [
@@ -195,6 +197,10 @@ export const printQueueRouter = router({
       let requiredFilamentTypes: string[] | null = null;
       let manualStart = options.manualStart;
 
+      let filamentOverrides:
+        | { slot_id: number; type: string; color: string }[]
+        | null = null;
+
       if (filamentConstraints.length > 0) {
         const typeConstraints = filamentConstraints.filter(
           (c) => c.type && !c.colorHex,
@@ -238,13 +244,41 @@ export const printQueueRouter = router({
             manualStart = true;
           }
         }
+
+        // For model/any targeting, pass color preferences as filament_overrides so
+        // Bambuddy's dispatch engine can honour them when it assigns a printer.
+        if (colorConstraints.length > 0 && targeting.mode !== "printer") {
+          filamentOverrides = colorConstraints
+            .filter((c) => c.slotId != null && c.type && c.colorHex)
+            .map((c) => ({
+              slot_id: c.slotId!,
+              type: c.type!,
+              color: `#${c.colorHex!.replace(/^#/, "").slice(0, 6).toUpperCase()}`,
+              ...(c.colorName ? { color_name: c.colorName } : {}),
+              force_color_match: true,
+            }));
+          if (filamentOverrides.length === 0) filamentOverrides = null;
+        }
       }
+
+      logger.info(
+        {
+          targetingMode: targeting.mode,
+          totalConstraints: filamentConstraints.length,
+          colorConstraintCount: filamentConstraints.filter((c) => c.colorHex)
+            .length,
+          filamentOverrides,
+          amsMappingResult,
+        },
+        "addToQueue: constraint resolution",
+      );
 
       const queuePayload = {
         archive_id: archiveId,
         printer_id: targeting.mode === "printer" ? targeting.printerId : null,
         target_model: targeting.mode === "model" ? targeting.model : null,
         required_filament_types: requiredFilamentTypes,
+        filament_overrides: filamentOverrides,
         ams_mapping: amsMappingResult,
         manual_start: manualStart,
         bed_levelling: options.bedLevelling,
@@ -257,7 +291,13 @@ export const printQueueRouter = router({
       try {
         const result = await addToQueue(queuePayload);
         logger.info(
-          { queueItemId: result.id, archiveId, userId: ctx.user.id },
+          {
+            queueItemId: result.id,
+            archiveId,
+            userId: ctx.user.id,
+            storedFilamentOverrides: result.filament_overrides,
+            storedAmsMapping: result.ams_mapping,
+          },
           "Print queued",
         );
         return { queueItem: result, unmatchedSlots: unmatched };

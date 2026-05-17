@@ -429,6 +429,7 @@ export interface AvailableFilamentSlot {
   tray_type: string | null;
   tray_color: string | null;
   tray_id_name: string | null;
+  tray_sub_brands: string | null;
   remain: number;
 }
 
@@ -568,6 +569,7 @@ async function collectFilamentSlotsFromStatuses(opts?: {
           tray_type: tray.tray_type ?? null,
           tray_color: tray.tray_color ?? null,
           tray_id_name: tray.tray_id_name ?? null,
+          tray_sub_brands: tray.tray_sub_brands ?? null,
           remain: tray.remain,
         });
       }
