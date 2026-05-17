@@ -65,9 +65,7 @@ function CustomTooltip({
             style={{ background: entry.color }}
           />
           <span className="text-muted-foreground">{entry.name}</span>
-          <span className="ml-auto font-medium">
-            {(entry.value).toFixed(1)}g
-          </span>
+          <span className="ml-auto font-medium">{entry.value.toFixed(1)}g</span>
         </div>
       ))}
     </div>
