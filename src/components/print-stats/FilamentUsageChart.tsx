@@ -44,7 +44,7 @@ function CustomTooltip({
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ name: string; value: number; color: string }>;
+  payload?: { name: string; value: number; color: string }[];
   label?: string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
@@ -66,7 +66,7 @@ function CustomTooltip({
           />
           <span className="text-muted-foreground">{entry.name}</span>
           <span className="ml-auto font-medium">
-            {(entry.value as number).toFixed(1)}g
+            {(entry.value).toFixed(1)}g
           </span>
         </div>
       ))}

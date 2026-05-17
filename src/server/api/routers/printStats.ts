@@ -177,12 +177,12 @@ export const printStatsRouter = router({
           allItems.push(...page.items);
         }
 
-        type LeaderEntry = {
+        interface LeaderEntry {
           type: string;
           color: string | null;
           printCount: number;
           totalGrams: number;
-        };
+        }
         const byKey = new Map<string, LeaderEntry>();
 
         for (const entry of allItems) {
