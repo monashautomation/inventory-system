@@ -186,6 +186,7 @@ model User {
     ConsumablePurchases   ConsumableRequest[]  @relation("RequestPurchasedBy")
     Notifications         Notification[]       @relation("UserNotifications")
     AuditLogs             AuditLog[]           @relation("AuditActor")
+    PrintQueueSubmissions PrintQueueSubmission[]
 
     role          String    @default("user")
     banned        Boolean?
@@ -340,6 +341,17 @@ enum AuditAction {
     REQUEST_STATUS_CHANGED
     REQUEST_CANCELLED
     REQUEST_RECEIVED
+}
+
+model PrintQueueSubmission {
+    id                  String   @id @default(uuid())
+    bambuddyQueueItemId Int      @unique
+    user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId              String
+    createdAt           DateTime @default(now())
+
+    @@index([userId])
+    @@index([bambuddyQueueItemId])
 }
 
 model AuditLog {

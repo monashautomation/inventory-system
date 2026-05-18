@@ -2,6 +2,7 @@ import { router, userProcedure, adminProcedure } from "@/server/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logger as rootLogger } from "@/server/lib/logger";
+import { prisma } from "@/server/lib/prisma";
 import {
   listBambuddyPrinters,
   getBambuddyPrinterStatus,
@@ -290,6 +291,9 @@ export const printQueueRouter = router({
 
       try {
         const result = await addToQueue(queuePayload);
+        await prisma.printQueueSubmission.create({
+          data: { bambuddyQueueItemId: result.id, userId: ctx.user.id },
+        });
         logger.info(
           {
             queueItemId: result.id,

@@ -209,7 +209,9 @@ export async function uploadArchive(
     const form = new FormData();
     form.append(
       "file",
-      new Blob([fileBuffer], { type: "application/octet-stream" }),
+      new Blob([new Uint8Array(fileBuffer)], {
+        type: "application/octet-stream",
+      }),
       filename,
     );
 

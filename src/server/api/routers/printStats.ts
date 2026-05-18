@@ -9,6 +9,7 @@ import {
   getFilamentCatalog,
   listBambuddyPrinters,
 } from "@/server/lib/bambuddy";
+import { prisma } from "@/server/lib/prisma";
 
 const logger = rootLogger.child({ module: "router:printStats" });
 
@@ -60,7 +61,7 @@ export const printStatsRouter = router({
     )
     .query(async ({ input }) => {
       try {
-        return await getPrintLog({
+        const result = await getPrintLog({
           search: input.search,
           printerId: input.printerId,
           createdByUsername: input.username,
@@ -70,6 +71,24 @@ export const printStatsRouter = router({
           limit: input.pageSize,
           offset: input.page * input.pageSize,
         });
+
+        const itemIds = result.items.map((e) => e.id);
+        const submissions = await prisma.printQueueSubmission.findMany({
+          where: { bambuddyQueueItemId: { in: itemIds } },
+          include: { user: { select: { name: true } } },
+        });
+        const userByItemId = new Map(
+          submissions.map((s) => [s.bambuddyQueueItemId, s.user.name]),
+        );
+
+        return {
+          ...result,
+          items: result.items.map((e) => ({
+            ...e,
+            created_by_username:
+              userByItemId.get(e.id) ?? e.created_by_username,
+          })),
+        };
       } catch (err) {
         logger.error({ err }, "Failed to get print log");
         throw new TRPCError({
