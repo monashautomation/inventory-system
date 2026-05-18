@@ -286,22 +286,27 @@ export default function PrintGcode() {
             <div className="space-y-2">
               <Label>{isBambu ? "G-code 3MF file" : "G-code file"}</Label>
               <div
-                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer
+                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors
                   ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 bg-muted/50 hover:bg-muted"
+                    !selectedPrinterIp
+                      ? "border-muted-foreground/15 bg-muted/30 opacity-60 cursor-not-allowed"
+                      : isDragging
+                        ? "border-primary bg-primary/5 cursor-pointer"
+                        : "border-muted-foreground/25 bg-muted/50 hover:bg-muted cursor-pointer"
                   }
                 `}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
+                onDragOver={selectedPrinterIp ? handleDragOver : undefined}
+                onDragLeave={selectedPrinterIp ? handleDragLeave : undefined}
+                onDrop={selectedPrinterIp ? handleDrop : undefined}
+                onClick={() =>
+                  selectedPrinterIp && fileInputRef.current?.click()
+                }
               >
                 <input
                   type="file"
                   ref={fileInputRef}
                   className="hidden"
+                  disabled={!selectedPrinterIp}
                   accept={
                     isBambu
                       ? ".3mf,application/octet-stream"
@@ -352,20 +357,30 @@ export default function PrintGcode() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-4">
-                    <div className="rounded-full bg-background p-4 shadow-sm border border-border/50 transition-transform group-hover:scale-105">
+                    <div className="rounded-full bg-background p-4 shadow-sm border border-border/50">
                       <Upload className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <div className="space-y-1">
-                      <div className="text-sm font-medium">
-                        Drag and drop your file here, or{" "}
-                        <span className="text-primary hover:underline">
-                          click to browse
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Supports{" "}
-                        {isBambu ? ".gcode.3mf" : ".gcode, .gc, .gco, .bgcode"}
-                      </div>
+                      {!selectedPrinterIp ? (
+                        <div className="text-sm text-muted-foreground">
+                          Select a printer first
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-medium">
+                            Drag and drop your file here, or{" "}
+                            <span className="text-primary hover:underline">
+                              click to browse
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Supports{" "}
+                            {isBambu
+                              ? ".gcode.3mf"
+                              : ".gcode, .gc, .gco, .bgcode"}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
