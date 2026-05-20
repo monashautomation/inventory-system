@@ -273,10 +273,10 @@ function AmsSlotEditDialog({
       : parseTrayColor(slot.tray.tray_color),
   );
   const [tempMin, setTempMin] = useState(
-    slot.tray.nozzle_temp_min ?? DEFAULT_TEMPS["PLA"]!.min,
+    slot.tray.nozzle_temp_min ?? DEFAULT_TEMPS.PLA.min,
   );
   const [tempMax, setTempMax] = useState(
-    slot.tray.nozzle_temp_max ?? DEFAULT_TEMPS["PLA"]!.max,
+    slot.tray.nozzle_temp_max ?? DEFAULT_TEMPS.PLA.max,
   );
 
   const applyTypeDefaults = (type: string) => {
