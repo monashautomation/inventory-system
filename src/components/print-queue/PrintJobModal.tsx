@@ -469,13 +469,14 @@ export function PrintJobModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg w-full overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="max-w-lg w-full flex flex-col max-h-[85vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Queue Print Job</DialogTitle>
         </DialogHeader>
 
         <StepIndicator current={step} steps={STEPS} />
 
+        <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
         {/* ── Step: archive ── */}
         {step === "archive" && (
           <div className="space-y-3">
@@ -1156,8 +1157,10 @@ export function PrintJobModal({
           </div>
         )}
 
+        </div>{/* end scroll wrapper */}
+
         {/* ── Navigation ── */}
-        <div className="flex justify-between pt-2">
+        <div className="flex justify-between pt-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
