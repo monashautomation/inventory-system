@@ -1136,7 +1136,9 @@ export function PrintJobModal({
               <div className="flex justify-between gap-3 min-w-0 pt-1 border-t border-border/50">
                 <span className="text-muted-foreground shrink-0">Project</span>
                 <span className="font-medium break-words text-right min-w-0">
-                  {selectedProject?.name ?? "—"}
+                  {selectedProjectId === "__personal__"
+                    ? "Personal / No project"
+                    : (selectedProject?.name ?? "—")}
                 </span>
               </div>
               <div className="flex justify-between gap-3 min-w-0">
@@ -1176,7 +1178,7 @@ export function PrintJobModal({
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={addMutation.isPending || !selectedProject}
+              disabled={addMutation.isPending || !selectedProjectId}
             >
               {addMutation.isPending ? "Queuing…" : "Queue print"}
             </Button>

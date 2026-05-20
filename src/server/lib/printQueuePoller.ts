@@ -1,5 +1,5 @@
 import { prisma } from "@/server/lib/prisma";
-import { getQueueItem } from "@/server/lib/bambuddy";
+import { getQueueItem, getPrintLog } from "@/server/lib/bambuddy";
 import { logger } from "@/server/lib/logger";
 
 const TERMINAL_STATUSES = new Set([
@@ -97,12 +97,16 @@ async function runPoll(): Promise<void> {
 
       if (!TERMINAL_STATUSES.has(item.status)) continue;
 
+      const capturedStartedAt = item.started_at
+        ? new Date(item.started_at)
+        : null;
+
       await prisma.printQueueSubmission.update({
         where: { id: submission.id },
         data: {
           capturedStatus: item.status,
           capturedAt: new Date(),
-          capturedStartedAt: item.started_at ? new Date(item.started_at) : null,
+          capturedStartedAt,
           capturedCompletedAt: item.completed_at
             ? new Date(item.completed_at)
             : null,
@@ -113,6 +117,47 @@ async function runPoll(): Promise<void> {
           capturedPrinterName: item.printer_name ?? null,
         },
       });
+
+      // Resolve the Bambuddy print log entry ID for reliable history matching.
+      if (capturedStartedAt && item.printer_id) {
+        try {
+          const startMs = capturedStartedAt.getTime();
+          const fromDate = new Date(startMs - 5 * 60_000)
+            .toISOString()
+            .slice(0, 10);
+          const toDate = new Date(startMs + 5 * 60_000)
+            .toISOString()
+            .slice(0, 10);
+          const logResult = await getPrintLog({
+            printerId: item.printer_id,
+            dateFrom: fromDate,
+            dateTo: toDate,
+            limit: 20,
+          });
+          const LOG_MATCH_MS = 5 * 60_000;
+          const logEntry = logResult.items.find(
+            (e) =>
+              e.started_at !== null &&
+              Math.abs(new Date(e.started_at).getTime() - startMs) <=
+                LOG_MATCH_MS,
+          );
+          if (logEntry) {
+            await prisma.printQueueSubmission.update({
+              where: { id: submission.id },
+              data: { capturedLogEntryId: logEntry.id },
+            });
+            logger.debug(
+              { submissionId: submission.id, logEntryId: logEntry.id },
+              "Linked submission to print log entry",
+            );
+          }
+        } catch (logErr) {
+          logger.warn(
+            { logErr, submissionId: submission.id },
+            "Could not resolve print log entry ID",
+          );
+        }
+      }
 
       logger.info(
         {

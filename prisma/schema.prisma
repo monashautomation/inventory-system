@@ -369,11 +369,13 @@ model PrintQueueSubmission {
     capturedFilamentColor   String?
     capturedPrinterId       Int?
     capturedPrinterName     String?
+    capturedLogEntryId      Int?
 
     @@index([userId])
     @@index([bambuddyQueueItemId])
     @@index([capturedStatus])
     @@index([capturedStartedAt, capturedPrinterId])
+    @@index([capturedLogEntryId])
 }
 
 model AuditLog {

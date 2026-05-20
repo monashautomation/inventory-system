@@ -72,13 +72,15 @@ export const printStatsRouter = router({
           offset: input.page * input.pageSize,
         });
 
-        // Match queue submissions to print log entries using capturedStartedAt
-        // + capturedPrinterId (within a 60s window). This is reliable because
-        // both fields record the exact moment the printer started the job.
-        const MATCH_WINDOW_MS = 60_000;
         const submissions = await prisma.printQueueSubmission.findMany({
-          where: { capturedStartedAt: { not: null } },
+          where: {
+            OR: [
+              { capturedLogEntryId: { not: null } },
+              { capturedStartedAt: { not: null } },
+            ],
+          },
           select: {
+            capturedLogEntryId: true,
             capturedStartedAt: true,
             capturedPrinterId: true,
             notionProjectName: true,
@@ -87,20 +89,32 @@ export const printStatsRouter = router({
           },
         });
 
+        // Primary: exact match on log entry ID (reliable).
+        // Fallback: 60s time-window match for older submissions without a log entry ID.
+        const byLogEntryId = new Map(
+          submissions
+            .filter((s) => s.capturedLogEntryId != null)
+            .map((s) => [s.capturedLogEntryId!, s]),
+        );
+        const FALLBACK_WINDOW_MS = 60_000;
+
         return {
           ...result,
           items: result.items.map((e) => {
-            if (!e.started_at || !e.printer_id) {
-              return { ...e, notionProjectName: null, personalUse: null };
+            let sub = byLogEntryId.get(e.id);
+
+            if (!sub && e.started_at && e.printer_id) {
+              const logStartMs = new Date(e.started_at).getTime();
+              sub = submissions.find(
+                (s) =>
+                  s.capturedLogEntryId == null &&
+                  s.capturedPrinterId === e.printer_id &&
+                  s.capturedStartedAt !== null &&
+                  Math.abs(s.capturedStartedAt.getTime() - logStartMs) <=
+                    FALLBACK_WINDOW_MS,
+              );
             }
-            const logStartMs = new Date(e.started_at).getTime();
-            const sub = submissions.find(
-              (s) =>
-                s.capturedPrinterId === e.printer_id &&
-                s.capturedStartedAt !== null &&
-                Math.abs(s.capturedStartedAt.getTime() - logStartMs) <=
-                  MATCH_WINDOW_MS,
-            );
+
             return {
               ...e,
               created_by_username: sub?.user.name ?? e.created_by_username,
