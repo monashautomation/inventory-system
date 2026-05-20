@@ -200,9 +200,7 @@ async function runPoll(): Promise<void> {
       const fromDate = new Date(startMs - 15 * 60_000)
         .toISOString()
         .slice(0, 10);
-      const toDate = new Date(startMs + 15 * 60_000)
-        .toISOString()
-        .slice(0, 10);
+      const toDate = new Date(startMs + 15 * 60_000).toISOString().slice(0, 10);
       const logResult = await getPrintLog({
         printerId: sub.capturedPrinterId!,
         dateFrom: fromDate,
@@ -226,7 +224,10 @@ async function runPoll(): Promise<void> {
         );
       }
     } catch (retryErr) {
-      logger.warn({ retryErr, submissionId: sub.id }, "Retry log entry link failed");
+      logger.warn(
+        { retryErr, submissionId: sub.id },
+        "Retry log entry link failed",
+      );
     }
   }
 }

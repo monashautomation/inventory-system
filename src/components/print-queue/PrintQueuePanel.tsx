@@ -379,23 +379,24 @@ export function PrintQueuePanel({ statusFilter }: PrintQueuePanelProps) {
               const ra = rank(a.status);
               const rb = rank(b.status);
               if (ra !== rb) return ra - rb;
-              if (ra === 0 || ra === 1) return (a.position ?? 0) - (b.position ?? 0);
+              if (ra === 0 || ra === 1)
+                return (a.position ?? 0) - (b.position ?? 0);
               // terminal: most recent first
               return (b.completed_at ?? b.created_at ?? "").localeCompare(
                 a.completed_at ?? a.created_at ?? "",
               );
             })
             .map((item) => (
-            <QueueItemRow
-              key={item.id}
-              item={item}
-              isAdmin={isAdmin}
-              onStart={(id) => startMutation.mutate({ itemId: id })}
-              onStop={(id) => stopMutation.mutate({ itemId: id })}
-              onCancel={(id) => cancelMutation.mutate({ itemId: id })}
-              onDelete={(id) => deleteMutation.mutate({ itemId: id })}
-            />
-          ))}
+              <QueueItemRow
+                key={item.id}
+                item={item}
+                isAdmin={isAdmin}
+                onStart={(id) => startMutation.mutate({ itemId: id })}
+                onStop={(id) => stopMutation.mutate({ itemId: id })}
+                onCancel={(id) => cancelMutation.mutate({ itemId: id })}
+                onDelete={(id) => deleteMutation.mutate({ itemId: id })}
+              />
+            ))}
         </div>
       )}
     </div>

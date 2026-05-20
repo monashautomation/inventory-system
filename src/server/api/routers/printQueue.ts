@@ -332,7 +332,10 @@ export const printQueueRouter = router({
               filament_overrides: filamentOverrides,
             });
             logger.info(
-              { queueItemId: result.id, storedFilamentOverrides: result.filament_overrides },
+              {
+                queueItemId: result.id,
+                storedFilamentOverrides: result.filament_overrides,
+              },
               "filament_overrides applied via PATCH",
             );
           } catch (patchErr) {

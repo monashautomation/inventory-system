@@ -548,7 +548,10 @@ export function PrintJobModal({
                           {archive.print_name ?? archive.filename}
                         </span>
                         {archive.sliced_for_model && (
-                          <Badge variant="secondary" className="text-xs shrink-0">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs shrink-0"
+                          >
                             {archive.sliced_for_model}
                           </Badge>
                         )}
@@ -781,7 +784,8 @@ export function PrintJobModal({
               targetingMode !== "any" &&
               (() => {
                 const isMultiPrinter = targetingMode !== "printer";
-                const multiLoading = targetingMode === "model" && !modelFilaments;
+                const multiLoading =
+                  targetingMode === "model" && !modelFilaments;
                 const printerLoading =
                   targetingMode === "printer" && !printerAms;
 
@@ -1008,7 +1012,6 @@ export function PrintJobModal({
                   </div>
                 );
               })()}
-
           </div>
         )}
 
