@@ -26,9 +26,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-// DataTable requires id: string
 interface PrintLogRow {
   id: string;
+  logEntryId: number | null;
+  archiveId: number | null;
   printName: string | null;
   printerName: string | null;
   printerId: number | null;
@@ -39,7 +40,6 @@ interface PrintLogRow {
   filamentType: string | null;
   filamentColor: string | null;
   filamentUsedGrams: number | null;
-  thumbnailPath: string | null;
   createdByUsername: string | null;
   notionProjectName: string | null;
   personalUse: boolean | null;
@@ -54,8 +54,11 @@ function statusIcon(status: string) {
       return <XCircle className="h-4 w-4 text-red-500" />;
     case "cancelled":
       return <Ban className="h-4 w-4 text-orange-500" />;
+    case "pending":
     case "printing":
       return <Clock className="h-4 w-4 text-blue-500" />;
+    case "missed":
+      return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
     default:
       return <HelpCircle className="h-4 w-4 text-muted-foreground" />;
   }
@@ -69,8 +72,11 @@ function statusColor(status: string): string {
       return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
     case "cancelled":
       return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400";
+    case "pending":
     case "printing":
       return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+    case "missed":
+      return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
     default:
       return "";
   }
@@ -96,7 +102,8 @@ const STATUS_OPTIONS = [
   { value: "completed", label: "Completed" },
   { value: "failed", label: "Failed" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "printing", label: "Printing" },
+  { value: "pending", label: "Pending" },
+  { value: "missed", label: "Missed" },
 ];
 
 export default function PrintHistory() {
@@ -120,33 +127,35 @@ export default function PrintHistory() {
   );
 
   const rows: PrintLogRow[] = (data?.items ?? []).map((e) => ({
-    id: String(e.id),
-    printName: e.print_name,
-    printerName: e.printer_name,
-    printerId: e.printer_id,
+    id: e.id,
+    logEntryId: e.logEntryId,
+    archiveId: e.archiveId,
+    printName: e.printName,
+    printerName: e.printerName,
+    printerId: e.printerId,
     status: e.status,
-    startedAt: e.started_at,
-    completedAt: e.completed_at,
-    durationSeconds: e.duration_seconds,
-    filamentType: e.filament_type,
-    filamentColor: e.filament_color,
-    filamentUsedGrams: e.filament_used_grams,
-    thumbnailPath: e.thumbnail_path,
-    createdByUsername: e.created_by_username,
-    notionProjectName:
-      (e as { notionProjectName?: string | null }).notionProjectName ?? null,
-    personalUse: (e as { personalUse?: boolean | null }).personalUse ?? null,
-    createdAt: e.created_at,
+    startedAt: e.startedAt,
+    completedAt: e.completedAt,
+    durationSeconds: e.durationSeconds,
+    filamentType: e.filamentType,
+    filamentColor: e.filamentColor,
+    filamentUsedGrams: e.filamentUsedGrams,
+    createdByUsername: e.createdByUsername,
+    notionProjectName: e.notionProjectName,
+    personalUse: e.personalUse,
+    createdAt: e.createdAt,
   }));
 
   const columns: ColumnDef<PrintLogRow, unknown>[] = [
     {
-      accessorKey: "createdAt",
+      accessorKey: "startedAt",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Date" />
       ),
       cell: ({ row }) => {
-        const d = new Date(row.original.createdAt);
+        const d = new Date(
+          row.original.startedAt ?? row.original.createdAt,
+        );
         return (
           <div className="group relative cursor-default p-2">
             <span className="text-sm text-muted-foreground">
@@ -178,14 +187,16 @@ export default function PrintHistory() {
       ),
       cell: ({ row }) => (
         <div className="flex items-center gap-2 p-2">
-          <img
-            src={`/api/bambu-thumbnail/${row.original.id}`}
-            alt=""
-            className="h-8 w-8 rounded object-cover flex-shrink-0 bg-muted"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
+          {row.original.logEntryId != null && (
+            <img
+              src={`/api/bambu-thumbnail/${row.original.logEntryId}`}
+              alt=""
+              className="h-8 w-8 rounded object-cover flex-shrink-0 bg-muted"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
           <span className="font-medium truncate max-w-[180px]">
             {row.original.printName ?? "Unnamed"}
           </span>

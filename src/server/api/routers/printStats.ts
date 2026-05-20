@@ -4,12 +4,13 @@ import { z } from "zod";
 import { logger as rootLogger } from "@/server/lib/logger";
 import {
   getArchiveStats,
-  getPrintLog,
   getAllUsageHistory,
   getFilamentCatalog,
   listBambuddyPrinters,
+  getPrintLog,
 } from "@/server/lib/bambuddy";
 import { prisma } from "@/server/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 const logger = rootLogger.child({ module: "router:printStats" });
 
@@ -52,7 +53,6 @@ export const printStatsRouter = router({
         page: z.number().int().min(0).default(0),
         pageSize: z.number().int().min(1).max(100).default(20),
         printerId: z.number().int().positive().optional(),
-        username: z.string().optional(),
         status: z.string().optional(),
         search: z.string().optional(),
         dateFrom: z.string().optional(),
@@ -61,75 +61,78 @@ export const printStatsRouter = router({
     )
     .query(async ({ input }) => {
       try {
-        const result = await getPrintLog({
-          search: input.search,
-          printerId: input.printerId,
-          createdByUsername: input.username,
-          status: input.status,
-          dateFrom: input.dateFrom,
-          dateTo: input.dateTo,
-          limit: input.pageSize,
-          offset: input.page * input.pageSize,
-        });
+        const where: Prisma.PrintQueueSubmissionWhereInput = {};
 
-        const submissions = await prisma.printQueueSubmission.findMany({
-          where: {
-            OR: [
-              { capturedLogEntryId: { not: null } },
-              { capturedStartedAt: { not: null } },
-            ],
-          },
-          select: {
-            capturedLogEntryId: true,
-            capturedStartedAt: true,
-            capturedPrinterId: true,
-            notionProjectName: true,
-            personalUse: true,
-            user: { select: { name: true } },
-          },
-        });
+        if (input.search) {
+          where.archiveName = { contains: input.search, mode: "insensitive" };
+        }
+        if (input.printerId != null) {
+          where.capturedPrinterId = input.printerId;
+        }
+        if (input.status && input.status !== "all") {
+          // "pending" maps to no captured status yet
+          where.capturedStatus =
+            input.status === "pending" ? null : input.status;
+        }
+        if (input.dateFrom || input.dateTo) {
+          const dateFilter: Prisma.DateTimeNullableFilter = {};
+          if (input.dateFrom) dateFilter.gte = new Date(input.dateFrom);
+          if (input.dateTo) {
+            const d = new Date(input.dateTo);
+            d.setHours(23, 59, 59, 999);
+            dateFilter.lte = d;
+          }
+          // Filter on start time when known, else fall back to submission date
+          where.OR = [
+            { capturedStartedAt: dateFilter },
+            {
+              capturedStartedAt: null,
+              createdAt: dateFilter as Prisma.DateTimeFilter,
+            },
+          ];
+        }
 
-        // Primary: exact match on log entry ID (reliable).
-        // Fallback: 60s time-window match for older submissions without a log entry ID.
-        const byLogEntryId = new Map(
-          submissions
-            .filter((s) => s.capturedLogEntryId != null)
-            .map((s) => [s.capturedLogEntryId!, s]),
-        );
-        // Queue started_at (dispatch) vs log started_at (printer actually starts)
-        // can differ by several minutes due to bed levelling, heating, etc.
-        const FALLBACK_WINDOW_MS = 10 * 60_000;
+        const [total, submissions] = await Promise.all([
+          prisma.printQueueSubmission.count({ where }),
+          prisma.printQueueSubmission.findMany({
+            where,
+            include: { user: { select: { name: true } } },
+            orderBy: { createdAt: "desc" },
+            skip: input.page * input.pageSize,
+            take: input.pageSize,
+          }),
+        ]);
 
         return {
-          ...result,
-          items: result.items.map((e) => {
-            let sub = byLogEntryId.get(e.id);
-
-            if (!sub && e.started_at && e.printer_id) {
-              const logStartMs = new Date(e.started_at).getTime();
-              // Find the closest-matching submission within the window (not just first).
-              let bestSub: (typeof submissions)[0] | undefined;
-              let bestDiff = Infinity;
-              for (const s of submissions) {
-                if (s.capturedLogEntryId != null) continue;
-                if (s.capturedPrinterId !== e.printer_id) continue;
-                if (s.capturedStartedAt === null) continue;
-                const diff = Math.abs(
-                  s.capturedStartedAt.getTime() - logStartMs,
-                );
-                if (diff <= FALLBACK_WINDOW_MS && diff < bestDiff) {
-                  bestDiff = diff;
-                  bestSub = s;
-                }
-              }
-              sub = bestSub;
-            }
+          total,
+          items: submissions.map((sub) => {
+            const durationSeconds =
+              sub.capturedStartedAt && sub.capturedCompletedAt
+                ? Math.round(
+                    (sub.capturedCompletedAt.getTime() -
+                      sub.capturedStartedAt.getTime()) /
+                      1000,
+                  )
+                : null;
 
             return {
-              ...e,
-              created_by_username: sub?.user.name ?? e.created_by_username,
-              notionProjectName: sub?.notionProjectName ?? null,
-              personalUse: sub?.personalUse ?? null,
+              id: sub.id,
+              logEntryId: sub.capturedLogEntryId,
+              archiveId: sub.archiveId,
+              printName: sub.archiveName,
+              printerName: sub.capturedPrinterName,
+              printerId: sub.capturedPrinterId,
+              status: sub.capturedStatus ?? "pending",
+              startedAt: sub.capturedStartedAt?.toISOString() ?? null,
+              completedAt: sub.capturedCompletedAt?.toISOString() ?? null,
+              durationSeconds,
+              filamentType: sub.capturedFilamentType,
+              filamentColor: sub.capturedFilamentColor,
+              filamentUsedGrams: sub.capturedFilamentGrams,
+              createdByUsername: sub.user.name,
+              notionProjectName: sub.notionProjectName,
+              personalUse: sub.personalUse,
+              createdAt: sub.createdAt.toISOString(),
             };
           }),
         };

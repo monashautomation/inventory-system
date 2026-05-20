@@ -31,6 +31,7 @@ import {
   stopBambuddyPrint,
   stopBambuddyCameraStream,
   clearBambuddyBuildPlate,
+  configureAmsSlot,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -1062,6 +1063,38 @@ export const printRouter = router({
     .mutation(async ({ input }) => {
       await clearBambuddyBuildPlate(input.bambuddyId);
       return { success: true, message: "Build plate marked as cleared." };
+    }),
+
+  configureAmsSlot: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        trayInfoIdx: z.string(),
+        trayType: z.string().min(1, "Filament type is required"),
+        traySubBrands: z.string(),
+        trayColor: z
+          .string()
+          .regex(/^[0-9A-Fa-f]{8}$/, "Color must be 8-char RRGGBBAA hex"),
+        nozzleTempMin: z.number().int().min(0).max(500),
+        nozzleTempMax: z.number().int().min(0).max(500),
+        nozzleDiameter: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await configureAmsSlot(input.bambuddyId, {
+        amsId: input.amsId,
+        trayId: input.trayId,
+        trayInfoIdx: input.trayInfoIdx,
+        trayType: input.trayType,
+        traySubBrands: input.traySubBrands,
+        trayColor: input.trayColor,
+        nozzleTempMin: input.nozzleTempMin,
+        nozzleTempMax: input.nozzleTempMax,
+        nozzleDiameter: input.nozzleDiameter,
+      });
+      return { message: "AMS slot configured." };
     }),
 
   getPrinterMonitoringOptions: userProcedure

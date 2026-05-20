@@ -261,22 +261,24 @@ export default function PrintStats() {
                     key={entry.id}
                     className="flex items-center gap-3 px-4 py-2.5"
                   >
-                    <img
-                      src={`/api/bambu-thumbnail/${entry.id}`}
-                      alt=""
-                      className="h-8 w-8 rounded object-cover flex-shrink-0 bg-muted"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
+                    {entry.logEntryId != null && (
+                      <img
+                        src={`/api/bambu-thumbnail/${entry.logEntryId}`}
+                        alt=""
+                        className="h-8 w-8 rounded object-cover flex-shrink-0 bg-muted"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {entry.print_name ?? "Unnamed print"}
+                        {entry.printName ?? "Unnamed print"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {entry.printer_name ?? "Unknown printer"}
-                        {entry.created_by_username
-                          ? ` · ${entry.created_by_username}`
+                        {entry.printerName ?? "Unknown printer"}
+                        {entry.createdByUsername
+                          ? ` · ${entry.createdByUsername}`
                           : ""}
                       </p>
                     </div>
@@ -295,9 +297,9 @@ export default function PrintStats() {
                       >
                         {entry.status}
                       </Badge>
-                      {entry.filament_used_grams != null && (
+                      {entry.filamentUsedGrams != null && (
                         <span className="text-xs text-muted-foreground">
-                          {formatGrams(entry.filament_used_grams)}
+                          {formatGrams(entry.filamentUsedGrams)}
                         </span>
                       )}
                     </div>

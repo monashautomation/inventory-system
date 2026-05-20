@@ -755,12 +755,15 @@ export interface SpoolUsageHistoryEntry {
 
 export interface FilamentCatalogEntry {
   id: number;
+  name: string;
   type: string;
   brand: string | null;
   color: string | null;
   color_hex: string | null;
   cost_per_kg: number | null;
   density: number | null;
+  print_temp_min: number | null;
+  print_temp_max: number | null;
 }
 
 // ─── Print Stats API ──────────────────────────────────────────────────────────
@@ -838,6 +841,41 @@ export async function getFilamentCatalog(): Promise<FilamentCatalogEntry[]> {
   });
   await checkResponse(res, "get filament catalog");
   return res.json() as Promise<FilamentCatalogEntry[]>;
+}
+
+export interface AmsSlotConfig {
+  amsId: number;
+  trayId: number;
+  trayInfoIdx: string;
+  trayType: string;
+  traySubBrands: string;
+  trayColor: string;
+  nozzleTempMin: number;
+  nozzleTempMax: number;
+  nozzleDiameter?: string;
+}
+
+export async function configureAmsSlot(
+  printerId: number,
+  config: AmsSlotConfig,
+): Promise<void> {
+  const { endpoint, apiKey } = getConfig();
+  const params = new URLSearchParams({
+    tray_info_idx: config.trayInfoIdx,
+    tray_type: config.trayType,
+    tray_sub_brands: config.traySubBrands,
+    tray_color: config.trayColor,
+    nozzle_temp_min: String(config.nozzleTempMin),
+    nozzle_temp_max: String(config.nozzleTempMax),
+    nozzle_diameter: config.nozzleDiameter ?? "0.4",
+  });
+  const url = `${endpoint}/api/v1/printers/${printerId}/slots/${config.amsId}/${config.trayId}/configure?${params.toString()}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: headers(apiKey),
+    signal: AbortSignal.timeout(15_000),
+  });
+  await checkResponse(res, "configure AMS slot");
 }
 
 export function getPrintLogThumbnailUrl(entryId: number): string {
