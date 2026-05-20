@@ -122,19 +122,19 @@ async function runPoll(): Promise<void> {
       if (capturedStartedAt && item.printer_id) {
         try {
           const startMs = capturedStartedAt.getTime();
-          const fromDate = new Date(startMs - 5 * 60_000)
+          const fromDate = new Date(startMs - 15 * 60_000)
             .toISOString()
             .slice(0, 10);
-          const toDate = new Date(startMs + 5 * 60_000)
+          const toDate = new Date(startMs + 15 * 60_000)
             .toISOString()
             .slice(0, 10);
           const logResult = await getPrintLog({
             printerId: item.printer_id,
             dateFrom: fromDate,
             dateTo: toDate,
-            limit: 20,
+            limit: 50,
           });
-          const LOG_MATCH_MS = 5 * 60_000;
+          const LOG_MATCH_MS = 10 * 60_000;
           const logEntry = logResult.items.find(
             (e) =>
               e.started_at !== null &&
@@ -173,6 +173,60 @@ async function runPoll(): Promise<void> {
         { err, submissionId: submission.id },
         "Failed to poll queue item stats",
       );
+    }
+  }
+
+  // Retry log entry linking for submissions captured but missing capturedLogEntryId.
+  // The log entry may not have been available when the item was first captured.
+  const recentCutoff = new Date(Date.now() - 7 * 24 * 60 * 60_000); // 7 days
+  const unlinked = await prisma.printQueueSubmission.findMany({
+    where: {
+      capturedLogEntryId: null,
+      capturedStartedAt: { not: null },
+      capturedPrinterId: { not: null },
+      capturedAt: { gte: recentCutoff },
+    },
+    select: {
+      id: true,
+      capturedStartedAt: true,
+      capturedPrinterId: true,
+    },
+    take: 10,
+  });
+
+  for (const sub of unlinked) {
+    try {
+      const startMs = sub.capturedStartedAt!.getTime();
+      const fromDate = new Date(startMs - 15 * 60_000)
+        .toISOString()
+        .slice(0, 10);
+      const toDate = new Date(startMs + 15 * 60_000)
+        .toISOString()
+        .slice(0, 10);
+      const logResult = await getPrintLog({
+        printerId: sub.capturedPrinterId!,
+        dateFrom: fromDate,
+        dateTo: toDate,
+        limit: 50,
+      });
+      const LOG_MATCH_MS = 10 * 60_000;
+      const logEntry = logResult.items.find(
+        (e) =>
+          e.started_at !== null &&
+          Math.abs(new Date(e.started_at).getTime() - startMs) <= LOG_MATCH_MS,
+      );
+      if (logEntry) {
+        await prisma.printQueueSubmission.update({
+          where: { id: sub.id },
+          data: { capturedLogEntryId: logEntry.id },
+        });
+        logger.debug(
+          { submissionId: sub.id, logEntryId: logEntry.id },
+          "Retried and linked submission to print log entry",
+        );
+      }
+    } catch (retryErr) {
+      logger.warn({ retryErr, submissionId: sub.id }, "Retry log entry link failed");
     }
   }
 }

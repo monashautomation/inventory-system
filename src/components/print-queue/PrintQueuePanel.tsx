@@ -368,7 +368,24 @@ export function PrintQueuePanel({ statusFilter }: PrintQueuePanelProps) {
 
       {!isLoading && queueItems && queueItems.length > 0 && (
         <div>
-          {queueItems.map((item) => (
+          {[...queueItems]
+            .sort((a, b) => {
+              const rank = (s: string | null | undefined) => {
+                const st = s?.toLowerCase();
+                if (st === "printing") return 0;
+                if (st === "pending") return 1;
+                return 2;
+              };
+              const ra = rank(a.status);
+              const rb = rank(b.status);
+              if (ra !== rb) return ra - rb;
+              if (ra === 0 || ra === 1) return (a.position ?? 0) - (b.position ?? 0);
+              // terminal: most recent first
+              return (b.completed_at ?? b.created_at ?? "").localeCompare(
+                a.completed_at ?? a.created_at ?? "",
+              );
+            })
+            .map((item) => (
             <QueueItemRow
               key={item.id}
               item={item}

@@ -96,7 +96,9 @@ export const printStatsRouter = router({
             .filter((s) => s.capturedLogEntryId != null)
             .map((s) => [s.capturedLogEntryId!, s]),
         );
-        const FALLBACK_WINDOW_MS = 60_000;
+        // Queue started_at (dispatch) vs log started_at (printer actually starts)
+        // can differ by several minutes due to bed levelling, heating, etc.
+        const FALLBACK_WINDOW_MS = 10 * 60_000;
 
         return {
           ...result,
@@ -105,14 +107,22 @@ export const printStatsRouter = router({
 
             if (!sub && e.started_at && e.printer_id) {
               const logStartMs = new Date(e.started_at).getTime();
-              sub = submissions.find(
-                (s) =>
-                  s.capturedLogEntryId == null &&
-                  s.capturedPrinterId === e.printer_id &&
-                  s.capturedStartedAt !== null &&
-                  Math.abs(s.capturedStartedAt.getTime() - logStartMs) <=
-                    FALLBACK_WINDOW_MS,
-              );
+              // Find the closest-matching submission within the window (not just first).
+              let bestSub: (typeof submissions)[0] | undefined;
+              let bestDiff = Infinity;
+              for (const s of submissions) {
+                if (s.capturedLogEntryId != null) continue;
+                if (s.capturedPrinterId !== e.printer_id) continue;
+                if (s.capturedStartedAt === null) continue;
+                const diff = Math.abs(
+                  s.capturedStartedAt.getTime() - logStartMs,
+                );
+                if (diff <= FALLBACK_WINDOW_MS && diff < bestDiff) {
+                  bestDiff = diff;
+                  bestSub = s;
+                }
+              }
+              sub = bestSub;
             }
 
             return {
