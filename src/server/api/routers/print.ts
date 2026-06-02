@@ -32,6 +32,13 @@ import {
   stopBambuddyCameraStream,
   clearBambuddyBuildPlate,
   configureAmsSlot,
+  getInventoryAssignments,
+  updateSpoolWeightUsed,
+  listInventorySpools,
+  listFilamentTypes,
+  createInventorySpool,
+  assignSpoolToSlot,
+  unassignSpoolFromSlot,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -1095,6 +1102,147 @@ export const printRouter = router({
         nozzleDiameter: input.nozzleDiameter,
       });
       return { message: "AMS slot configured." };
+    }),
+
+  updateFilamentRemain: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        remainPercent: z.number().int().min(0).max(100),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const assignments = await getInventoryAssignments(input.bambuddyId);
+      const assignment = assignments.find(
+        (a) => a.ams_id === input.amsId && a.tray_id === input.trayId,
+      );
+      if (!assignment?.spool) {
+        return {
+          message:
+            "No spool assigned to this slot — remaining not updated in inventory.",
+          noSpool: true,
+        };
+      }
+      const { label_weight } = assignment.spool;
+      const weightUsed = label_weight * (1 - input.remainPercent / 100);
+      await updateSpoolWeightUsed(assignment.spool_id, weightUsed);
+      return {
+        message: "Filament remaining updated in BamBuddy inventory.",
+        noSpool: false,
+      };
+    }),
+
+  listInventorySpools: userProcedure.query(async () => {
+    return listInventorySpools();
+  }),
+
+  listFilamentTypes: userProcedure.query(async () => {
+    return listFilamentTypes();
+  }),
+
+  getSlotAssignment: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .query(async ({ input }) => {
+      const assignments = await getInventoryAssignments(input.bambuddyId);
+      return (
+        assignments.find(
+          (a) => a.ams_id === input.amsId && a.tray_id === input.trayId,
+        ) ?? null
+      );
+    }),
+
+  listSlotAssignments: userProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      return getInventoryAssignments(input.bambuddyId);
+    }),
+
+  createAndAssignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        material: z.string().min(1).max(50),
+        brand: z.string().nullable().optional(),
+        colorName: z.string().nullable().optional(),
+        rgba: z
+          .string()
+          .regex(/^[0-9A-Fa-f]{8}$/)
+          .nullable()
+          .optional(),
+        nozzleTempMin: z.number().int().nullable().optional(),
+        nozzleTempMax: z.number().int().nullable().optional(),
+        remainPercent: z.number().int().min(0).max(100).default(100),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const labelWeight = 1000;
+      const weightUsed = labelWeight * (1 - input.remainPercent / 100);
+      const spool = await createInventorySpool({
+        material: input.material,
+        brand: input.brand,
+        color_name: input.colorName,
+        rgba: input.rgba,
+        nozzle_temp_min: input.nozzleTempMin,
+        nozzle_temp_max: input.nozzleTempMax,
+        label_weight: labelWeight,
+        weight_used: weightUsed,
+      });
+      await assignSpoolToSlot({
+        spoolId: spool.id,
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      const label = [input.brand, input.material, input.colorName]
+        .filter(Boolean)
+        .join(" · ");
+      return { spoolId: spool.id, label };
+    }),
+
+  assignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        spoolId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await assignSpoolToSlot({
+        spoolId: input.spoolId,
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      return { message: "Spool assigned to AMS slot." };
+    }),
+
+  unassignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await unassignSpoolFromSlot({
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      return { message: "Spool unassigned from AMS slot." };
     }),
 
   getPrinterMonitoringOptions: userProcedure

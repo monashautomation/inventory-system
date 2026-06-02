@@ -18,6 +18,7 @@ import {
   getAllAvailableFilaments,
   listBambuddyArchives,
   updateQueueItem,
+  BambuddyError,
   type FilamentOverride,
 } from "@/server/lib/bambuddy";
 import {
@@ -36,6 +37,25 @@ const filamentConstraintSchema = z.object({
   colorHex: z.string().nullable().optional(),
   colorName: z.string().nullable().optional(),
 });
+
+function formatBambuddyStartError(detail: {
+  code: string;
+  deficit?: {
+    slot_id: number;
+    filament_type: string;
+    required_grams: number;
+    remaining_grams: number;
+  }[];
+}): string {
+  if (detail.code === "insufficient_filament" && detail.deficit?.length) {
+    const parts = detail.deficit.map(
+      (d) =>
+        `Slot ${d.slot_id} (${d.filament_type}): needs ${d.required_grams.toFixed(1)}g, ${d.remaining_grams.toFixed(1)}g remaining`,
+    );
+    return `Insufficient filament — ${parts.join("; ")}`;
+  }
+  return `Cannot start print: ${detail.code.replace(/_/g, " ")}`;
+}
 
 const targetingSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("any") }),
@@ -442,6 +462,12 @@ export const printQueueRouter = router({
           { err, itemId: input.itemId },
           "Failed to start queue item",
         );
+        if (err instanceof BambuddyError && err.detail) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: formatBambuddyStartError(err.detail),
+          });
+        }
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Could not start queue item",

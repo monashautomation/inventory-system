@@ -17,13 +17,50 @@ function headers(apiKey: string): Record<string, string> {
   return { "X-API-Key": apiKey };
 }
 
+interface BambuddyFilamentDeficit {
+  slot_id: number;
+  ams_id: number;
+  tray_id: number;
+  filament_type: string;
+  required_grams: number;
+  remaining_grams: number;
+}
+
+interface BambuddyErrorDetail {
+  code: string;
+  deficit?: BambuddyFilamentDeficit[];
+  [key: string]: unknown;
+}
+
+export class BambuddyError extends Error {
+  readonly status: number;
+  readonly detail: BambuddyErrorDetail | null;
+
+  constructor(
+    status: number,
+    detail: BambuddyErrorDetail | null,
+    rawBody: string,
+    context: string,
+  ) {
+    super(`BamBuddy ${context} failed (HTTP ${status}): ${rawBody}`);
+    this.name = "BambuddyError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function checkResponse(res: Response, context: string): Promise<void> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    let detail: BambuddyErrorDetail | null = null;
+    try {
+      const parsed = JSON.parse(body) as { detail?: BambuddyErrorDetail };
+      if (parsed?.detail && typeof parsed.detail === "object") {
+        detail = parsed.detail;
+      }
+    } catch {}
     const safeBody = (body || "<empty>").replace(/\s+/g, " ").slice(0, 1024);
-    throw new Error(
-      `BambBuddy ${context} failed (HTTP ${res.status}): ${safeBody}`,
-    );
+    throw new BambuddyError(res.status, detail, safeBody, context);
   }
 }
 
@@ -418,6 +455,7 @@ export interface PrintQueueItemResponse {
   require_previous_success: boolean;
   auto_off_after: boolean;
   manual_start: boolean;
+  filament_short: boolean;
   ams_mapping: number[] | null;
   plate_id: number | null;
   bed_levelling: boolean;
@@ -434,6 +472,7 @@ export interface PrintQueueItemResponse {
   created_at: string | null;
   archive_name: string | null;
   archive_thumbnail: string | null;
+  archive_deleted: boolean;
   library_file_name: string | null;
   library_file_thumbnail: string | null;
   printer_name: string | null;
@@ -878,7 +917,158 @@ export async function configureAmsSlot(
   await checkResponse(res, "configure AMS slot");
 }
 
+export interface InventorySpool {
+  id: number;
+  material: string;
+  subtype: string | null;
+  color_name: string | null;
+  rgba: string | null;
+  brand: string | null;
+  label_weight: number;
+  weight_used: number;
+  nozzle_temp_min: number | null;
+  nozzle_temp_max: number | null;
+  note: string | null;
+  archived_at: string | null;
+}
+
+export interface BambuddySpoolAssignment {
+  id: number;
+  spool_id: number;
+  printer_id: number;
+  printer_name: string | null;
+  ams_id: number;
+  tray_id: number;
+  spool: InventorySpool | null;
+  configured: boolean;
+  pending_config: boolean;
+}
+
+export async function getInventoryAssignments(
+  printerId: number,
+): Promise<BambuddySpoolAssignment[]> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(
+    `${endpoint}/api/v1/inventory/assignments?printer_id=${printerId}`,
+    { headers: headers(apiKey), signal: AbortSignal.timeout(10_000) },
+  );
+  await checkResponse(res, "get inventory assignments");
+  return res.json() as Promise<BambuddySpoolAssignment[]>;
+}
+
+export async function updateSpoolWeightUsed(
+  spoolId: number,
+  weightUsed: number,
+): Promise<void> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/inventory/spools/${spoolId}`, {
+    method: "PATCH",
+    headers: { ...headers(apiKey), "Content-Type": "application/json" },
+    body: JSON.stringify({ weight_used: weightUsed }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "update spool weight");
+}
+
 export function getPrintLogThumbnailUrl(entryId: number): string {
   const { endpoint, apiKey } = getConfig();
   return `${endpoint}/api/v1/print-log/${entryId}/thumbnail?api_key=${encodeURIComponent(apiKey)}`;
+}
+
+export async function listInventorySpools(): Promise<InventorySpool[]> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/inventory/spools`, {
+    headers: headers(apiKey),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "list inventory spools");
+  const data = await res.json();
+  return Array.isArray(data) ? (data as InventorySpool[]) : [];
+}
+
+export async function listFilamentTypes(): Promise<string[]> {
+  const spools = await listInventorySpools();
+  const fromSpools = spools
+    .map((s) => s.material)
+    .filter((m): m is string => Boolean(m));
+  const merged = Array.from(
+    new Set([
+      ...fromSpools,
+      "PLA",
+      "PETG",
+      "ABS",
+      "ASA",
+      "TPU",
+      "PA",
+      "PC",
+      "PHA",
+      "PLA-CF",
+      "PA-CF",
+      "PETG-CF",
+    ]),
+  );
+  return merged.sort();
+}
+
+export interface SpoolCreateInput {
+  material: string;
+  brand?: string | null;
+  color_name?: string | null;
+  rgba?: string | null;
+  nozzle_temp_min?: number | null;
+  nozzle_temp_max?: number | null;
+  label_weight?: number;
+  weight_used?: number;
+}
+
+export async function createInventorySpool(
+  data: SpoolCreateInput,
+): Promise<InventorySpool> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/inventory/spools`, {
+    method: "POST",
+    headers: { ...headers(apiKey), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "create inventory spool");
+  return res.json() as Promise<InventorySpool>;
+}
+
+export async function assignSpoolToSlot(opts: {
+  spoolId: number;
+  printerId: number;
+  amsId: number;
+  trayId: number;
+}): Promise<void> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(`${endpoint}/api/v1/inventory/assignments`, {
+    method: "POST",
+    headers: { ...headers(apiKey), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      spool_id: opts.spoolId,
+      printer_id: opts.printerId,
+      ams_id: opts.amsId,
+      tray_id: opts.trayId,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  await checkResponse(res, "assign spool to slot");
+}
+
+export async function unassignSpoolFromSlot(opts: {
+  printerId: number;
+  amsId: number;
+  trayId: number;
+}): Promise<void> {
+  const { endpoint, apiKey } = getConfig();
+  const res = await fetch(
+    `${endpoint}/api/v1/inventory/assignments/${opts.printerId}/${opts.amsId}/${opts.trayId}`,
+    {
+      method: "DELETE",
+      headers: headers(apiKey),
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  await checkResponse(res, "unassign spool from slot");
 }

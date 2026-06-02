@@ -17,12 +17,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Upload,
   Library,
   X,
@@ -117,6 +131,8 @@ export function PrintJobModal({
   const [timelapse, setTimelapse] = useState(false);
   const [bedLevelling, setBedLevelling] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [projectComboOpen, setProjectComboOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
 
   const { data: projects, isLoading: projectsLoading } =
     trpc.print.getProjects.useQuery(undefined, { enabled: open });
@@ -1026,31 +1042,95 @@ export function PrintJobModal({
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Project</Label>
-                <Select
-                  value={selectedProjectId}
-                  onValueChange={setSelectedProjectId}
-                  disabled={projectsLoading}
+                <Popover
+                  open={projectComboOpen}
+                  onOpenChange={(o) => {
+                    setProjectComboOpen(o);
+                    if (!o) setProjectSearch("");
+                  }}
                 >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        projectsLoading
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={projectComboOpen}
+                      disabled={projectsLoading}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {projectsLoading
                           ? "Loading projects…"
-                          : "Select a project"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__personal__">
-                      Personal / No project
-                    </SelectItem>
-                    {(projects ?? []).map((project) => (
-                      <SelectItem value={project.id} key={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                          : selectedProjectId === "__personal__"
+                            ? "Personal / No project"
+                            : selectedProjectId
+                              ? ((projects ?? []).find(
+                                  (p) => p.id === selectedProjectId,
+                                )?.name ?? "Select a project")
+                              : "Select a project"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search projects…"
+                        value={projectSearch}
+                        onValueChange={setProjectSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No project found.</CommandEmpty>
+                        <CommandGroup>
+                          {(() => {
+                            const q = projectSearch.toLowerCase();
+                            const showPersonal =
+                              !q || "personal / no project".includes(q);
+                            const filtered = (projects ?? []).filter(
+                              (p) =>
+                                p.name.trim() !== "" &&
+                                (!q || p.name.toLowerCase().includes(q)),
+                            );
+                            return (
+                              <>
+                                {showPersonal && (
+                                  <CommandItem
+                                    value="__personal__"
+                                    onSelect={() => {
+                                      setSelectedProjectId("__personal__");
+                                      setProjectComboOpen(false);
+                                      setProjectSearch("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${selectedProjectId === "__personal__" ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    Personal / No project
+                                  </CommandItem>
+                                )}
+                                {filtered.map((project) => (
+                                  <CommandItem
+                                    key={project.id}
+                                    value={project.id}
+                                    onSelect={() => {
+                                      setSelectedProjectId(project.id);
+                                      setProjectComboOpen(false);
+                                      setProjectSearch("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${selectedProjectId === project.id ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    {project.name}
+                                  </CommandItem>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">

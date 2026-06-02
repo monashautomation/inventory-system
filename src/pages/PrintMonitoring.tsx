@@ -222,19 +222,6 @@ const hexToTrayColor = (hex: string): string => {
   return "000000FF";
 };
 
-const COMMON_FILAMENT_TYPES = [
-  "PLA",
-  "PETG",
-  "ABS",
-  "ASA",
-  "TPU",
-  "PA",
-  "PC",
-  "PLA-CF",
-  "PA-CF",
-  "PETG-CF",
-];
-
 const DEFAULT_TEMPS: Record<string, { min: number; max: number }> = {
   PLA: { min: 190, max: 230 },
   PETG: { min: 230, max: 250 },
@@ -256,6 +243,23 @@ interface EditingSlot {
   tray: AMSTray;
 }
 
+const spoolRemainPct = (spool: {
+  label_weight: number;
+  weight_used: number;
+}): number =>
+  spool.label_weight > 0
+    ? Math.round(
+        ((spool.label_weight - spool.weight_used) / spool.label_weight) * 100,
+      )
+    : 0;
+
+const spoolDisplayName = (spool: {
+  material: string;
+  brand: string | null;
+  color_name: string | null;
+}): string =>
+  [spool.brand, spool.material, spool.color_name].filter(Boolean).join(" · ");
+
 function AmsSlotEditDialog({
   slot,
   onClose,
@@ -264,6 +268,25 @@ function AmsSlotEditDialog({
   onClose: () => void;
 }) {
   const utils = trpc.useUtils();
+
+  const assignmentQuery = trpc.print.getSlotAssignment.useQuery({
+    bambuddyId: slot.bambuddyId,
+    amsId: slot.amsId,
+    trayId: slot.tray.id,
+  });
+
+  const [showSpoolPicker, setShowSpoolPicker] = useState(false);
+  const spoolsQuery = trpc.print.listInventorySpools.useQuery(undefined, {
+    enabled: showSpoolPicker,
+  });
+  const filamentTypesQuery = trpc.print.listFilamentTypes.useQuery();
+
+  const assignment = assignmentQuery.data ?? null;
+  const hasSpool = assignment?.spool != null;
+
+  const initialRemain = hasSpool
+    ? spoolRemainPct(assignment.spool!)
+    : (slot.tray.remain ?? 100);
 
   const [trayType, setTrayType] = useState(slot.tray.tray_type ?? "PLA");
   const [subBrand, setSubBrand] = useState(slot.tray.tray_sub_brands ?? "");
@@ -278,6 +301,18 @@ function AmsSlotEditDialog({
   const [tempMax, setTempMax] = useState(
     slot.tray.nozzle_temp_max ?? DEFAULT_TEMPS.PLA.max,
   );
+  const [remain, setRemain] = useState<number>(initialRemain);
+  const [selectedSpoolId, setSelectedSpoolId] = useState<string>("");
+
+  // Sync remain when assignment loads
+  const assignmentLoaded = !assignmentQuery.isLoading;
+  const [remainSynced, setRemainSynced] = useState(false);
+  if (assignmentLoaded && !remainSynced) {
+    setRemainSynced(true);
+    if (hasSpool) {
+      setRemain(spoolRemainPct(assignment.spool!));
+    }
+  }
 
   const applyTypeDefaults = (type: string) => {
     setTrayType(type);
@@ -288,23 +323,93 @@ function AmsSlotEditDialog({
     }
   };
 
+  const invalidateAll = async () => {
+    await Promise.all([
+      utils.print.getLivePrinterStatuses.invalidate(),
+      utils.print.getSlotAssignment.invalidate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+      }),
+      utils.printQueue.getPrinterAms.invalidate({
+        printerId: slot.bambuddyId,
+      }),
+      utils.printQueue.getAvailableFilamentsForModel.invalidate(),
+      utils.printQueue.getAvailableFilaments.invalidate(),
+    ]);
+  };
+
   const configureMutation = trpc.print.configureAmsSlot.useMutation({
     onSuccess: async (result) => {
       toast.success(result.message);
-      await Promise.all([
-        utils.print.getLivePrinterStatuses.invalidate(),
-        utils.printQueue.getPrinterAms.invalidate({
-          printerId: slot.bambuddyId,
-        }),
-        utils.printQueue.getAvailableFilamentsForModel.invalidate(),
-        utils.printQueue.getAvailableFilaments.invalidate(),
-      ]);
+      await invalidateAll();
       onClose();
     },
     onError: (error) => toast.error(error.message),
   });
 
+  const updateRemainMutation = trpc.print.updateFilamentRemain.useMutation({
+    onSuccess: (result) => {
+      if (result.noSpool) {
+        toast.warning(result.message);
+      } else {
+        toast.success(result.message);
+      }
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const assignMutation = trpc.print.assignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      setShowSpoolPicker(false);
+      setSelectedSpoolId("");
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const unassignMutation = trpc.print.unassignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const createAndAssignMutation = trpc.print.createAndAssignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(
+        `Spool created and assigned: ${result.label || trayType}. You can update details in inventory.`,
+      );
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const handleSave = () => {
+    if (!hasSpool) {
+      createAndAssignMutation.mutate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+        material: trayType,
+        brand: subBrand || null,
+        colorName: null,
+        rgba: hexToTrayColor(colorHex),
+        nozzleTempMin: tempMin,
+        nozzleTempMax: tempMax,
+        remainPercent: remain,
+      });
+    }
+    if (hasSpool && remain !== initialRemain) {
+      updateRemainMutation.mutate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+        remainPercent: remain,
+      });
+    }
     configureMutation.mutate({
       bambuddyId: slot.bambuddyId,
       amsId: slot.amsId,
@@ -318,26 +423,41 @@ function AmsSlotEditDialog({
     });
   };
 
+  const handleAssignSpool = () => {
+    if (!selectedSpoolId) return;
+    assignMutation.mutate({
+      bambuddyId: slot.bambuddyId,
+      spoolId: Number(selectedSpoolId),
+      amsId: slot.amsId,
+      trayId: slot.tray.id,
+    });
+  };
+
+  const activeSpools = (spoolsQuery.data ?? []).filter(
+    (s) => s.archived_at === null,
+  );
+
   const currentColor = parseTrayColor(slot.tray.tray_color);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit AMS Slot {slot.tray.id + 1}</DialogTitle>
           <DialogDescription>
-            Set custom filament info for this slot.
+            Update filament info and inventory assignment for this slot.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Current slot overview */}
           <div className="flex items-center gap-3 rounded-lg border p-3 bg-card">
             <div
               className="h-8 w-8 rounded-full border border-border/60 shadow-sm shrink-0"
               style={{ background: currentColor }}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">Current</p>
+              <p className="text-xs text-muted-foreground">Printer reports</p>
               <p className="text-sm font-medium truncate">
                 {slot.tray.tray_type ?? "Empty"}{" "}
                 {slot.tray.tray_sub_brands
@@ -347,6 +467,152 @@ function AmsSlotEditDialog({
             </div>
           </div>
 
+          {/* Spool assignment */}
+          <div className="space-y-2">
+            <Label>Inventory Spool Assignment</Label>
+            {assignmentQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border p-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading assignment…
+              </div>
+            ) : hasSpool ? (
+              <div className="rounded-lg border p-3 bg-card space-y-2">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="h-7 w-7 rounded-full border border-border/60 shadow-sm shrink-0 mt-0.5"
+                    style={{
+                      background: parseTrayColor(assignment.spool!.rgba),
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {spoolDisplayName(assignment.spool!)}
+                    </p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {Math.round(
+                        assignment.spool!.label_weight -
+                          assignment.spool!.weight_used,
+                      )}
+                      g remaining of {assignment.spool!.label_weight}g
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs shrink-0"
+                    onClick={() => setShowSpoolPicker(true)}
+                  >
+                    Change
+                  </Button>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs text-destructive hover:text-destructive"
+                  disabled={unassignMutation.isPending}
+                  onClick={() =>
+                    unassignMutation.mutate({
+                      bambuddyId: slot.bambuddyId,
+                      amsId: slot.amsId,
+                      trayId: slot.tray.id,
+                    })
+                  }
+                >
+                  {unassignMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Remove Assignment"
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-3 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  No spool assigned. Assign one to track filament usage in
+                  inventory.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  onClick={() => setShowSpoolPicker(true)}
+                >
+                  Assign Spool
+                </Button>
+              </div>
+            )}
+
+            {showSpoolPicker ? (
+              <div className="rounded-lg border p-3 space-y-2 bg-muted/30">
+                <p className="text-xs font-medium">
+                  Select spool from inventory
+                </p>
+                {spoolsQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading spools…
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedSpoolId}
+                    onValueChange={setSelectedSpoolId}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Choose a spool…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeSpools.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-full border border-border/60 shrink-0"
+                              style={{ background: parseTrayColor(s.rgba) }}
+                            />
+                            {spoolDisplayName(s)}{" "}
+                            <span className="text-muted-foreground">
+                              ({spoolRemainPct(s)}%)
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                      {activeSpools.length === 0 ? (
+                        <SelectItem value="_none" disabled>
+                          No spools in inventory
+                        </SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 h-7 text-xs"
+                    disabled={!selectedSpoolId || assignMutation.isPending}
+                    onClick={handleAssignSpool}
+                  >
+                    {assignMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Assign"
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setShowSpoolPicker(false);
+                      setSelectedSpoolId("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Filament config */}
           <div className="space-y-1.5">
             <Label>Filament Type</Label>
             <Select value={trayType} onValueChange={applyTypeDefaults}>
@@ -354,7 +620,21 @@ function AmsSlotEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {COMMON_FILAMENT_TYPES.map((t) => (
+                {(
+                  filamentTypesQuery.data ?? [
+                    "PLA",
+                    "PETG",
+                    "ABS",
+                    "ASA",
+                    "TPU",
+                    "PA",
+                    "PC",
+                    "PHA",
+                    "PLA-CF",
+                    "PA-CF",
+                    "PETG-CF",
+                  ]
+                ).map((t) => (
                   <SelectItem key={t} value={t}>
                     {t}
                   </SelectItem>
@@ -412,13 +692,56 @@ function AmsSlotEditDialog({
               />
             </div>
           </div>
+
+          {/* Remaining */}
+          <div className="space-y-1.5">
+            <Label>Remaining (%)</Label>
+            {hasSpool ? (
+              <p className="text-[11px] text-muted-foreground">
+                Updates spool weight in BamBuddy inventory.
+              </p>
+            ) : (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                No spool assigned — this value won&apos;t be saved to inventory
+                tracking.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={remain}
+                onChange={(e) =>
+                  setRemain(Math.min(100, Math.max(0, Number(e.target.value))))
+                }
+                min={0}
+                max={100}
+                className="w-24"
+              />
+              <div className="flex-1 h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${remain}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground tabular-nums w-10 text-right">
+                {remain}%
+              </span>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={configureMutation.isPending}>
+          <Button
+            onClick={handleSave}
+            disabled={
+              configureMutation.isPending ||
+              updateRemainMutation.isPending ||
+              createAndAssignMutation.isPending
+            }
+          >
             {configureMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -489,6 +812,25 @@ function PrinterDetail({
   const [bambuStreamActive, setBambuStreamActive] = useState(false);
   const bambuStreamKey = useRef(0);
   const [editingSlot, setEditingSlot] = useState<EditingSlot | null>(null);
+
+  const slotAssignmentsQuery = trpc.print.listSlotAssignments.useQuery(
+    { bambuddyId: status.bambuddyId! },
+    { enabled: status.bambuddyId != null && status.amsExists },
+  );
+  const slotRemainMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of slotAssignmentsQuery.data ?? []) {
+      if (a.spool && a.spool.label_weight > 0) {
+        const pct = Math.round(
+          ((a.spool.label_weight - a.spool.weight_used) /
+            a.spool.label_weight) *
+            100,
+        );
+        map.set(`${a.ams_id}:${a.tray_id}`, pct);
+      }
+    }
+    return map;
+  }, [slotAssignmentsQuery.data]);
 
   const stopStreamMutation = trpc.print.stopCameraStream.useMutation();
 
@@ -714,7 +1056,9 @@ function PrinterDetail({
           </div>
         </div>
 
-        {status.awaitingPlateClear && status.bambuddyId != null ? (
+        {status.awaitingPlateClear &&
+        status.bambuddyId != null &&
+        !canCancel ? (
           <div className="flex items-center gap-2 border-t pt-4 bg-amber-500/10 rounded-lg px-3 py-3 border-amber-500/30 border">
             <div className="flex-1">
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
@@ -838,7 +1182,10 @@ function PrinterDetail({
         {editingSlot ? (
           <AmsSlotEditDialog
             slot={editingSlot}
-            onClose={() => setEditingSlot(null)}
+            onClose={() => {
+              setEditingSlot(null);
+              void slotAssignmentsQuery.refetch();
+            }}
           />
         ) : null}
 
@@ -868,8 +1215,14 @@ function PrinterDetail({
                 <div className="grid grid-cols-4 gap-2">
                   {unit.tray.map((tray) => {
                     const color = parseTrayColor(tray.tray_color);
+                    const inventoryRemain = slotRemainMap.get(
+                      `${unit.id}:${tray.id}`,
+                    );
+                    const rawRemain =
+                      tray.remain != null && tray.remain >= 0 ? tray.remain : 0;
+                    const remainValue = inventoryRemain ?? rawRemain;
                     const isEmpty =
-                      color === "transparent" || tray.remain === 0;
+                      color === "transparent" || remainValue === 0;
                     const canEdit = status.bambuddyId != null;
                     return (
                       <div
@@ -904,7 +1257,7 @@ function PrinterDetail({
                           </span>
                         ) : null}
                         <span className="text-[10px] tabular-nums text-muted-foreground">
-                          {isEmpty ? "Empty" : `${tray.remain}%`}
+                          {isEmpty ? "Empty" : `${remainValue}%`}
                         </span>
                       </div>
                     );
