@@ -52,7 +52,9 @@ async function resolveUser(studentId: string) {
     throw err;
   }
   const user = await prisma.user.findFirst({
-    where: { email: studentInfo.email },
+    where: {
+      OR: [{ email: studentInfo.email }, { studentNumber: studentId }],
+    },
   });
 
   if (user && !user.studentNumber) {
@@ -311,11 +313,12 @@ export const kioskRouter = router({
       }
 
       // Fetch candidate itemIds where this user has ever had a loaned=true record
+      // Consumables are consumed on checkout and cannot be returned — exclude them.
       const candidates = await prisma.itemRecord.findMany({
         where: {
           actionByUserId: user.id,
           loaned: true,
-          item: { deleted: false },
+          item: { deleted: false, consumable: null },
         },
         select: { itemId: true },
         distinct: ["itemId"],

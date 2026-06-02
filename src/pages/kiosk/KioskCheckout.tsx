@@ -6,15 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   ArrowLeft,
   Camera,
+  CheckCircle2,
+  Info,
   Loader2,
   PackagePlus,
   Trash2,
   X,
 } from "lucide-react";
-import logoText from "@/assets/Horizontal White & Blue.svg";
+
+import logoLight from "@/assets/Horizontal Black & Blue.svg";
+import logoDark from "@/assets/Horizontal White & Blue.svg";
 import { BrowserMultiFormatReader } from "@zxing/library";
+
+type ScanFeedback = {
+  type: "success" | "error" | "info";
+  title: string;
+  message: string;
+} | null;
 
 interface ScannedItem {
   id: string;
@@ -28,6 +39,9 @@ export default function KioskCheckout() {
   const navigate = useNavigate();
   const [items, setItems] = useState<ScannedItem[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<ScanFeedback>(null);
+  const [flashType, setFlashType] = useState<"success" | "error" | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const lastScanRef = useRef<{ id: string; ts: number } | null>(null);
@@ -61,6 +75,19 @@ export default function KioskCheckout() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  const showScanFeedback = useCallback(
+    (type: "success" | "error" | "info", title: string, message: string) => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      setScanFeedback({ type, title, message });
+      if (type !== "info") setFlashType(type);
+      feedbackTimerRef.current = setTimeout(() => {
+        setScanFeedback(null);
+        setFlashType(null);
+      }, 2000);
+    },
+    [],
+  );
 
   const stopCamera = () => {
     if (readerRef.current) {
@@ -110,7 +137,11 @@ export default function KioskCheckout() {
 
           // Claim the slot synchronously before awaiting to prevent TOCTOU race
           if (scannedIdsRef.current.has(itemId)) {
-            toast.info("Item already in list");
+            showScanFeedback(
+              "info",
+              "Already scanned",
+              "Item is already in your list",
+            );
             return;
           }
           scannedIdsRef.current.add(itemId);
@@ -122,22 +153,34 @@ export default function KioskCheckout() {
               return;
             }
 
-            const latestRecord = item.ItemRecords[0];
-            if (latestRecord?.loaned) {
+            if (!item.consumable && item.stored === false) {
               scannedIdsRef.current.delete(itemId);
-              toast.error(`${item.name} is already on loan`);
+              showScanFeedback(
+                "error",
+                "Cannot check out",
+                `${item.name} is Lab Use only`,
+              );
               return;
             }
 
-            if (!item.consumable && item.stored === false) {
+            const latestRecord = item.ItemRecords[0];
+            if (latestRecord?.loaned) {
               scannedIdsRef.current.delete(itemId);
-              toast.error(`${item.name} is marked as Lab Use only`);
+              showScanFeedback(
+                "error",
+                "Cannot check out",
+                `${item.name} is already on loan`,
+              );
               return;
             }
 
             if (item.consumable && (item.consumable.available ?? 0) <= 0) {
               scannedIdsRef.current.delete(itemId);
-              toast.error(`${item.name} is out of stock`);
+              showScanFeedback(
+                "error",
+                "Cannot check out",
+                `${item.name} is out of stock`,
+              );
               return;
             }
 
@@ -151,7 +194,7 @@ export default function KioskCheckout() {
                 image: item.image ? `/api/items/${item.id}/image` : null,
               },
             ]);
-            toast.success(`Added: ${item.name}`);
+            showScanFeedback("success", "Item added", item.name);
           } catch {
             scannedIdsRef.current.delete(itemId);
             // error handled by mutation
@@ -164,7 +207,7 @@ export default function KioskCheckout() {
       );
       setScanning(false);
     }
-  }, [getItem]);
+  }, [getItem, showScanFeedback]);
 
   const removeItem = (id: string) => {
     scannedIdsRef.current.delete(id);
@@ -201,9 +244,14 @@ export default function KioskCheckout() {
           <h1 className="text-base font-semibold truncate">Check Out Items</h1>
         </div>
         <img
-          src={logoText}
+          src={logoLight}
           alt="Monash Automation"
-          className="h-7 w-auto ml-auto shrink-0"
+          className="h-7 w-auto ml-auto shrink-0 dark:hidden"
+        />
+        <img
+          src={logoDark}
+          alt="Monash Automation"
+          className="h-7 w-auto ml-auto shrink-0 hidden dark:block"
         />
         {items.length > 0 && (
           <Badge variant="secondary" className="ml-auto shrink-0">
@@ -244,8 +292,58 @@ export default function KioskCheckout() {
                 <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-sm" />
               </div>
             )}
+            {flashType && (
+              <div
+                key={flashType + String(scanFeedback?.message)}
+                className={`absolute inset-0 pointer-events-none animate-[flash_0.4s_ease-out_forwards] ${
+                  flashType === "success" ? "bg-green-500/40" : "bg-red-500/40"
+                }`}
+              />
+            )}
           </div>
-          {!scanning ? (
+          {scanFeedback ? (
+            <div
+              className={`w-full md:max-w-sm md:mx-auto rounded-xl px-4 py-3 flex items-start gap-3 border transition-all ${
+                scanFeedback.type === "success"
+                  ? "bg-green-50 border-green-300 dark:bg-green-950/40 dark:border-green-800"
+                  : scanFeedback.type === "error"
+                    ? "bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-800"
+                    : "bg-blue-50 border-blue-300 dark:bg-blue-950/40 dark:border-blue-800"
+              }`}
+            >
+              {scanFeedback.type === "success" ? (
+                <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              ) : scanFeedback.type === "error" ? (
+                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="w-6 h-6 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0">
+                <p
+                  className={`font-semibold text-sm ${
+                    scanFeedback.type === "success"
+                      ? "text-green-800 dark:text-green-300"
+                      : scanFeedback.type === "error"
+                        ? "text-red-800 dark:text-red-300"
+                        : "text-blue-800 dark:text-blue-300"
+                  }`}
+                >
+                  {scanFeedback.title}
+                </p>
+                <p
+                  className={`text-sm mt-0.5 truncate ${
+                    scanFeedback.type === "success"
+                      ? "text-green-700 dark:text-green-400"
+                      : scanFeedback.type === "error"
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-blue-700 dark:text-blue-400"
+                  }`}
+                >
+                  {scanFeedback.message}
+                </p>
+              </div>
+            </div>
+          ) : !scanning ? (
             <Button
               onClick={startCamera}
               className="w-full md:max-w-sm md:mx-auto"

@@ -30,6 +30,15 @@ import {
   resumeBambuddyPrint,
   stopBambuddyPrint,
   stopBambuddyCameraStream,
+  clearBambuddyBuildPlate,
+  configureAmsSlot,
+  getInventoryAssignments,
+  updateSpoolWeightUsed,
+  listInventorySpools,
+  listFilamentTypes,
+  createInventorySpool,
+  assignSpoolToSlot,
+  unassignSpoolFromSlot,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -38,6 +47,7 @@ import {
   getAllCachedStatuses,
   refreshPrintCamCache,
 } from "@/server/lib/printCamPoller";
+import { getActiveProjects } from "@/server/lib/external-api";
 import {
   prusaStatusResponseSchema,
   prusaJobResponseSchema,
@@ -533,6 +543,10 @@ export const printRouter = router({
         orderBy: { createdAt: "desc" },
       });
     }),
+
+  getProjects: userProcedure.query(async () => {
+    return getActiveProjects();
+  }),
 
   getPrinterStatus: userProcedure
     .meta({
@@ -1051,6 +1065,186 @@ export const printRouter = router({
       return { success: true };
     }),
 
+  clearBuildPlate: userProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      await clearBambuddyBuildPlate(input.bambuddyId);
+      return { success: true, message: "Build plate marked as cleared." };
+    }),
+
+  configureAmsSlot: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        trayInfoIdx: z.string(),
+        trayType: z.string().min(1, "Filament type is required"),
+        traySubBrands: z.string(),
+        trayColor: z
+          .string()
+          .regex(/^[0-9A-Fa-f]{8}$/, "Color must be 8-char RRGGBBAA hex"),
+        nozzleTempMin: z.number().int().min(0).max(500),
+        nozzleTempMax: z.number().int().min(0).max(500),
+        nozzleDiameter: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await configureAmsSlot(input.bambuddyId, {
+        amsId: input.amsId,
+        trayId: input.trayId,
+        trayInfoIdx: input.trayInfoIdx,
+        trayType: input.trayType,
+        traySubBrands: input.traySubBrands,
+        trayColor: input.trayColor,
+        nozzleTempMin: input.nozzleTempMin,
+        nozzleTempMax: input.nozzleTempMax,
+        nozzleDiameter: input.nozzleDiameter,
+      });
+      return { message: "AMS slot configured." };
+    }),
+
+  updateFilamentRemain: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        remainPercent: z.number().int().min(0).max(100),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const assignments = await getInventoryAssignments(input.bambuddyId);
+      const assignment = assignments.find(
+        (a) => a.ams_id === input.amsId && a.tray_id === input.trayId,
+      );
+      if (!assignment?.spool) {
+        return {
+          message:
+            "No spool assigned to this slot — remaining not updated in inventory.",
+          noSpool: true,
+        };
+      }
+      const { label_weight } = assignment.spool;
+      const weightUsed = label_weight * (1 - input.remainPercent / 100);
+      await updateSpoolWeightUsed(assignment.spool_id, weightUsed);
+      return {
+        message: "Filament remaining updated in BamBuddy inventory.",
+        noSpool: false,
+      };
+    }),
+
+  listInventorySpools: userProcedure.query(async () => {
+    return listInventorySpools();
+  }),
+
+  listFilamentTypes: userProcedure.query(async () => {
+    return listFilamentTypes();
+  }),
+
+  getSlotAssignment: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .query(async ({ input }) => {
+      const assignments = await getInventoryAssignments(input.bambuddyId);
+      return (
+        assignments.find(
+          (a) => a.ams_id === input.amsId && a.tray_id === input.trayId,
+        ) ?? null
+      );
+    }),
+
+  listSlotAssignments: userProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      return getInventoryAssignments(input.bambuddyId);
+    }),
+
+  createAndAssignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        material: z.string().min(1).max(50),
+        brand: z.string().nullable().optional(),
+        colorName: z.string().nullable().optional(),
+        rgba: z
+          .string()
+          .regex(/^[0-9A-Fa-f]{8}$/)
+          .nullable()
+          .optional(),
+        nozzleTempMin: z.number().int().nullable().optional(),
+        nozzleTempMax: z.number().int().nullable().optional(),
+        remainPercent: z.number().int().min(0).max(100).default(100),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const labelWeight = 1000;
+      const weightUsed = labelWeight * (1 - input.remainPercent / 100);
+      const spool = await createInventorySpool({
+        material: input.material,
+        brand: input.brand,
+        color_name: input.colorName,
+        rgba: input.rgba,
+        nozzle_temp_min: input.nozzleTempMin,
+        nozzle_temp_max: input.nozzleTempMax,
+        label_weight: labelWeight,
+        weight_used: weightUsed,
+      });
+      await assignSpoolToSlot({
+        spoolId: spool.id,
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      const label = [input.brand, input.material, input.colorName]
+        .filter(Boolean)
+        .join(" · ");
+      return { spoolId: spool.id, label };
+    }),
+
+  assignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        spoolId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await assignSpoolToSlot({
+        spoolId: input.spoolId,
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      return { message: "Spool assigned to AMS slot." };
+    }),
+
+  unassignSpool: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await unassignSpoolFromSlot({
+        printerId: input.bambuddyId,
+        amsId: input.amsId,
+        trayId: input.trayId,
+      });
+      return { message: "Spool unassigned from AMS slot." };
+    }),
+
   getPrinterMonitoringOptions: userProcedure
     .meta({
       mcp: {
@@ -1493,6 +1687,9 @@ export const printRouter = router({
         fileContentBase64: z.string().min(1),
         useAms: z.boolean().optional(),
         amsMapping: z.array(z.number().int().min(-1).max(255)).optional(),
+        notionProjectId: z.string().min(1).nullable().optional(),
+        notionProjectName: z.string().min(1).nullable().optional(),
+        personalUse: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1550,6 +1747,9 @@ export const printRouter = router({
             fileHashSha256: sha256,
             fileSizeBytes: fileBuffer.length,
             status: "STORED",
+            notionProjectId: input.notionProjectId,
+            notionProjectName: input.notionProjectName,
+            personalUse: input.personalUse ?? false,
           },
         });
 
@@ -1664,6 +1864,9 @@ export const printRouter = router({
             fileSizeBytes: fileBuffer.length,
             status: "DISPATCH_FAILED",
             dispatchError: message,
+            notionProjectId: input.notionProjectId,
+            notionProjectName: input.notionProjectName,
+            personalUse: input.personalUse ?? false,
           },
         });
         throw new TRPCError({
@@ -1683,6 +1886,9 @@ export const printRouter = router({
           fileSizeBytes: fileBuffer.length,
           status: "DISPATCHED",
           dispatchResponse: dispatchResult.value.details,
+          notionProjectId: input.notionProjectId,
+          notionProjectName: input.notionProjectName,
+          personalUse: input.personalUse ?? false,
         },
       });
       return { ...job, s3Warning: !s3Succeeded };
@@ -2065,6 +2271,7 @@ export const printRouter = router({
       let nozzles: { nozzle_type: string; nozzle_diameter: string }[] = [];
       let amsUnits: AMSUnit[] = [];
       let amsExists = false;
+      let awaitingPlateClear = false;
 
       if (s === null) {
         state = "UNREACHABLE";
@@ -2119,6 +2326,7 @@ export const printRouter = router({
         nozzles = s.nozzles ?? [];
         amsUnits = s.ams ?? [];
         amsExists = s.ams_exists ?? false;
+        awaitingPlateClear = s.awaiting_plate_clear ?? false;
         const hmsErrors = s.hms_errors ?? [];
         if (hmsErrors.length > 0) {
           state = "ATTENTION";
@@ -2153,6 +2361,7 @@ export const printRouter = router({
         nozzles,
         ams: amsUnits,
         amsExists,
+        awaitingPlateClear,
         startedBy: job ? { name: job.user.name, email: job.user.email } : null,
         jobStartedAt: job?.createdAt ?? null,
         updatedAt: Date.now(),
@@ -2261,6 +2470,7 @@ export const printRouter = router({
           }[],
           ams: [] as AMSUnit[],
           amsExists: false,
+          awaitingPlateClear: false,
           startedBy: job
             ? { name: job.user.name, email: job.user.email }
             : null,

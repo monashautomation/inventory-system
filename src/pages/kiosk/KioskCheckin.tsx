@@ -14,8 +14,9 @@ import {
   PackageCheck,
   QrCode,
 } from "lucide-react";
-import logoText from "@/assets/Horizontal White & Blue.svg";
-import { QRScanner } from "@/components/ui/qr-scanner";
+import logoLight from "@/assets/Horizontal Black & Blue.svg";
+import logoDark from "@/assets/Horizontal White & Blue.svg";
+import { QRScanner, type ScanFeedback } from "@/components/ui/qr-scanner";
 
 export default function KioskCheckin() {
   const { session, resetTimeout } = useKiosk();
@@ -62,27 +63,38 @@ export default function KioskCheckin() {
     });
   };
 
-  const handleQRScan = async (qrData: string) => {
+  const handleQRScan = async (qrData: string): Promise<ScanFeedback> => {
     try {
       const item = await getItem.mutateAsync({ qrData });
-      if (!item) return;
+      if (!item)
+        return { type: "error", title: "Not found", message: "Item not found" };
 
       const loaned = loanedItems?.find((r) => r.itemId === item.id);
       if (!loaned) {
-        toast.error(`${item.name} is not in your loaned items`);
-        return;
+        return {
+          type: "error",
+          title: "Not your item",
+          message: `${item.name} is not in your loaned items`,
+        };
       }
 
       if (selectedIds.has(item.id)) {
-        toast.info(`${item.name} already selected`);
-        return;
+        return {
+          type: "info",
+          title: "Already selected",
+          message: `${item.name} is already selected`,
+        };
       }
 
       resetTimeout();
       setSelectedIds((prev) => new Set(prev).add(item.id));
-      toast.success(`Selected: ${item.name}`);
+      return { type: "success", title: "Item selected", message: item.name };
     } catch (err) {
-      if (err instanceof Error) toast.error(err.message);
+      return {
+        type: "error",
+        title: "Error",
+        message: err instanceof Error ? err.message : "Failed to scan item",
+      };
     }
   };
 
@@ -113,9 +125,14 @@ export default function KioskCheckin() {
           <h1 className="text-lg font-semibold">Check In Items</h1>
         </div>
         <img
-          src={logoText}
+          src={logoLight}
           alt="Monash Automation"
-          className="h-7 w-auto ml-auto"
+          className="h-7 w-auto ml-auto dark:hidden"
+        />
+        <img
+          src={logoDark}
+          alt="Monash Automation"
+          className="h-7 w-auto ml-auto hidden dark:block"
         />
       </div>
 

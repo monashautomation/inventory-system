@@ -51,24 +51,30 @@ export type StatusAlert = z.infer<typeof alertSchema>;
 
 export const statusRouter = router({
   outages: publicProcedure
-    .output(z.object({ alerts: z.array(alertSchema) }))
+    .output(
+      z.object({
+        alerts: z.array(alertSchema),
+        statusUrl: z.string().nullable(),
+      }),
+    )
     .query(async () => {
       const base = process.env.UPTIME_KUMA_BASE;
       const page = process.env.UPTIME_KUMA_PAGE;
+      const statusUrl = process.env.UPTIME_KUMA_USER_LINK ?? null;
 
-      if (!base || !page) return { alerts: [] };
+      if (!base || !page) return { alerts: [], statusUrl };
 
       const prefix = base.startsWith("http") ? "" : "http://";
-      const statusUrl = `${prefix}${base}/api/status-page/${page}`;
+      const apiStatusUrl = `${prefix}${base}/api/status-page/${page}`;
       const heartbeatUrl = `${prefix}${base}/api/status-page/heartbeat/${page}`;
 
       try {
         const [statusRes, heartbeatRes] = await Promise.all([
-          fetch(statusUrl, { signal: AbortSignal.timeout(5000) }),
+          fetch(apiStatusUrl, { signal: AbortSignal.timeout(5000) }),
           fetch(heartbeatUrl, { signal: AbortSignal.timeout(5000) }),
         ]);
 
-        if (!statusRes.ok || !heartbeatRes.ok) return { alerts: [] };
+        if (!statusRes.ok || !heartbeatRes.ok) return { alerts: [], statusUrl };
 
         const [statusJson, heartbeatJson] = await Promise.all([
           statusRes.json(),
@@ -79,7 +85,7 @@ export const statusRouter = router({
         const heartbeatParsed = heartbeatListSchema.safeParse(heartbeatJson);
 
         if (!statusParsed.success || !heartbeatParsed.success) {
-          return { alerts: [] };
+          return { alerts: [], statusUrl };
         }
 
         const { incidents, publicGroupList, maintenanceList } =
@@ -112,9 +118,9 @@ export const statusRouter = router({
           if (m?.title) alerts.push({ type: "maintenance", label: m.title });
         }
 
-        return { alerts };
+        return { alerts, statusUrl };
       } catch {
-        return { alerts: [] };
+        return { alerts: [], statusUrl };
       }
     }),
 });

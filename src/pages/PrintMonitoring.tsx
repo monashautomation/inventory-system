@@ -11,14 +11,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video, Loader2, Wifi, Play, Square } from "lucide-react";
+import {
+  Video,
+  Loader2,
+  Wifi,
+  Play,
+  Square,
+  CheckSquare,
+  Info,
+  Pencil,
+} from "lucide-react";
+import type { AMSTray } from "@/server/lib/bambuddy";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 
@@ -157,6 +170,14 @@ function PrinterCard({
         </div>
 
         <div className="mt-auto space-y-1.5">
+          {status.awaitingPlateClear ? (
+            <div className="flex items-center gap-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5">
+              <CheckSquare className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                Awaiting plate clear
+              </span>
+            </div>
+          ) : null}
           {status.startedBy ? (
             <div className="bg-primary/5 rounded-md px-2.5 py-1.5 border border-primary/20">
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
@@ -193,6 +214,549 @@ const parseTrayColor = (hex: string | null): string => {
   return `#${hex.slice(0, 6)}`;
 };
 
+// #RRGGBB → RRGGBBFF (Bambu format)
+const hexToTrayColor = (hex: string): string => {
+  const clean = hex.replace("#", "");
+  if (clean.length === 6) return `${clean.toUpperCase()}FF`;
+  if (clean.length === 8) return clean.toUpperCase();
+  return "000000FF";
+};
+
+const DEFAULT_TEMPS: Record<string, { min: number; max: number }> = {
+  PLA: { min: 190, max: 230 },
+  PETG: { min: 230, max: 250 },
+  ABS: { min: 240, max: 270 },
+  ASA: { min: 240, max: 260 },
+  TPU: { min: 210, max: 240 },
+  PA: { min: 260, max: 290 },
+  PC: { min: 260, max: 280 },
+  "PLA-CF": { min: 200, max: 230 },
+  "PA-CF": { min: 260, max: 290 },
+  "PETG-CF": { min: 240, max: 260 },
+};
+
+// ─── AMS slot edit dialog ─────────────────────────────────────────────────────
+
+interface EditingSlot {
+  bambuddyId: number;
+  amsId: number;
+  tray: AMSTray;
+}
+
+const spoolRemainPct = (spool: {
+  label_weight: number;
+  weight_used: number;
+}): number =>
+  spool.label_weight > 0
+    ? Math.round(
+        ((spool.label_weight - spool.weight_used) / spool.label_weight) * 100,
+      )
+    : 0;
+
+const spoolDisplayName = (spool: {
+  material: string;
+  brand: string | null;
+  color_name: string | null;
+}): string =>
+  [spool.brand, spool.material, spool.color_name].filter(Boolean).join(" · ");
+
+function AmsSlotEditDialog({
+  slot,
+  onClose,
+}: {
+  slot: EditingSlot;
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+
+  const assignmentQuery = trpc.print.getSlotAssignment.useQuery({
+    bambuddyId: slot.bambuddyId,
+    amsId: slot.amsId,
+    trayId: slot.tray.id,
+  });
+
+  const [showSpoolPicker, setShowSpoolPicker] = useState(false);
+  const spoolsQuery = trpc.print.listInventorySpools.useQuery(undefined, {
+    enabled: showSpoolPicker,
+  });
+  const filamentTypesQuery = trpc.print.listFilamentTypes.useQuery();
+
+  const assignment = assignmentQuery.data ?? null;
+  const hasSpool = assignment?.spool != null;
+
+  const initialRemain = hasSpool
+    ? spoolRemainPct(assignment.spool!)
+    : (slot.tray.remain ?? 100);
+
+  const [trayType, setTrayType] = useState(slot.tray.tray_type ?? "PLA");
+  const [subBrand, setSubBrand] = useState(slot.tray.tray_sub_brands ?? "");
+  const [colorHex, setColorHex] = useState(
+    parseTrayColor(slot.tray.tray_color) === "transparent"
+      ? "#ffffff"
+      : parseTrayColor(slot.tray.tray_color),
+  );
+  const [tempMin, setTempMin] = useState(
+    slot.tray.nozzle_temp_min ?? DEFAULT_TEMPS.PLA.min,
+  );
+  const [tempMax, setTempMax] = useState(
+    slot.tray.nozzle_temp_max ?? DEFAULT_TEMPS.PLA.max,
+  );
+  const [remain, setRemain] = useState<number>(initialRemain);
+  const [selectedSpoolId, setSelectedSpoolId] = useState<string>("");
+
+  // Sync remain when assignment loads
+  const assignmentLoaded = !assignmentQuery.isLoading;
+  const [remainSynced, setRemainSynced] = useState(false);
+  if (assignmentLoaded && !remainSynced) {
+    setRemainSynced(true);
+    if (hasSpool) {
+      setRemain(spoolRemainPct(assignment.spool!));
+    }
+  }
+
+  const applyTypeDefaults = (type: string) => {
+    setTrayType(type);
+    const defaults = DEFAULT_TEMPS[type];
+    if (defaults) {
+      setTempMin(defaults.min);
+      setTempMax(defaults.max);
+    }
+  };
+
+  const invalidateAll = async () => {
+    await Promise.all([
+      utils.print.getLivePrinterStatuses.invalidate(),
+      utils.print.getSlotAssignment.invalidate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+      }),
+      utils.printQueue.getPrinterAms.invalidate({
+        printerId: slot.bambuddyId,
+      }),
+      utils.printQueue.getAvailableFilamentsForModel.invalidate(),
+      utils.printQueue.getAvailableFilaments.invalidate(),
+    ]);
+  };
+
+  const configureMutation = trpc.print.configureAmsSlot.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await invalidateAll();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const updateRemainMutation = trpc.print.updateFilamentRemain.useMutation({
+    onSuccess: (result) => {
+      if (result.noSpool) {
+        toast.warning(result.message);
+      } else {
+        toast.success(result.message);
+      }
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const assignMutation = trpc.print.assignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      setShowSpoolPicker(false);
+      setSelectedSpoolId("");
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const unassignMutation = trpc.print.unassignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const createAndAssignMutation = trpc.print.createAndAssignSpool.useMutation({
+    onSuccess: async (result) => {
+      toast.success(
+        `Spool created and assigned: ${result.label || trayType}. You can update details in inventory.`,
+      );
+      await assignmentQuery.refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleSave = () => {
+    if (!hasSpool) {
+      createAndAssignMutation.mutate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+        material: trayType,
+        brand: subBrand || null,
+        colorName: null,
+        rgba: hexToTrayColor(colorHex),
+        nozzleTempMin: tempMin,
+        nozzleTempMax: tempMax,
+        remainPercent: remain,
+      });
+    }
+    if (hasSpool && remain !== initialRemain) {
+      updateRemainMutation.mutate({
+        bambuddyId: slot.bambuddyId,
+        amsId: slot.amsId,
+        trayId: slot.tray.id,
+        remainPercent: remain,
+      });
+    }
+    configureMutation.mutate({
+      bambuddyId: slot.bambuddyId,
+      amsId: slot.amsId,
+      trayId: slot.tray.id,
+      trayInfoIdx: slot.tray.tray_info_idx ?? "",
+      trayType,
+      traySubBrands: subBrand,
+      trayColor: hexToTrayColor(colorHex),
+      nozzleTempMin: tempMin,
+      nozzleTempMax: tempMax,
+    });
+  };
+
+  const handleAssignSpool = () => {
+    if (!selectedSpoolId) return;
+    assignMutation.mutate({
+      bambuddyId: slot.bambuddyId,
+      spoolId: Number(selectedSpoolId),
+      amsId: slot.amsId,
+      trayId: slot.tray.id,
+    });
+  };
+
+  const activeSpools = (spoolsQuery.data ?? []).filter(
+    (s) => s.archived_at === null,
+  );
+
+  const currentColor = parseTrayColor(slot.tray.tray_color);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit AMS Slot {slot.tray.id + 1}</DialogTitle>
+          <DialogDescription>
+            Update filament info and inventory assignment for this slot.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Current slot overview */}
+          <div className="flex items-center gap-3 rounded-lg border p-3 bg-card">
+            <div
+              className="h-8 w-8 rounded-full border border-border/60 shadow-sm shrink-0"
+              style={{ background: currentColor }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Printer reports</p>
+              <p className="text-sm font-medium truncate">
+                {slot.tray.tray_type ?? "Empty"}{" "}
+                {slot.tray.tray_sub_brands
+                  ? `· ${slot.tray.tray_sub_brands}`
+                  : ""}
+              </p>
+            </div>
+          </div>
+
+          {/* Spool assignment */}
+          <div className="space-y-2">
+            <Label>Inventory Spool Assignment</Label>
+            {assignmentQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border p-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading assignment…
+              </div>
+            ) : hasSpool ? (
+              <div className="rounded-lg border p-3 bg-card space-y-2">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="h-7 w-7 rounded-full border border-border/60 shadow-sm shrink-0 mt-0.5"
+                    style={{
+                      background: parseTrayColor(assignment.spool!.rgba),
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {spoolDisplayName(assignment.spool!)}
+                    </p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {Math.round(
+                        assignment.spool!.label_weight -
+                          assignment.spool!.weight_used,
+                      )}
+                      g remaining of {assignment.spool!.label_weight}g
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs shrink-0"
+                    onClick={() => setShowSpoolPicker(true)}
+                  >
+                    Change
+                  </Button>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs text-destructive hover:text-destructive"
+                  disabled={unassignMutation.isPending}
+                  onClick={() =>
+                    unassignMutation.mutate({
+                      bambuddyId: slot.bambuddyId,
+                      amsId: slot.amsId,
+                      trayId: slot.tray.id,
+                    })
+                  }
+                >
+                  {unassignMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Remove Assignment"
+                  )}
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-3 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  No spool assigned. Assign one to track filament usage in
+                  inventory.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  onClick={() => setShowSpoolPicker(true)}
+                >
+                  Assign Spool
+                </Button>
+              </div>
+            )}
+
+            {showSpoolPicker ? (
+              <div className="rounded-lg border p-3 space-y-2 bg-muted/30">
+                <p className="text-xs font-medium">
+                  Select spool from inventory
+                </p>
+                {spoolsQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading spools…
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedSpoolId}
+                    onValueChange={setSelectedSpoolId}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Choose a spool…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeSpools.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-full border border-border/60 shrink-0"
+                              style={{ background: parseTrayColor(s.rgba) }}
+                            />
+                            {spoolDisplayName(s)}{" "}
+                            <span className="text-muted-foreground">
+                              ({spoolRemainPct(s)}%)
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                      {activeSpools.length === 0 ? (
+                        <SelectItem value="_none" disabled>
+                          No spools in inventory
+                        </SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 h-7 text-xs"
+                    disabled={!selectedSpoolId || assignMutation.isPending}
+                    onClick={handleAssignSpool}
+                  >
+                    {assignMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Assign"
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setShowSpoolPicker(false);
+                      setSelectedSpoolId("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Filament config */}
+          <div className="space-y-1.5">
+            <Label>Filament Type</Label>
+            <Select value={trayType} onValueChange={applyTypeDefaults}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(
+                  filamentTypesQuery.data ?? [
+                    "PLA",
+                    "PETG",
+                    "ABS",
+                    "ASA",
+                    "TPU",
+                    "PA",
+                    "PC",
+                    "PHA",
+                    "PLA-CF",
+                    "PA-CF",
+                    "PETG-CF",
+                  ]
+                ).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Brand / Sub-brand</Label>
+            <Input
+              value={subBrand}
+              onChange={(e) => setSubBrand(e.target.value)}
+              placeholder="e.g. PLA Basic, PETG HF"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={colorHex}
+                onChange={(e) => setColorHex(e.target.value)}
+                className="h-10 w-14 cursor-pointer rounded border border-input bg-background p-0.5"
+              />
+              <Input
+                value={colorHex}
+                onChange={(e) => setColorHex(e.target.value)}
+                placeholder="#ffffff"
+                className="font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Min Temp (°C)</Label>
+              <Input
+                type="number"
+                value={tempMin}
+                onChange={(e) => setTempMin(Number(e.target.value))}
+                min={0}
+                max={500}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Max Temp (°C)</Label>
+              <Input
+                type="number"
+                value={tempMax}
+                onChange={(e) => setTempMax(Number(e.target.value))}
+                min={0}
+                max={500}
+              />
+            </div>
+          </div>
+
+          {/* Remaining */}
+          <div className="space-y-1.5">
+            <Label>Remaining (%)</Label>
+            {hasSpool ? (
+              <p className="text-[11px] text-muted-foreground">
+                Updates spool weight in BamBuddy inventory.
+              </p>
+            ) : (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                No spool assigned — this value won&apos;t be saved to inventory
+                tracking.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={remain}
+                onChange={(e) =>
+                  setRemain(Math.min(100, Math.max(0, Number(e.target.value))))
+                }
+                min={0}
+                max={100}
+                className="w-24"
+              />
+              <div className="flex-1 h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${remain}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground tabular-nums w-10 text-right">
+                {remain}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={
+              configureMutation.isPending ||
+              updateRemainMutation.isPending ||
+              createAndAssignMutation.isPending
+            }
+          >
+            {configureMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const wifiStrengthLabel = (dbm: number): string => {
   if (dbm >= -50) return "Excellent";
   if (dbm >= -65) return "Good";
@@ -209,18 +773,37 @@ function PrinterDetail({
   status: PrinterStatus;
   onClose: () => void;
 }) {
+  const utils = trpc.useUtils();
+
   const pauseMutation = trpc.print.pausePrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
   const resumeMutation = trpc.print.resumePrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
   const cancelMutation = trpc.print.cancelPrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const clearPlateMutation = trpc.print.clearBuildPlate.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -228,6 +811,26 @@ function PrinterDetail({
   const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
   const [bambuStreamActive, setBambuStreamActive] = useState(false);
   const bambuStreamKey = useRef(0);
+  const [editingSlot, setEditingSlot] = useState<EditingSlot | null>(null);
+
+  const slotAssignmentsQuery = trpc.print.listSlotAssignments.useQuery(
+    { bambuddyId: status.bambuddyId! },
+    { enabled: status.bambuddyId != null && status.amsExists },
+  );
+  const slotRemainMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of slotAssignmentsQuery.data ?? []) {
+      if (a.spool && a.spool.label_weight > 0) {
+        const pct = Math.round(
+          ((a.spool.label_weight - a.spool.weight_used) /
+            a.spool.label_weight) *
+            100,
+        );
+        map.set(`${a.ams_id}:${a.tray_id}`, pct);
+      }
+    }
+    return map;
+  }, [slotAssignmentsQuery.data]);
 
   const stopStreamMutation = trpc.print.stopCameraStream.useMutation();
 
@@ -453,6 +1056,42 @@ function PrinterDetail({
           </div>
         </div>
 
+        {status.awaitingPlateClear &&
+        status.bambuddyId != null &&
+        !canCancel ? (
+          <div className="flex items-center gap-2 border-t pt-4 bg-amber-500/10 rounded-lg px-3 py-3 border-amber-500/30 border">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                Build plate not cleared
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Remove the print from the build plate before the next job can
+                start.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearPlateMutation.isPending}
+              onClick={() =>
+                clearPlateMutation.mutate({ bambuddyId: status.bambuddyId! })
+              }
+            >
+              {clearPlateMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Mark Build Plate Cleared
+                </>
+              )}
+            </Button>
+          </div>
+        ) : null}
+
         {canCancel ? (
           <div className="flex items-center gap-2 border-t pt-4">
             {canPause ? (
@@ -540,9 +1179,26 @@ function PrinterDetail({
           </div>
         ) : null}
 
+        {editingSlot ? (
+          <AmsSlotEditDialog
+            slot={editingSlot}
+            onClose={() => {
+              setEditingSlot(null);
+              void slotAssignmentsQuery.refetch();
+            }}
+          />
+        ) : null}
+
         {status.amsExists && status.ams.length > 0 ? (
           <div className="space-y-3 border-t pt-4">
-            <h4 className="font-semibold">AMS</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">AMS</h4>
+              {status.bambuddyId != null ? (
+                <span className="text-[10px] text-muted-foreground">
+                  Click slot to edit filament
+                </span>
+              ) : null}
+            </div>
             {status.ams.map((unit) => (
               <div key={unit.id} className="space-y-2">
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -559,13 +1215,33 @@ function PrinterDetail({
                 <div className="grid grid-cols-4 gap-2">
                   {unit.tray.map((tray) => {
                     const color = parseTrayColor(tray.tray_color);
+                    const inventoryRemain = slotRemainMap.get(
+                      `${unit.id}:${tray.id}`,
+                    );
+                    const rawRemain =
+                      tray.remain != null && tray.remain >= 0 ? tray.remain : 0;
+                    const remainValue = inventoryRemain ?? rawRemain;
                     const isEmpty =
-                      color === "transparent" || tray.remain === 0;
+                      color === "transparent" || remainValue === 0;
+                    const canEdit = status.bambuddyId != null;
                     return (
                       <div
                         key={tray.id}
-                        className={`flex flex-col items-center gap-1 rounded-lg border p-2 ${isEmpty ? "opacity-40" : ""}`}
+                        className={`group relative flex flex-col items-center gap-1 rounded-lg border p-2 ${isEmpty ? "opacity-40" : ""} ${canEdit ? "cursor-pointer hover:border-primary/50 hover:bg-secondary/30 transition-colors" : ""}`}
+                        onClick={
+                          canEdit
+                            ? () =>
+                                setEditingSlot({
+                                  bambuddyId: status.bambuddyId!,
+                                  amsId: unit.id,
+                                  tray,
+                                })
+                            : undefined
+                        }
                       >
+                        {canEdit ? (
+                          <Pencil className="absolute top-1 right-1 h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        ) : null}
                         <div
                           className="h-7 w-7 rounded-full border border-border/60 shadow-sm"
                           style={{
@@ -581,7 +1257,7 @@ function PrinterDetail({
                           </span>
                         ) : null}
                         <span className="text-[10px] tabular-nums text-muted-foreground">
-                          {isEmpty ? "Empty" : `${tray.remain}%`}
+                          {isEmpty ? "Empty" : `${remainValue}%`}
                         </span>
                       </div>
                     );
@@ -744,6 +1420,15 @@ export default function PrintMonitoring() {
             View All Webcams
           </Button>
         ) : null}
+      </div>
+
+      <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-3">
+        <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+        <p className="text-sm text-blue-700 dark:text-blue-300">
+          Once you remove your print from the build plate, click the printer
+          card and select <strong>Mark Build Plate Cleared</strong> to
+          automatically release the next job in the queue.
+        </p>
       </div>
 
       {dashboardQuery.isLoading ? (

@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { useKiosk } from "@/contexts/kiosk-context";
+import type { TRPCClientErrorLike } from "@trpc/client";
+import type { AppRouter } from "@/server/api/routers/_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +20,50 @@ import { Loader2 } from "lucide-react";
 import logoLight from "@/assets/Horizontal Black & Blue.svg";
 import logoDark from "@/assets/Horizontal White & Blue.svg";
 import { OutageBanner } from "@/components/OutageBanner";
+
+function getKioskErrorInfo(err: TRPCClientErrorLike<AppRouter>): {
+  title: string;
+  description: string;
+  code: string;
+} {
+  const trpcCode = (err as { data?: { code?: string } }).data?.code;
+  switch (trpcCode) {
+    case "INTERNAL_SERVER_ERROR":
+      return {
+        title: "Server error",
+        description:
+          "Something went wrong on our end. Try again shortly or contact a lab supervisor.",
+        code: "KSK-500",
+      };
+    case "BAD_REQUEST":
+      return {
+        title: "Invalid request",
+        description:
+          "The student ID format is not recognised. Check your ID and try again.",
+        code: "KSK-400",
+      };
+    case "UNAUTHORIZED":
+      return {
+        title: "Session expired",
+        description:
+          "The kiosk session has expired. Please restart the kiosk terminal.",
+        code: "KSK-401",
+      };
+    case "FORBIDDEN":
+      return {
+        title: "Access denied",
+        description: "You don't have permission to perform this action.",
+        code: "KSK-403",
+      };
+    default:
+      return {
+        title: "Connection error",
+        description:
+          "Could not reach the server. Check your network connection and try again.",
+        code: "KSK-NET",
+      };
+  }
+}
 
 function isAfterHoursNow(): boolean {
   const h = new Date().getHours();
@@ -58,7 +104,10 @@ export default function KioskLanding() {
       if (err.message === "MEMBER_NOT_FOUND") {
         setShowNotionDialog(true);
       } else {
-        toast.error(err.message);
+        const { title, description, code } = getKioskErrorInfo(err);
+        toast.error(title, {
+          description: `${description} [${code}]`,
+        });
       }
     },
   });
@@ -79,14 +128,15 @@ export default function KioskLanding() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Account not initialised</AlertDialogTitle>
+            <AlertDialogTitle>No account found</AlertDialogTitle>
             <AlertDialogDescription>
-              Your student ID hasn&apos;t been set up in the inventory system
-              yet. Visit{" "}
+              To use the kiosk, you must have previously signed in to{" "}
               <span className="font-medium text-foreground">
                 {window.location.host}
               </span>{" "}
-              on a personal device to initialise your account, then try again.
+              on a personal device. You must also have your correct Monash
+              student or staff email set in the Monash Automation Notion
+              database. Once both are done, try again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -103,8 +153,9 @@ export default function KioskLanding() {
           <AlertDialogHeader>
             <AlertDialogTitle>Student ID not found</AlertDialogTitle>
             <AlertDialogDescription>
-              Your student ID could not be found in the member database. Please
-              update your credentials on the Notion page and try again.
+              Your student or staff ID could not be found in the member
+              database. Please update your student/staff ID in the Monash
+              Automation Notion database, then try again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
