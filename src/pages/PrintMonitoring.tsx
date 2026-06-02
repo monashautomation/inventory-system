@@ -11,14 +11,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Video, Loader2, Wifi, Play, Square } from "lucide-react";
+import {
+  Video,
+  Loader2,
+  Wifi,
+  Play,
+  Square,
+  CheckSquare,
+  Info,
+  Pencil,
+} from "lucide-react";
+import type { AMSTray } from "@/server/lib/bambuddy";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 
@@ -157,6 +170,14 @@ function PrinterCard({
         </div>
 
         <div className="mt-auto space-y-1.5">
+          {status.awaitingPlateClear ? (
+            <div className="flex items-center gap-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5">
+              <CheckSquare className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                Awaiting plate clear
+              </span>
+            </div>
+          ) : null}
           {status.startedBy ? (
             <div className="bg-primary/5 rounded-md px-2.5 py-1.5 border border-primary/20">
               <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
@@ -193,6 +214,226 @@ const parseTrayColor = (hex: string | null): string => {
   return `#${hex.slice(0, 6)}`;
 };
 
+// #RRGGBB → RRGGBBFF (Bambu format)
+const hexToTrayColor = (hex: string): string => {
+  const clean = hex.replace("#", "");
+  if (clean.length === 6) return `${clean.toUpperCase()}FF`;
+  if (clean.length === 8) return clean.toUpperCase();
+  return "000000FF";
+};
+
+const COMMON_FILAMENT_TYPES = [
+  "PLA",
+  "PETG",
+  "ABS",
+  "ASA",
+  "TPU",
+  "PA",
+  "PC",
+  "PLA-CF",
+  "PA-CF",
+  "PETG-CF",
+];
+
+const DEFAULT_TEMPS: Record<string, { min: number; max: number }> = {
+  PLA: { min: 190, max: 230 },
+  PETG: { min: 230, max: 250 },
+  ABS: { min: 240, max: 270 },
+  ASA: { min: 240, max: 260 },
+  TPU: { min: 210, max: 240 },
+  PA: { min: 260, max: 290 },
+  PC: { min: 260, max: 280 },
+  "PLA-CF": { min: 200, max: 230 },
+  "PA-CF": { min: 260, max: 290 },
+  "PETG-CF": { min: 240, max: 260 },
+};
+
+// ─── AMS slot edit dialog ─────────────────────────────────────────────────────
+
+interface EditingSlot {
+  bambuddyId: number;
+  amsId: number;
+  tray: AMSTray;
+}
+
+function AmsSlotEditDialog({
+  slot,
+  onClose,
+}: {
+  slot: EditingSlot;
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+
+  const [trayType, setTrayType] = useState(slot.tray.tray_type ?? "PLA");
+  const [subBrand, setSubBrand] = useState(slot.tray.tray_sub_brands ?? "");
+  const [colorHex, setColorHex] = useState(
+    parseTrayColor(slot.tray.tray_color) === "transparent"
+      ? "#ffffff"
+      : parseTrayColor(slot.tray.tray_color),
+  );
+  const [tempMin, setTempMin] = useState(
+    slot.tray.nozzle_temp_min ?? DEFAULT_TEMPS.PLA.min,
+  );
+  const [tempMax, setTempMax] = useState(
+    slot.tray.nozzle_temp_max ?? DEFAULT_TEMPS.PLA.max,
+  );
+
+  const applyTypeDefaults = (type: string) => {
+    setTrayType(type);
+    const defaults = DEFAULT_TEMPS[type];
+    if (defaults) {
+      setTempMin(defaults.min);
+      setTempMax(defaults.max);
+    }
+  };
+
+  const configureMutation = trpc.print.configureAmsSlot.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await Promise.all([
+        utils.print.getLivePrinterStatuses.invalidate(),
+        utils.printQueue.getPrinterAms.invalidate({
+          printerId: slot.bambuddyId,
+        }),
+        utils.printQueue.getAvailableFilamentsForModel.invalidate(),
+        utils.printQueue.getAvailableFilaments.invalidate(),
+      ]);
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleSave = () => {
+    configureMutation.mutate({
+      bambuddyId: slot.bambuddyId,
+      amsId: slot.amsId,
+      trayId: slot.tray.id,
+      trayInfoIdx: slot.tray.tray_info_idx ?? "",
+      trayType,
+      traySubBrands: subBrand,
+      trayColor: hexToTrayColor(colorHex),
+      nozzleTempMin: tempMin,
+      nozzleTempMax: tempMax,
+    });
+  };
+
+  const currentColor = parseTrayColor(slot.tray.tray_color);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit AMS Slot {slot.tray.id + 1}</DialogTitle>
+          <DialogDescription>
+            Set custom filament info for this slot.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="flex items-center gap-3 rounded-lg border p-3 bg-card">
+            <div
+              className="h-8 w-8 rounded-full border border-border/60 shadow-sm shrink-0"
+              style={{ background: currentColor }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Current</p>
+              <p className="text-sm font-medium truncate">
+                {slot.tray.tray_type ?? "Empty"}{" "}
+                {slot.tray.tray_sub_brands
+                  ? `· ${slot.tray.tray_sub_brands}`
+                  : ""}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Filament Type</Label>
+            <Select value={trayType} onValueChange={applyTypeDefaults}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COMMON_FILAMENT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Brand / Sub-brand</Label>
+            <Input
+              value={subBrand}
+              onChange={(e) => setSubBrand(e.target.value)}
+              placeholder="e.g. PLA Basic, PETG HF"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={colorHex}
+                onChange={(e) => setColorHex(e.target.value)}
+                className="h-10 w-14 cursor-pointer rounded border border-input bg-background p-0.5"
+              />
+              <Input
+                value={colorHex}
+                onChange={(e) => setColorHex(e.target.value)}
+                placeholder="#ffffff"
+                className="font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Min Temp (°C)</Label>
+              <Input
+                type="number"
+                value={tempMin}
+                onChange={(e) => setTempMin(Number(e.target.value))}
+                min={0}
+                max={500}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Max Temp (°C)</Label>
+              <Input
+                type="number"
+                value={tempMax}
+                onChange={(e) => setTempMax(Number(e.target.value))}
+                min={0}
+                max={500}
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={configureMutation.isPending}>
+            {configureMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const wifiStrengthLabel = (dbm: number): string => {
   if (dbm >= -50) return "Excellent";
   if (dbm >= -65) return "Good";
@@ -209,18 +450,37 @@ function PrinterDetail({
   status: PrinterStatus;
   onClose: () => void;
 }) {
+  const utils = trpc.useUtils();
+
   const pauseMutation = trpc.print.pausePrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
   const resumeMutation = trpc.print.resumePrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
   const cancelMutation = trpc.print.cancelPrint.useMutation({
-    onSuccess: (result) => toast.success(result.message),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const clearPlateMutation = trpc.print.clearBuildPlate.useMutation({
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      await utils.print.getLivePrinterStatuses.invalidate();
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -228,6 +488,7 @@ function PrinterDetail({
   const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
   const [bambuStreamActive, setBambuStreamActive] = useState(false);
   const bambuStreamKey = useRef(0);
+  const [editingSlot, setEditingSlot] = useState<EditingSlot | null>(null);
 
   const stopStreamMutation = trpc.print.stopCameraStream.useMutation();
 
@@ -453,6 +714,40 @@ function PrinterDetail({
           </div>
         </div>
 
+        {status.awaitingPlateClear && status.bambuddyId != null ? (
+          <div className="flex items-center gap-2 border-t pt-4 bg-amber-500/10 rounded-lg px-3 py-3 border-amber-500/30 border">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                Build plate not cleared
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Remove the print from the build plate before the next job can
+                start.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearPlateMutation.isPending}
+              onClick={() =>
+                clearPlateMutation.mutate({ bambuddyId: status.bambuddyId! })
+              }
+            >
+              {clearPlateMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Mark Build Plate Cleared
+                </>
+              )}
+            </Button>
+          </div>
+        ) : null}
+
         {canCancel ? (
           <div className="flex items-center gap-2 border-t pt-4">
             {canPause ? (
@@ -540,9 +835,23 @@ function PrinterDetail({
           </div>
         ) : null}
 
+        {editingSlot ? (
+          <AmsSlotEditDialog
+            slot={editingSlot}
+            onClose={() => setEditingSlot(null)}
+          />
+        ) : null}
+
         {status.amsExists && status.ams.length > 0 ? (
           <div className="space-y-3 border-t pt-4">
-            <h4 className="font-semibold">AMS</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">AMS</h4>
+              {status.bambuddyId != null ? (
+                <span className="text-[10px] text-muted-foreground">
+                  Click slot to edit filament
+                </span>
+              ) : null}
+            </div>
             {status.ams.map((unit) => (
               <div key={unit.id} className="space-y-2">
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -561,11 +870,25 @@ function PrinterDetail({
                     const color = parseTrayColor(tray.tray_color);
                     const isEmpty =
                       color === "transparent" || tray.remain === 0;
+                    const canEdit = status.bambuddyId != null;
                     return (
                       <div
                         key={tray.id}
-                        className={`flex flex-col items-center gap-1 rounded-lg border p-2 ${isEmpty ? "opacity-40" : ""}`}
+                        className={`group relative flex flex-col items-center gap-1 rounded-lg border p-2 ${isEmpty ? "opacity-40" : ""} ${canEdit ? "cursor-pointer hover:border-primary/50 hover:bg-secondary/30 transition-colors" : ""}`}
+                        onClick={
+                          canEdit
+                            ? () =>
+                                setEditingSlot({
+                                  bambuddyId: status.bambuddyId!,
+                                  amsId: unit.id,
+                                  tray,
+                                })
+                            : undefined
+                        }
                       >
+                        {canEdit ? (
+                          <Pencil className="absolute top-1 right-1 h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        ) : null}
                         <div
                           className="h-7 w-7 rounded-full border border-border/60 shadow-sm"
                           style={{
@@ -744,6 +1067,15 @@ export default function PrintMonitoring() {
             View All Webcams
           </Button>
         ) : null}
+      </div>
+
+      <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-3">
+        <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+        <p className="text-sm text-blue-700 dark:text-blue-300">
+          Once you remove your print from the build plate, click the printer
+          card and select <strong>Mark Build Plate Cleared</strong> to
+          automatically release the next job in the queue.
+        </p>
       </div>
 
       {dashboardQuery.isLoading ? (

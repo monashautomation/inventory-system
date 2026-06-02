@@ -22,6 +22,7 @@ import {
     initPrintCamPoller,
     syncBambuPrinters,
 } from "@/server/lib/printCamPoller";
+import { initPrintQueuePoller } from "@/server/lib/printQueuePoller";
 import sharp from "sharp";
 import {
     uploadFile,
@@ -30,6 +31,7 @@ import {
     fileExists,
     downloadFile,
 } from "@/server/lib/s3";
+import { uploadArchive as uploadBambuddyArchive } from "@/server/lib/bambuddy";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -536,6 +538,152 @@ app.get("/api/bambu-stream/:bambuddyId", async (c) => {
     return new Response(upstreamRes.body, { status: 200, headers: resHeaders });
 });
 
+// ─── BamBuddy thumbnail proxy ────────────────────────────────────────────────
+// Proxies print-log thumbnails through the server so clients don't need the API key.
+// Uses a stream token (?token=xxx) as required by the BamBuddy thumbnail endpoint.
+app.get("/api/bambu-thumbnail/:entryId", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
+
+    const entryId = Number(c.req.param("entryId"));
+    if (!Number.isInteger(entryId) || entryId <= 0)
+        throw new HTTPException(400, { message: "Invalid entry ID" });
+
+    const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
+    const apiKey = process.env.BAMBUDDY_API_KEY;
+    if (!endpoint || !apiKey)
+        throw new HTTPException(503, { message: "BamBuddy not configured" });
+
+    // Get a stream token (required for thumbnail auth)
+    let token: string | null = null;
+    try {
+        const tokenRes = await fetch(
+            `${endpoint}/api/v1/printers/camera/stream-token`,
+            {
+                method: "POST",
+                headers: { "X-API-Key": apiKey },
+                signal: AbortSignal.timeout(8_000),
+            },
+        );
+        if (tokenRes.ok) {
+            const tokenData = (await tokenRes.json()) as { token?: string };
+            token = tokenData.token ?? null;
+        }
+    } catch {
+        // Fall through and try without token (may work if auth disabled)
+    }
+
+    const url = token
+        ? `${endpoint}/api/v1/print-log/${entryId}/thumbnail?token=${encodeURIComponent(token)}`
+        : `${endpoint}/api/v1/print-log/${entryId}/thumbnail`;
+
+    let upstreamRes: Response;
+    try {
+        upstreamRes = await fetch(url, {
+            headers: { "X-API-Key": apiKey },
+            signal: AbortSignal.timeout(10_000),
+        });
+    } catch (err) {
+        throw new HTTPException(502, { message: "Failed to fetch thumbnail" });
+    }
+
+    if (!upstreamRes.ok)
+        throw new HTTPException(upstreamRes.status as 400, {
+            message: `BamBuddy thumbnail returned ${upstreamRes.status}`,
+        });
+
+    const contentType =
+        upstreamRes.headers.get("content-type") ?? "image/png";
+    const buffer = await upstreamRes.arrayBuffer();
+    return new Response(buffer, {
+        status: 200,
+        headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=3600",
+        },
+    });
+});
+
+// ─── BamBuddy stats export proxy ─────────────────────────────────────────────
+app.get("/api/bambu-stats-export", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
+
+    const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
+    const apiKey = process.env.BAMBUDDY_API_KEY;
+    if (!endpoint || !apiKey)
+        throw new HTTPException(503, { message: "BamBuddy not configured" });
+
+    const format = c.req.query("format") === "xlsx" ? "xlsx" : "csv";
+    const days = Math.min(3650, Math.max(1, Number(c.req.query("days") ?? "30")));
+
+    const url = `${endpoint}/api/v1/archives/stats/export?format=${format}&days=${days}`;
+    let upstreamRes: Response;
+    try {
+        upstreamRes = await fetch(url, {
+            headers: { "X-API-Key": apiKey },
+            signal: AbortSignal.timeout(30_000),
+        });
+    } catch (err) {
+        throw new HTTPException(502, { message: "Failed to fetch export" });
+    }
+
+    if (!upstreamRes.ok)
+        throw new HTTPException(upstreamRes.status as 400, {
+            message: `BamBuddy export returned ${upstreamRes.status}`,
+        });
+
+    const contentType =
+        upstreamRes.headers.get("content-type") ??
+        (format === "xlsx"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "text/csv");
+    const buffer = await upstreamRes.arrayBuffer();
+    return new Response(buffer, {
+        status: 200,
+        headers: {
+            "Content-Type": contentType,
+            "Content-Disposition": `attachment; filename="print-stats.${format}"`,
+        },
+    });
+});
+
+// ─── 3MF file upload to BamBuddy ─────────────────────────────────────────────
+app.post("/api/print-queue/upload-3mf", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
+
+    const formData = await c.req.formData();
+    const file = formData.get("file");
+    if (!(file instanceof File))
+        throw new HTTPException(400, { message: "Missing file field" });
+
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".3mf"))
+        throw new HTTPException(400, { message: "Only .3mf files are accepted" });
+
+    const MAX_3MF_BYTES = 500 * 1024 * 1024;
+    const bytes = await file.arrayBuffer();
+    if (bytes.byteLength > MAX_3MF_BYTES)
+        throw new HTTPException(413, { message: "File exceeds 500 MB limit" });
+
+    try {
+        const archiveId = await uploadBambuddyArchive(
+            file.name,
+            Buffer.from(bytes),
+        );
+        return c.json({ archiveId });
+    } catch (err) {
+        logger.error({ err }, "Failed to upload 3MF to BamBuddy");
+        throw new HTTPException(502, {
+            message: `BamBuddy upload failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+    }
+});
+
 // MCP route
 const mcpPassword = process.env.MCP_PASSWORD;
 if (!mcpPassword) {
@@ -652,6 +800,7 @@ setInterval(
     5 * 60 * 1000,
 );
 initPrintCamPoller();
+initPrintQueuePoller();
 
 export default {
     port: process.env.PORT ?? 3000,

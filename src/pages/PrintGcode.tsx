@@ -1,4 +1,11 @@
-import { type FormEvent, useState, useRef, useCallback } from "react";
+import {
+  type FormEvent,
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+} from "react";
+import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
 import { parse3mf, type ThreeMfFilamentInfo } from "@/lib/parse-3mf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,8 +39,10 @@ const readFileAsBase64 = (file: File): Promise<string> =>
   });
 
 export default function PrintGcode() {
+  const navigate = useNavigate();
   const printersQuery = trpc.print.getPrinters.useQuery();
   const jobsQuery = trpc.print.listMyPrintJobs.useQuery();
+  const projectsQuery = trpc.print.getProjects.useQuery();
 
   const uploadAndPrintMutation = trpc.print.uploadAndPrint.useMutation({
     onSuccess: (result) => {
@@ -60,6 +69,7 @@ export default function PrintGcode() {
   });
 
   const [selectedPrinterIp, setSelectedPrinterIp] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,12 +159,20 @@ export default function PrintGcode() {
     !!statusQuery.data &&
     BLOCKED_PRINTER_STATES.has(statusQuery.data.state.toUpperCase());
 
-  const printerOptions = printersQuery.data ?? [];
+  const printerOptions = (printersQuery.data ?? [])
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
   const selectedPrinter =
     printerOptions.find((printer) => printer.ipAddress === selectedPrinterIp) ??
     null;
   const isBambu = selectedPrinter?.type === "BAMBU";
   isBambuRef.current = isBambu;
+
+  useEffect(() => {
+    if (isBambu) {
+      void navigate("/print-queue?open=upload");
+    }
+  }, [isBambu, navigate]);
 
   // AMS tray data from live printer status (excludes external spool tray 254)
   const amsTrays = (statusQuery.data?.amsTrays ?? []).filter(
@@ -181,18 +199,31 @@ export default function PrintGcode() {
     return `#${color.slice(0, 6)}`;
   };
 
+  const selectedProject = (projectsQuery.data ?? []).find(
+    (p) => p.id === selectedProjectId,
+  );
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !selectedPrinterIp) {
       toast.error("Select a printer and a file.");
       return;
     }
-
+    if (!selectedProjectId) {
+      toast.error("Select a project before printing.");
+      return;
+    }
     const fileContentBase64 = await readFileAsBase64(selectedFile);
     await uploadAndPrintMutation.mutateAsync({
       printerIpAddress: selectedPrinterIp,
       fileName: selectedFile.name,
       fileContentBase64,
+      notionProjectId:
+        selectedProjectId && selectedProjectId !== "__personal__"
+          ? selectedProjectId
+          : null,
+      notionProjectName: selectedProject?.name ?? null,
+      personalUse: selectedProjectId === "__personal__",
       ...(isBambu && { useAms, amsMapping }),
     });
   };
@@ -268,24 +299,76 @@ export default function PrintGcode() {
               ) : null}
             </div>
             <div className="space-y-2">
+              <Label>Project</Label>
+              <Select
+                value={selectedProjectId}
+                onValueChange={setSelectedProjectId}
+                disabled={projectsQuery.isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      projectsQuery.isLoading
+                        ? "Loading projects…"
+                        : "Select a project"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__personal__">
+                    Personal / No project
+                  </SelectItem>
+                  {(projectsQuery.data ?? []).map((project) => (
+                    <SelectItem value={project.id} key={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {projectsQuery.isError ? (
+                <p className="text-sm text-destructive">
+                  Could not load projects. Check your connection.
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
               <Label>{isBambu ? "G-code 3MF file" : "G-code file"}</Label>
               <div
-                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors cursor-pointer
+                className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors
                   ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 bg-muted/50 hover:bg-muted"
+                    !selectedPrinterIp || !selectedProjectId
+                      ? "border-muted-foreground/15 bg-muted/30 opacity-60 cursor-not-allowed"
+                      : isDragging
+                        ? "border-primary bg-primary/5 cursor-pointer"
+                        : "border-muted-foreground/25 bg-muted/50 hover:bg-muted cursor-pointer"
                   }
                 `}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
+                onDragOver={
+                  selectedPrinterIp && selectedProjectId
+                    ? handleDragOver
+                    : undefined
+                }
+                onDragLeave={
+                  selectedPrinterIp && selectedProjectId
+                    ? handleDragLeave
+                    : undefined
+                }
+                onDrop={
+                  selectedPrinterIp && selectedProjectId
+                    ? handleDrop
+                    : undefined
+                }
+                onClick={() =>
+                  selectedPrinterIp &&
+                  selectedProjectId &&
+                  fileInputRef.current?.click()
+                }
               >
                 <input
                   type="file"
                   ref={fileInputRef}
                   className="hidden"
+                  disabled={!selectedPrinterIp || !selectedProjectId}
                   accept={
                     isBambu
                       ? ".3mf,application/octet-stream"
@@ -336,20 +419,32 @@ export default function PrintGcode() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-4">
-                    <div className="rounded-full bg-background p-4 shadow-sm border border-border/50 transition-transform group-hover:scale-105">
+                    <div className="rounded-full bg-background p-4 shadow-sm border border-border/50">
                       <Upload className="h-6 w-6 text-muted-foreground" />
                     </div>
                     <div className="space-y-1">
-                      <div className="text-sm font-medium">
-                        Drag and drop your file here, or{" "}
-                        <span className="text-primary hover:underline">
-                          click to browse
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Supports{" "}
-                        {isBambu ? ".gcode.3mf" : ".gcode, .gc, .gco, .bgcode"}
-                      </div>
+                      {!selectedPrinterIp || !selectedProjectId ? (
+                        <div className="text-sm text-muted-foreground">
+                          {!selectedPrinterIp
+                            ? "Select a printer first"
+                            : "Select a project first"}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-medium">
+                            Drag and drop your file here, or{" "}
+                            <span className="text-primary hover:underline">
+                              click to browse
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Supports{" "}
+                            {isBambu
+                              ? ".gcode.3mf"
+                              : ".gcode, .gc, .gco, .bgcode"}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -479,6 +574,7 @@ export default function PrintGcode() {
                   printerOptions.length === 0 ||
                   !selectedFile ||
                   !selectedPrinterIp ||
+                  !selectedProjectId ||
                   (!!selectedPrinterIp && statusQuery.isLoading) ||
                   printerBusy
                 }
@@ -521,6 +617,9 @@ export default function PrintGcode() {
                       <div className="text-muted-foreground">
                         {job.printer.name} ({job.printer.type}) &bull;{" "}
                         {job.status}
+                        {job.notionProjectName
+                          ? ` · ${job.notionProjectName}`
+                          : ""}
                       </div>
                       {job.status === "DISPATCH_FAILED" &&
                         job.dispatchError && (

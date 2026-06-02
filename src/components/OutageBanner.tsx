@@ -65,18 +65,26 @@ export function OutageBanner() {
   const alerts = data?.alerts ?? [];
   if (alerts.length === 0) return null;
 
+  const statusUrl = data?.statusUrl ?? null;
+
   const dominantType = alerts.reduce<AlertType>(
     (acc, a) => (PRIORITY[a.type] > PRIORITY[acc] ? a.type : acc),
     alerts[0].type,
   );
 
   const { banner } = STYLES[dominantType];
-  const bannerClass = `w-full border-b py-2.5 ${banner}`;
+  const bannerClass = `w-full border-b py-2.5 ${banner}${statusUrl ? " hover:brightness-95 transition-[filter] duration-150" : ""}`;
 
   if (alerts.length === 1) {
     const { Icon, item, label } = STYLES[alerts[0].type];
+    const Wrapper = statusUrl ? "a" : "div";
     return (
-      <div className={bannerClass}>
+      <Wrapper
+        className={bannerClass}
+        {...(statusUrl
+          ? { href: statusUrl, target: "_blank", rel: "noopener noreferrer" }
+          : {})}
+      >
         <div
           className={`flex items-center justify-center gap-2 text-sm font-medium px-4 ${item}`}
         >
@@ -86,7 +94,7 @@ export function OutageBanner() {
           </span>
           <span>{alerts[0].label}</span>
         </div>
-      </div>
+      </Wrapper>
     );
   }
 
@@ -102,8 +110,14 @@ export function OutageBanner() {
   // Keep speed constant at ~100px/s regardless of content length.
   const durationS = Math.round((copies.length * EST_ITEM_PX) / 100);
 
+  const MarqueeWrapper = statusUrl ? "a" : "div";
   return (
-    <div className={`${bannerClass} overflow-hidden`}>
+    <MarqueeWrapper
+      className={`${bannerClass} overflow-hidden`}
+      {...(statusUrl
+        ? { href: statusUrl, target: "_blank", rel: "noopener noreferrer" }
+        : {})}
+    >
       <div
         className="flex whitespace-nowrap animate-marquee"
         style={{ "--marquee-duration": `${durationS}s` } as React.CSSProperties}
@@ -112,6 +126,6 @@ export function OutageBanner() {
           <AlertItem key={i} alert={alert} ariaHidden={i >= copies.length} />
         ))}
       </div>
-    </div>
+    </MarqueeWrapper>
   );
 }

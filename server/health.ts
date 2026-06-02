@@ -64,13 +64,14 @@ async function checkBambBuddy(): Promise<ComponentResult> {
 
     try {
         const res = await withTimeout(
-            fetch(`${endpoint}/api/v1/printers`, {
-                headers: { "X-API-Key": apiKey },
+            fetch(`${endpoint}/health`, {
                 signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
             }),
             CHECK_TIMEOUT_MS,
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = (await res.json()) as { status?: string };
+        if (body.status !== "healthy") throw new Error(`status=${body.status}`);
         return {
             id: "bambuddy",
             name: "BambBuddy",

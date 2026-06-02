@@ -186,12 +186,14 @@ model User {
     ConsumablePurchases   ConsumableRequest[]  @relation("RequestPurchasedBy")
     Notifications         Notification[]       @relation("UserNotifications")
     AuditLogs             AuditLog[]           @relation("AuditActor")
+    PrintQueueSubmissions PrintQueueSubmission[]
 
-    role          String    @default("user")
-    banned        Boolean?
-    banReason     String?
-    banExpires    DateTime?
-    studentNumber String?   @unique
+    role             String    @default("user")
+    banned           Boolean?
+    banReason        String?
+    banExpires       DateTime?
+    studentNumber    String?   @unique
+    lastSeenVersion  String?
 
     @@index([email])
     @@index([groupId])
@@ -289,11 +291,14 @@ model GcodePrintJob {
     s3Key            String?
     fileHashSha256   String
     fileSizeBytes    Int
-    status           GcodePrintJobStatus @default(STORED)
-    dispatchResponse String?
-    dispatchError    String?
-    createdAt        DateTime            @default(now())
-    updatedAt        DateTime            @updatedAt
+    status            GcodePrintJobStatus @default(STORED)
+    dispatchResponse  String?
+    dispatchError     String?
+    notionProjectId   String?
+    notionProjectName String?
+    personalUse       Boolean             @default(false)
+    createdAt         DateTime            @default(now())
+    updatedAt         DateTime            @updatedAt
 
     @@index([userId])
     @@index([printerId])
@@ -340,6 +345,38 @@ enum AuditAction {
     REQUEST_STATUS_CHANGED
     REQUEST_CANCELLED
     REQUEST_RECEIVED
+}
+
+model PrintQueueSubmission {
+    id                      String    @id @default(uuid())
+    bambuddyQueueItemId     Int       @unique
+    bambuddyQueueCreatedAt  DateTime?
+    archiveId               Int?
+    archiveName             String?
+    user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId                  String
+    notionProjectId         String?
+    notionProjectName       String?
+    personalUse             Boolean   @default(false)
+    createdAt               DateTime  @default(now())
+
+    // Captured when the queue item reaches a terminal state
+    capturedStatus          String?
+    capturedAt              DateTime?
+    capturedStartedAt       DateTime?
+    capturedCompletedAt     DateTime?
+    capturedFilamentGrams   Float?
+    capturedFilamentType    String?
+    capturedFilamentColor   String?
+    capturedPrinterId       Int?
+    capturedPrinterName     String?
+    capturedLogEntryId      Int?
+
+    @@index([userId])
+    @@index([bambuddyQueueItemId])
+    @@index([capturedStatus])
+    @@index([capturedStartedAt, capturedPrinterId])
+    @@index([capturedLogEntryId])
 }
 
 model AuditLog {

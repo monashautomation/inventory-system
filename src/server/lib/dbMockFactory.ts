@@ -99,6 +99,7 @@ export class DatabaseMockFactory {
       banExpires: null,
       ...overrides,
       studentNumber: overrides?.studentNumber ?? null,
+      lastSeenVersion: overrides?.lastSeenVersion ?? null,
     } satisfies User;
   }
 

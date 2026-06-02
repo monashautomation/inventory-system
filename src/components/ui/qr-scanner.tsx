@@ -7,12 +7,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./dialog";
-import { Camera, X, AlertCircle } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle2, Info, X } from "lucide-react";
 import { Alert, AlertDescription } from "./alert";
 import { BrowserMultiFormatReader } from "@zxing/library";
 
+export type ScanFeedback = {
+  type: "success" | "error" | "info";
+  title: string;
+  message: string;
+} | null;
+
 interface QRScannerProps {
-  onScan: (result: string) => void;
+  onScan: (
+    result: string,
+  ) => Promise<ScanFeedback | void> | ScanFeedback | void;
   trigger?: React.ReactNode;
   title?: string;
   description?: string;
@@ -32,9 +40,25 @@ export function QRScanner({
   const [isOpen, setIsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<ScanFeedback>(null);
+  const [flashType, setFlashType] = useState<"success" | "error" | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const lastScanRef = useRef<{ text: string; ts: number } | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showScanFeedback = useCallback(
+    (feedback: NonNullable<ScanFeedback>) => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      setScanFeedback(feedback);
+      if (feedback.type !== "info") setFlashType(feedback.type);
+      feedbackTimerRef.current = setTimeout(() => {
+        setScanFeedback(null);
+        setFlashType(null);
+      }, 2000);
+    },
+    [],
+  );
 
   const startCamera = useCallback(async () => {
     try {
@@ -52,11 +76,10 @@ export function QRScanner({
       await reader.decodeFromVideoDevice(
         videoInputDevices[0].deviceId,
         videoRef.current,
-        (result, err) => {
+        async (result, err) => {
           if (result) {
             const text = result.getText();
 
-            // Debounce: ignore same code within 3 seconds
             const now = Date.now();
             if (
               lastScanRef.current?.text === text &&
@@ -65,7 +88,8 @@ export function QRScanner({
               return;
             lastScanRef.current = { text, ts: now };
 
-            onScan(text);
+            const feedback = await onScan(text);
+            if (feedback) showScanFeedback(feedback);
 
             if (!multiScan) {
               stopCamera();
@@ -87,7 +111,7 @@ export function QRScanner({
       );
       setIsScanning(false);
     }
-  }, [onScan, multiScan]);
+  }, [onScan, multiScan, showScanFeedback]);
 
   const stopCamera = useCallback(() => {
     if (readerRef.current) {
@@ -100,7 +124,12 @@ export function QRScanner({
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
-      if (!open) stopCamera();
+      if (!open) {
+        stopCamera();
+        setScanFeedback(null);
+        setFlashType(null);
+        if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+      }
     },
     [stopCamera],
   );
@@ -108,6 +137,7 @@ export function QRScanner({
   useEffect(() => {
     return () => {
       readerRef.current?.reset();
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     };
   }, []);
 
@@ -157,6 +187,16 @@ export function QRScanner({
                   </div>
                 </div>
               )}
+              {flashType && (
+                <div
+                  key={flashType + String(scanFeedback?.message)}
+                  className={`absolute inset-0 pointer-events-none animate-[flash_0.4s_ease-out_forwards] ${
+                    flashType === "success"
+                      ? "bg-green-500/40"
+                      : "bg-red-500/40"
+                  }`}
+                />
+              )}
             </div>
 
             {isScanning && (
@@ -170,6 +210,50 @@ export function QRScanner({
               </div>
             )}
           </div>
+
+          {scanFeedback && (
+            <div
+              className={`rounded-xl px-4 py-3 flex items-start gap-3 border transition-all ${
+                scanFeedback.type === "success"
+                  ? "bg-green-50 border-green-300 dark:bg-green-950/40 dark:border-green-800"
+                  : scanFeedback.type === "error"
+                    ? "bg-red-50 border-red-300 dark:bg-red-950/40 dark:border-red-800"
+                    : "bg-blue-50 border-blue-300 dark:bg-blue-950/40 dark:border-blue-800"
+              }`}
+            >
+              {scanFeedback.type === "success" ? (
+                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              ) : scanFeedback.type === "error" ? (
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0">
+                <p
+                  className={`font-semibold text-sm ${
+                    scanFeedback.type === "success"
+                      ? "text-green-800 dark:text-green-300"
+                      : scanFeedback.type === "error"
+                        ? "text-red-800 dark:text-red-300"
+                        : "text-blue-800 dark:text-blue-300"
+                  }`}
+                >
+                  {scanFeedback.title}
+                </p>
+                <p
+                  className={`text-sm mt-0.5 ${
+                    scanFeedback.type === "success"
+                      ? "text-green-700 dark:text-green-400"
+                      : scanFeedback.type === "error"
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-blue-700 dark:text-blue-400"
+                  }`}
+                >
+                  {scanFeedback.message}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2">
             {!isScanning ? (

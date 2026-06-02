@@ -1,4 +1,4 @@
-import { router, adminProcedure } from "@/server/trpc";
+import { router, adminProcedure, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { userInput, userUpdateInput } from "@/server/schema/user.schema";
@@ -61,6 +61,22 @@ export const userRouter = router({
           group: true,
           ItemRecords: true,
         },
+      });
+    }),
+
+  getSelf: userProcedure.query(async ({ ctx }) => {
+    return prisma.user.findUnique({
+      where: { id: ctx.user.id },
+      select: { lastSeenVersion: true },
+    });
+  }),
+
+  acknowledgeVersion: userProcedure
+    .input(z.object({ version: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return prisma.user.update({
+        where: { id: ctx.user.id },
+        data: { lastSeenVersion: input.version },
       });
     }),
 });

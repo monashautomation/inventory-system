@@ -97,7 +97,12 @@ describe("kiosk router", () => {
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { email: "specific@student.monash.edu" },
+          where: {
+            OR: [
+              { email: "specific@student.monash.edu" },
+              { studentNumber: studentInfo.studentId },
+            ],
+          },
         }),
       );
     });

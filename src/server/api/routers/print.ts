@@ -30,6 +30,8 @@ import {
   resumeBambuddyPrint,
   stopBambuddyPrint,
   stopBambuddyCameraStream,
+  clearBambuddyBuildPlate,
+  configureAmsSlot,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -38,6 +40,7 @@ import {
   getAllCachedStatuses,
   refreshPrintCamCache,
 } from "@/server/lib/printCamPoller";
+import { getActiveProjects } from "@/server/lib/external-api";
 import {
   prusaStatusResponseSchema,
   prusaJobResponseSchema,
@@ -533,6 +536,10 @@ export const printRouter = router({
         orderBy: { createdAt: "desc" },
       });
     }),
+
+  getProjects: userProcedure.query(async () => {
+    return getActiveProjects();
+  }),
 
   getPrinterStatus: userProcedure
     .meta({
@@ -1051,6 +1058,45 @@ export const printRouter = router({
       return { success: true };
     }),
 
+  clearBuildPlate: userProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      await clearBambuddyBuildPlate(input.bambuddyId);
+      return { success: true, message: "Build plate marked as cleared." };
+    }),
+
+  configureAmsSlot: userProcedure
+    .input(
+      z.object({
+        bambuddyId: z.number().int().positive(),
+        amsId: z.number().int().min(0),
+        trayId: z.number().int().min(0),
+        trayInfoIdx: z.string(),
+        trayType: z.string().min(1, "Filament type is required"),
+        traySubBrands: z.string(),
+        trayColor: z
+          .string()
+          .regex(/^[0-9A-Fa-f]{8}$/, "Color must be 8-char RRGGBBAA hex"),
+        nozzleTempMin: z.number().int().min(0).max(500),
+        nozzleTempMax: z.number().int().min(0).max(500),
+        nozzleDiameter: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await configureAmsSlot(input.bambuddyId, {
+        amsId: input.amsId,
+        trayId: input.trayId,
+        trayInfoIdx: input.trayInfoIdx,
+        trayType: input.trayType,
+        traySubBrands: input.traySubBrands,
+        trayColor: input.trayColor,
+        nozzleTempMin: input.nozzleTempMin,
+        nozzleTempMax: input.nozzleTempMax,
+        nozzleDiameter: input.nozzleDiameter,
+      });
+      return { message: "AMS slot configured." };
+    }),
+
   getPrinterMonitoringOptions: userProcedure
     .meta({
       mcp: {
@@ -1493,6 +1539,9 @@ export const printRouter = router({
         fileContentBase64: z.string().min(1),
         useAms: z.boolean().optional(),
         amsMapping: z.array(z.number().int().min(-1).max(255)).optional(),
+        notionProjectId: z.string().min(1).nullable().optional(),
+        notionProjectName: z.string().min(1).nullable().optional(),
+        personalUse: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1550,6 +1599,9 @@ export const printRouter = router({
             fileHashSha256: sha256,
             fileSizeBytes: fileBuffer.length,
             status: "STORED",
+            notionProjectId: input.notionProjectId,
+            notionProjectName: input.notionProjectName,
+            personalUse: input.personalUse ?? false,
           },
         });
 
@@ -1664,6 +1716,9 @@ export const printRouter = router({
             fileSizeBytes: fileBuffer.length,
             status: "DISPATCH_FAILED",
             dispatchError: message,
+            notionProjectId: input.notionProjectId,
+            notionProjectName: input.notionProjectName,
+            personalUse: input.personalUse ?? false,
           },
         });
         throw new TRPCError({
@@ -1683,6 +1738,9 @@ export const printRouter = router({
           fileSizeBytes: fileBuffer.length,
           status: "DISPATCHED",
           dispatchResponse: dispatchResult.value.details,
+          notionProjectId: input.notionProjectId,
+          notionProjectName: input.notionProjectName,
+          personalUse: input.personalUse ?? false,
         },
       });
       return { ...job, s3Warning: !s3Succeeded };
@@ -2065,6 +2123,7 @@ export const printRouter = router({
       let nozzles: { nozzle_type: string; nozzle_diameter: string }[] = [];
       let amsUnits: AMSUnit[] = [];
       let amsExists = false;
+      let awaitingPlateClear = false;
 
       if (s === null) {
         state = "UNREACHABLE";
@@ -2119,6 +2178,7 @@ export const printRouter = router({
         nozzles = s.nozzles ?? [];
         amsUnits = s.ams ?? [];
         amsExists = s.ams_exists ?? false;
+        awaitingPlateClear = s.awaiting_plate_clear ?? false;
         const hmsErrors = s.hms_errors ?? [];
         if (hmsErrors.length > 0) {
           state = "ATTENTION";
@@ -2153,6 +2213,7 @@ export const printRouter = router({
         nozzles,
         ams: amsUnits,
         amsExists,
+        awaitingPlateClear,
         startedBy: job ? { name: job.user.name, email: job.user.email } : null,
         jobStartedAt: job?.createdAt ?? null,
         updatedAt: Date.now(),
@@ -2261,6 +2322,7 @@ export const printRouter = router({
           }[],
           ams: [] as AMSUnit[],
           amsExists: false,
+          awaitingPlateClear: false,
           startedBy: job
             ? { name: job.user.name, email: job.user.email }
             : null,

@@ -113,6 +113,67 @@ export async function getStudentInfo(studentId: string): Promise<StudentInfo> {
   };
 }
 
+export interface NotionProject {
+  id: string;
+  name: string;
+}
+
+export async function getActiveProjects(): Promise<NotionProject[]> {
+  const STUDENT_API_BASE = process.env.STUDENT_API_BASE ?? "";
+  const STUDENT_API_KEY = process.env.STUDENT_API_KEY ?? "";
+
+  if (!STUDENT_API_BASE) {
+    return [
+      { id: "proj-stub-1", name: "Example Project A" },
+      { id: "proj-stub-2", name: "Example Project B" },
+    ];
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${STUDENT_API_BASE}/projects`, {
+      headers: {
+        Authorization: `Bearer ${STUDENT_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Projects API timeout after 15s");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    throw new Error(`Projects API error: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as unknown;
+  const items: unknown[] = Array.isArray(data)
+    ? data
+    : Array.isArray((data as Record<string, unknown>).projects)
+      ? ((data as Record<string, unknown>).projects as unknown[])
+      : Array.isArray((data as Record<string, unknown>).items)
+        ? ((data as Record<string, unknown>).items as unknown[])
+        : [];
+
+  return items
+    .filter(
+      (p): p is { id: string; name: string } =>
+        typeof p === "object" &&
+        p !== null &&
+        typeof (p as Record<string, unknown>).id === "string" &&
+        typeof (p as Record<string, unknown>).name === "string",
+    )
+    .map((p) => ({ id: p.id, name: p.name }));
+}
+
 export async function postDiscordMessage(
   payload: DiscordMessagePayload,
 ): Promise<void> {
