@@ -10,11 +10,13 @@ import {
   Play,
   Square,
   Clock,
+  CalendarClock,
   User,
   Printer,
   AlertTriangle,
   Package,
   FolderOpen,
+  SkipForward,
 } from "lucide-react";
 import { authClient } from "@/auth/client";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -206,13 +208,39 @@ function QueueItemRow({
               {item.notionProjectName}
             </span>
           )}
+          {item.scheduled_time && (
+            <span className="flex items-center gap-1">
+              <CalendarClock className="h-3 w-3" />
+              {new Date(item.scheduled_time).toLocaleString(undefined, {
+                dateStyle: "short",
+                timeStyle: "short",
+              })}
+            </span>
+          )}
+          {item.been_jumped && (
+            <span className="flex items-center gap-1 text-orange-500 dark:text-orange-400">
+              <SkipForward className="h-3 w-3" />
+              skipped over
+            </span>
+          )}
         </div>
 
+        {/* Deleted archive warning */}
+        {item.archive_deleted && (
+          <div className="flex items-center gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            <span>File has been deleted — print will fail</span>
+          </div>
+        )}
+
         {/* Waiting reason */}
-        {item.waiting_reason && (
+        {(item.waiting_reason || item.filament_short) && (
           <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
             <AlertTriangle className="h-3 w-3 shrink-0" />
-            <span>{item.waiting_reason}</span>
+            <span>
+              {item.waiting_reason ??
+                "Insufficient filament for the assigned spool"}
+            </span>
           </div>
         )}
 

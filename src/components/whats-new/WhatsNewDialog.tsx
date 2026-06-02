@@ -79,6 +79,22 @@ const CHANGELOG: VersionEntry[] = [
         type: "fixed",
         text: "Add-to-queue popup was overflowing on smaller screens — dialog is now centred and constrained correctly",
       },
+      {
+        type: "new",
+        text: "Printer button status indicator — each Bambu printer's physical button now reflects job state: breathing green while printing, flashing red on error, off when idle, and flashing blue when a finished print needs the build plate cleared",
+      },
+      {
+        type: "new",
+        text: "Auto-create spool on queue submission — if no matching spool is selected when submitting a job, a new spool is created automatically and the user is notified",
+      },
+      {
+        type: "improved",
+        text: "Filament types sourced from BambuBuddy API — available filament types in the AMS editor are now fetched live from BambuBuddy instead of a hardcoded list",
+      },
+      {
+        type: "improved",
+        text: "PHA added as a supported filament type",
+      },
     ],
   },
   {
