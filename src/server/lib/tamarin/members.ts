@@ -58,7 +58,7 @@ export async function getMember(
     string,
     unknown
   >;
-  const pages = result["results"] as Record<string, unknown>[] | undefined;
+  const pages = result.results as Record<string, unknown>[] | undefined;
   const page = pages?.[0];
 
   if (!page) {
@@ -67,9 +67,9 @@ export async function getMember(
     throw err;
   }
 
-  const props = page["properties"] as Record<string, unknown>;
+  const props = page.properties as Record<string, unknown>;
   const member: Member = {
-    id: (page["id"] as string) ?? "",
+    id: (page.id as string) ?? "",
     name: extractTitle(props, PROP_NAME),
     student_number: extractRichText(props, PROP_STUDENT_NUMBER),
     email: extractEmail(props, PROP_EMAIL),
@@ -82,17 +82,17 @@ export async function getMember(
 
 function extractTitle(props: Record<string, unknown>, key: string): string {
   const field = props[key] as Record<string, unknown> | undefined;
-  const arr = field?.["title"] as Record<string, unknown>[] | undefined;
-  return (arr?.[0]?.["plain_text"] as string) ?? "";
+  const arr = field?.title as Record<string, unknown>[] | undefined;
+  return (arr?.[0]?.plain_text as string) ?? "";
 }
 
 function extractRichText(props: Record<string, unknown>, key: string): string {
   const field = props[key] as Record<string, unknown> | undefined;
-  const arr = field?.["rich_text"] as Record<string, unknown>[] | undefined;
-  return (arr?.[0]?.["plain_text"] as string) ?? "";
+  const arr = field?.rich_text as Record<string, unknown>[] | undefined;
+  return (arr?.[0]?.plain_text as string) ?? "";
 }
 
 function extractEmail(props: Record<string, unknown>, key: string): string {
   const field = props[key] as Record<string, unknown> | undefined;
-  return (field?.["email"] as string) ?? "";
+  return (field?.email as string) ?? "";
 }

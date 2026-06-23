@@ -24,12 +24,12 @@ export async function getProjects(
     string,
     unknown
   >;
-  const pages = (result["results"] as Record<string, unknown>[]) ?? [];
+  const pages = (result.results as Record<string, unknown>[]) ?? [];
 
   return pages.map((page) => {
-    const props = page["properties"] as Record<string, unknown>;
+    const props = page.properties as Record<string, unknown>;
     return {
-      id: (page["id"] as string) ?? "",
+      id: (page.id as string) ?? "",
       name: extractTitle(props, PROP_NAME),
     };
   });
@@ -37,6 +37,6 @@ export async function getProjects(
 
 function extractTitle(props: Record<string, unknown>, key: string): string {
   const field = props[key] as Record<string, unknown> | undefined;
-  const arr = field?.["title"] as Record<string, unknown>[] | undefined;
-  return (arr?.[0]?.["plain_text"] as string) ?? "";
+  const arr = field?.title as Record<string, unknown>[] | undefined;
+  return (arr?.[0]?.plain_text as string) ?? "";
 }

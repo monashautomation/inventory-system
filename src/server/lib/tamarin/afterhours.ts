@@ -19,16 +19,16 @@ async function resolveUsernameToId(
 
   if (!res.ok) return null;
 
-  const members = (await res.json()) as Array<Record<string, unknown>>;
+  const members = (await res.json()) as Record<string, unknown>[];
   for (const member of members) {
-    const nick = (member["nick"] as string | null) ?? "";
-    const user = member["user"] as Record<string, unknown>;
-    const global = (user?.["username"] as string) ?? "";
+    const nick = (member.nick as string | null) ?? "";
+    const user = member.user as Record<string, unknown>;
+    const global = (user?.username as string) ?? "";
     if (
       nick.toLowerCase() === username.toLowerCase() ||
       global.toLowerCase() === username.toLowerCase()
     ) {
-      return (user?.["id"] as string) ?? null;
+      return (user?.id as string) ?? null;
     }
   }
 
