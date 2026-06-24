@@ -116,7 +116,7 @@ export function PrintJobModal({
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [targetingMode, setTargetingMode] = useState<TargetingMode>("any");
+  const [targetingMode, setTargetingMode] = useState<TargetingMode>("model");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedPrinterId, setSelectedPrinterId] = useState<number | null>(
     null,
@@ -241,7 +241,7 @@ export function PrintJobModal({
       setUploadFile(null);
       setUploading(false);
       setIsDraggingFile(false);
-      setTargetingMode("any");
+      setTargetingMode("model");
       setSelectedModel("");
       setSelectedPrinterId(null);
       setSlotSelections(new Map());
@@ -261,7 +261,7 @@ export function PrintJobModal({
     const modelExists = printers.some(
       (p) => p.model?.toLowerCase() === model.toLowerCase(),
     );
-    if (modelExists && targetingMode === "any") {
+    if (modelExists && !selectedModel) {
       setTargetingMode("model");
       setSelectedModel(model);
     }
@@ -677,9 +677,6 @@ export function PrintJobModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="any">
-                      Any available Bambu printer
-                    </SelectItem>
                     <SelectItem value="model">
                       Specific printer model
                     </SelectItem>

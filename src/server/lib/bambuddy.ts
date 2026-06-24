@@ -527,21 +527,39 @@ export interface BambuddyArchive {
 
 // ─── Queue API ────────────────────────────────────────────────────────────────
 
+// In-flight coalescing for listQueue: concurrent callers with the same params
+// share a single HTTP request instead of hammering Bambuddy in parallel.
+const listQueueInflight = new Map<string, Promise<PrintQueueItemResponse[]>>();
+
 export async function listQueue(opts?: {
   printerId?: number;
   status?: string;
 }): Promise<PrintQueueItemResponse[]> {
+  const cacheKey = `${opts?.printerId ?? ""}:${opts?.status ?? ""}`;
+
+  const existing = listQueueInflight.get(cacheKey);
+  if (existing) return existing;
+
   const { endpoint, apiKey } = getConfig();
   const params = new URLSearchParams();
   if (opts?.printerId != null) params.set("printer_id", String(opts.printerId));
   if (opts?.status) params.set("status", opts.status);
   const qs = params.toString();
-  const res = await fetch(`${endpoint}/api/v1/queue/${qs ? `?${qs}` : ""}`, {
+
+  const promise = fetch(`${endpoint}/api/v1/queue/${qs ? `?${qs}` : ""}`, {
     headers: headers(apiKey),
     signal: AbortSignal.timeout(10_000),
-  });
-  await checkResponse(res, "list queue");
-  return res.json() as Promise<PrintQueueItemResponse[]>;
+  })
+    .then(async (res) => {
+      await checkResponse(res, "list queue");
+      return res.json() as Promise<PrintQueueItemResponse[]>;
+    })
+    .finally(() => {
+      listQueueInflight.delete(cacheKey);
+    });
+
+  listQueueInflight.set(cacheKey, promise);
+  return promise;
 }
 
 export async function addToQueue(
@@ -729,15 +747,27 @@ export async function getBambuddyPrometheusMetrics(): Promise<string> {
   return res.text();
 }
 
+// In-flight coalescing for listBambuddyPrinterStatuses
+let listPrinterStatusesInflight: Promise<BambuddyPrinterStatus[]> | null = null;
+
 /** Fetch status for all BamBuddy printers in parallel. Failed individual lookups are skipped. */
 export async function listBambuddyPrinterStatuses(): Promise<
   BambuddyPrinterStatus[]
 > {
-  const printers = await listBambuddyPrinters();
-  const results = await Promise.allSettled(
-    printers.map((p) => getBambuddyPrinterStatus(p.id)),
-  );
-  return results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  if (listPrinterStatusesInflight) return listPrinterStatusesInflight;
+
+  const promise = (async () => {
+    const printers = await listBambuddyPrinters();
+    const results = await Promise.allSettled(
+      printers.map((p) => getBambuddyPrinterStatus(p.id)),
+    );
+    return results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  })().finally(() => {
+    listPrinterStatusesInflight = null;
+  });
+
+  listPrinterStatusesInflight = promise;
+  return promise;
 }
 
 // ─── Print Stats Types ────────────────────────────────────────────────────────

@@ -26,6 +26,42 @@ type QueueItem =
   inferRouterOutputs<AppRouter>["printQueue"]["listQueue"][number];
 type QueueStatus = QueueItem["status"];
 
+function humaniseWaitingReason(
+  raw: string,
+  filamentOverrides?: QueueItem["filament_overrides"],
+): string {
+  const s = raw.toLowerCase();
+  if (
+    s.includes("color") ||
+    s.includes("colour") ||
+    s.includes("colour_match") ||
+    s.includes("color_match")
+  ) {
+    const colours =
+      filamentOverrides && filamentOverrides.length > 0
+        ? filamentOverrides
+            .map((o) => o.color_name ?? o.color)
+            .filter(Boolean)
+            .join(", ")
+        : null;
+    return colours
+      ? `Waiting for a printer with ${colours} loaded to become available. The job will start automatically once a compatible printer is free.`
+      : "Waiting for a printer with matching filament colours to become available. The job will start automatically once a compatible printer is free.";
+  }
+  if (s.includes("plate") || s.includes("clear"))
+    return "Waiting for the build plate to be cleared. Collect the previous print from the printer, then mark the plate as cleared in Printer Monitoring.";
+  if (s.includes("no_printer") || s.includes("no printer") || s.includes("unavailable"))
+    return "No compatible printer is currently available. The job will start automatically when one becomes free.";
+  if (s.includes("filament") || s.includes("spool"))
+    return "Waiting for the required filament type to be loaded on a printer. Load the correct spool and the job will start automatically.";
+  if (s.includes("manual"))
+    return "This print is held for manual start. A staff member must press the play button to begin.";
+  if (s.includes("scheduled"))
+    return "This print is scheduled for a future time and will start automatically when the scheduled time is reached.";
+  // Return the raw reason with a prefix if none of the patterns match
+  return `On hold: ${raw}`;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   pending: {
     label: "Pending",
@@ -75,9 +111,12 @@ function ColorSwatch({ hex }: { hex: string }) {
   );
 }
 
+type PrinterConnectivity = { id: number; name: string; connected: boolean };
+
 function QueueItemRow({
   item,
   isAdmin,
+  connectivity,
   onStart,
   onStop,
   onCancel,
@@ -85,6 +124,7 @@ function QueueItemRow({
 }: {
   item: QueueItem;
   isAdmin: boolean;
+  connectivity: PrinterConnectivity[];
   onStart: (id: number) => void;
   onStop: (id: number) => void;
   onCancel: (id: number) => void;
@@ -101,6 +141,13 @@ function QueueItemRow({
   const isTerminal = ["completed", "failed", "cancelled", "skipped"].includes(
     status,
   );
+
+  const offlinePrinter =
+    isPending && item.printer_id != null
+      ? connectivity.find(
+          (c) => c.id === item.printer_id && !c.connected,
+        ) ?? null
+      : null;
 
   const displayName =
     item.archive_name ??
@@ -148,7 +195,7 @@ function QueueItemRow({
               variant="outline"
               className="text-xs shrink-0 border-amber-400/60 text-amber-600 dark:text-amber-400"
             >
-              manual
+              Held — manual start
             </Badge>
           )}
           {item.timelapse && (
@@ -202,12 +249,10 @@ function QueueItemRow({
               {item.created_by_username}
             </span>
           )}
-          {item.notionProjectName && (
-            <span className="flex items-center gap-1">
-              <FolderOpen className="h-3 w-3" />
-              {item.notionProjectName}
-            </span>
-          )}
+          <span className="flex items-center gap-1">
+            <FolderOpen className="h-3 w-3" />
+            {item.notionProjectName ?? (item.personalUse ? "Personal use" : "—")}
+          </span>
           {item.scheduled_time && (
             <span className="flex items-center gap-1">
               <CalendarClock className="h-3 w-3" />
@@ -220,26 +265,72 @@ function QueueItemRow({
           {item.been_jumped && (
             <span className="flex items-center gap-1 text-orange-500 dark:text-orange-400">
               <SkipForward className="h-3 w-3" />
-              skipped over
+              Skipped — waiting for compatible printer
             </span>
           )}
         </div>
 
-        {/* Deleted archive warning */}
-        {item.archive_deleted && (
-          <div className="flex items-center gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="h-3 w-3 shrink-0" />
-            <span>File has been deleted — print will fail</span>
+        {/* Deleted archive warning — only actionable on pending */}
+        {item.archive_deleted && isPending && (
+          <div className="flex items-start gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+            <span>
+              The print file has been deleted from Bambuddy and this job will
+              fail when dispatched. Cancel this job and re-queue with a valid
+              file.
+            </span>
+          </div>
+        )}
+
+        {/* Offline printer */}
+        {offlinePrinter && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+            <span>
+              <strong>{offlinePrinter.name}</strong> is currently offline. This
+              job will start automatically once the printer reconnects.
+            </span>
+          </div>
+        )}
+
+        {/* Manual start explanation */}
+        {item.manual_start && isPending && !item.waiting_reason && !item.filament_short && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+            <span>
+              This print is held for manual start. A staff member must press the
+              play button to begin.
+            </span>
           </div>
         )}
 
         {/* Waiting reason */}
-        {(item.waiting_reason || item.filament_short) && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="h-3 w-3 shrink-0" />
+        {item.waiting_reason && isPending && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+            <span>{humaniseWaitingReason(item.waiting_reason, item.filament_overrides ?? undefined)}</span>
+          </div>
+        )}
+
+        {/* Filament short */}
+        {item.filament_short && isPending && !item.waiting_reason && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
             <span>
-              {item.waiting_reason ??
-                "Insufficient filament for the assigned spool"}
+              Not enough filament on the assigned spool to complete this print.
+              Replace or top up the spool, then the job will start automatically.
+            </span>
+          </div>
+        )}
+
+        {/* Been jumped explanation */}
+        {item.been_jumped && isPending && (
+          <div className="flex items-start gap-1.5 text-xs text-orange-600 dark:text-orange-400">
+            <SkipForward className="h-3 w-3 shrink-0 mt-px" />
+            <span>
+              Jobs ahead in the queue could not run on the required printer, so
+              this job was skipped over. It will start as soon as a compatible
+              printer becomes available.
             </span>
           </div>
         )}
@@ -319,6 +410,11 @@ export function PrintQueuePanel({ statusFilter }: PrintQueuePanelProps) {
     { status: statusFilter },
     { refetchInterval: 10_000 },
   );
+
+  const { data: connectivity = [] } =
+    trpc.printQueue.listPrinterConnectivity.useQuery(undefined, {
+      refetchInterval: 30_000,
+    });
 
   const utils = trpc.useUtils();
 
@@ -428,6 +524,7 @@ export function PrintQueuePanel({ statusFilter }: PrintQueuePanelProps) {
                 key={item.id}
                 item={item}
                 isAdmin={isAdmin}
+                connectivity={connectivity}
                 onStart={(id) => startMutation.mutate({ itemId: id })}
                 onStop={(id) => stopMutation.mutate({ itemId: id })}
                 onCancel={(id) => cancelMutation.mutate({ itemId: id })}

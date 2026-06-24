@@ -6,6 +6,7 @@ import { prisma } from "@/server/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
   listBambuddyPrinters,
+  listBambuddyPrinterStatuses,
   getBambuddyPrinterStatus,
   listQueue,
   addToQueue,
@@ -100,6 +101,23 @@ export const printQueueRouter = router({
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Could not fetch printers",
+      });
+    }
+  }),
+
+  listPrinterConnectivity: userProcedure.query(async () => {
+    try {
+      const statuses = await listBambuddyPrinterStatuses();
+      return statuses.map((s) => ({
+        id: s.id,
+        name: s.name,
+        connected: s.connected,
+      }));
+    } catch (err) {
+      logger.error({ err }, "Failed to fetch printer connectivity");
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Could not fetch printer connectivity",
       });
     }
   }),
@@ -212,6 +230,7 @@ export const printQueueRouter = router({
           select: {
             bambuddyQueueItemId: true,
             notionProjectName: true,
+            personalUse: true,
             user: { select: { name: true } },
           },
         });
@@ -226,6 +245,7 @@ export const printQueueRouter = router({
             created_by_username:
               sub?.user.name ?? item.created_by_username ?? null,
             notionProjectName: sub?.notionProjectName ?? null,
+            personalUse: sub?.personalUse ?? false,
           };
         });
       } catch (err) {
