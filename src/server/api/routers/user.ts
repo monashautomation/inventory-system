@@ -2,6 +2,11 @@ import { router, adminProcedure, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
 import { userInput, userUpdateInput } from "@/server/schema/user.schema";
+import {
+  syncAllMembers,
+  syncOneMember,
+  getMemberSyncStatus,
+} from "@/server/lib/member-sync";
 
 export const userRouter = router({
   create: adminProcedure.input(userInput).mutation(async ({ input }) => {
@@ -126,6 +131,20 @@ export const userRouter = router({
         where: { id: input.id },
         data: { role: input.role },
       });
+    }),
+
+  memberSyncStatus: adminProcedure.query(() => {
+    return getMemberSyncStatus();
+  }),
+
+  syncAllMembers: adminProcedure.mutation(async () => {
+    return syncAllMembers();
+  }),
+
+  syncOneMember: adminProcedure
+    .input(z.object({ userId: z.uuid() }))
+    .mutation(async ({ input }) => {
+      return syncOneMember(input.userId);
     }),
 
   getSelf: userProcedure.query(async ({ ctx }) => {

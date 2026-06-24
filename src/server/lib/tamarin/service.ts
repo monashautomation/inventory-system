@@ -5,6 +5,7 @@ import { getProjects } from "./projects";
 import type { Project } from "./projects";
 import { postAfterHours } from "./afterhours";
 import type { AfterHoursRequest } from "./afterhours";
+import { initMemberSync } from "@/server/lib/member-sync";
 
 export type { Member, Project, AfterHoursRequest };
 
@@ -41,6 +42,8 @@ export function getTamarinService(): TamarinService | null {
 
   const notion = new NotionClient(notionToken);
   const cache = new MemberCache();
+
+  initMemberSync(notion, membersDbId);
 
   _service = {
     getMember: (studentNumber) =>

@@ -2,7 +2,14 @@ import { useState } from "react";
 import { trpc } from "@/client/trpc";
 import { authClient } from "@/auth/client";
 import { Navigate } from "react-router-dom";
-import { Users, ShieldCheck, ShieldOff, Ban, CheckCircle } from "lucide-react";
+import {
+  Users,
+  ShieldCheck,
+  ShieldOff,
+  Ban,
+  CheckCircle,
+  RefreshCw,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -210,6 +217,28 @@ export default function Members() {
   const utils = trpc.useUtils();
 
   const { data: members, isLoading, error } = trpc.user.members.useQuery();
+  const { data: syncStatus, refetch: refetchSyncStatus } =
+    trpc.user.memberSyncStatus.useQuery(undefined, { refetchInterval: 10000 });
+
+  const syncAllMutation = trpc.user.syncAllMembers.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `Sync complete — ${result.updated} updated, ${result.skipped} unchanged`,
+      );
+      void utils.user.members.invalidate();
+      void refetchSyncStatus();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const syncOneMutation = trpc.user.syncOneMember.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.updated ? "Member synced" : "No changes found");
+      void utils.user.members.invalidate();
+      void refetchSyncStatus();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const banMutation = trpc.user.ban.useMutation({
     onSuccess: () => {
@@ -254,13 +283,44 @@ export default function Members() {
 
   return (
     <div className="container mx-auto py-3 p-6 md:p-8">
-      <div className="mb-6 flex items-center gap-3">
-        <Users className="size-6 text-muted-foreground" />
-        <div>
-          <h1 className="text-3xl font-bold">Members</h1>
-          <p className="text-muted-foreground">
-            Manage users, roles, and access
-          </p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Users className="size-6 text-muted-foreground" />
+          <div>
+            <h1 className="text-3xl font-bold">Members</h1>
+            <p className="text-muted-foreground">
+              Manage users, roles, and access
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => syncAllMutation.mutate()}
+            disabled={syncAllMutation.isPending || syncStatus?.isSyncing}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${syncAllMutation.isPending || syncStatus?.isSyncing ? "animate-spin" : ""}`}
+            />
+            {syncAllMutation.isPending || syncStatus?.isSyncing
+              ? "Syncing…"
+              : "Refresh all"}
+          </Button>
+          {syncStatus && (
+            <p className="text-xs text-muted-foreground">
+              {syncStatus.lastSyncAt
+                ? `Last synced ${formatDate(syncStatus.lastSyncAt)}`
+                : "Not yet synced"}
+              {syncStatus.totalCached > 0 &&
+                ` · ${syncStatus.totalCached} cached`}
+            </p>
+          )}
+          {syncStatus?.lastError && (
+            <p className="text-xs text-destructive max-w-xs text-right truncate">
+              {syncStatus.lastError}
+            </p>
+          )}
         </div>
       </div>
 
@@ -390,6 +450,16 @@ export default function Members() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                syncOneMutation.mutate({ userId: member.id })
+                              }
+                              disabled={syncOneMutation.isPending}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Refresh from Notion
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {member.role === "admin" ? (
                               <DropdownMenuItem
                                 onClick={() =>

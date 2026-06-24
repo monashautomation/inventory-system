@@ -38,6 +38,45 @@ export class MemberCache {
   }
 }
 
+export async function getAllMembers(
+  notion: NotionClient,
+  dbId: string,
+): Promise<Member[]> {
+  const pages = await notion.queryDatabaseAll(dbId);
+  return pages.map((page) => {
+    const props = page.properties as Record<string, unknown>;
+    return {
+      id: (page.id as string) ?? "",
+      name: extractTitle(props, PROP_NAME),
+      student_number: extractRichText(props, PROP_STUDENT_NUMBER),
+      email: extractEmail(props, PROP_EMAIL),
+      discord_id: extractRichText(props, PROP_DISCORD_ID),
+    };
+  });
+}
+
+export async function getMemberByEmail(
+  notion: NotionClient,
+  dbId: string,
+  email: string,
+): Promise<Member | null> {
+  const filter = {
+    property: PROP_EMAIL,
+    email: { equals: email },
+  };
+  const pages = await notion.queryDatabaseAll(dbId, filter);
+  const page = pages[0];
+  if (!page) return null;
+  const props = page.properties as Record<string, unknown>;
+  return {
+    id: (page.id as string) ?? "",
+    name: extractTitle(props, PROP_NAME),
+    student_number: extractRichText(props, PROP_STUDENT_NUMBER),
+    email: extractEmail(props, PROP_EMAIL),
+    discord_id: extractRichText(props, PROP_DISCORD_ID),
+  };
+}
+
 export async function getMember(
   notion: NotionClient,
   dbId: string,

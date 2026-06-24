@@ -11,6 +11,32 @@ export class NotionClient {
     return this.queryRaw(dbId, { filter });
   }
 
+  async queryDatabaseAll(
+    dbId: string,
+    filter?: unknown,
+  ): Promise<Record<string, unknown>[]> {
+    const pages: Record<string, unknown>[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const body: Record<string, unknown> = {};
+      if (filter) body.filter = filter;
+      if (cursor) body.start_cursor = cursor;
+
+      const result = (await this.queryRaw(dbId, body)) as {
+        results: Record<string, unknown>[];
+        has_more: boolean;
+        next_cursor: string | null;
+      };
+
+      pages.push(...result.results);
+      cursor =
+        result.has_more && result.next_cursor ? result.next_cursor : undefined;
+    } while (cursor);
+
+    return pages;
+  }
+
   private async queryRaw(dbId: string, body: unknown): Promise<unknown> {
     const url = `${NOTION_BASE}/databases/${dbId}/query`;
     const res = await fetch(url, {
