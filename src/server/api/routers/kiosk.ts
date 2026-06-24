@@ -1,6 +1,7 @@
 import { router, kioskProcedure, adminProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { getStudentInfo, postDiscordMessage } from "@/server/lib/external-api";
+import { getCachedMemberByStudentNumber } from "@/server/lib/member-sync";
 import { itemCheckout } from "../utils/item/item.checkout";
 import { itemCheckin } from "../utils/item/item.checkin";
 import { z } from "zod";
@@ -36,21 +37,35 @@ const DISCORD_AFTER_HOURS_CHANNEL =
 const studentIdSchema = z.string().regex(/^[A-Za-z0-9]{1,20}$/);
 
 async function resolveUser(studentId: string) {
-  let studentInfo;
-  try {
-    studentInfo = await getStudentInfo(studentId);
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      (err as Error & { code?: string }).code === "MEMBER_NOT_FOUND"
-    ) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "MEMBER_NOT_FOUND",
-      });
+  // 1. Try in-memory snapshot (populated by hourly member sync)
+  const cached = getCachedMemberByStudentNumber(studentId);
+  let studentInfo = cached
+    ? {
+        studentId: cached.student_number || studentId,
+        name: cached.name,
+        email: cached.email,
+        discordId: cached.discord_id,
+      }
+    : null;
+
+  // 2. Fall back to live Tamarin lookup
+  if (!studentInfo) {
+    try {
+      studentInfo = await getStudentInfo(studentId);
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err as Error & { code?: string }).code === "MEMBER_NOT_FOUND"
+      ) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "MEMBER_NOT_FOUND",
+        });
+      }
+      throw err;
     }
-    throw err;
   }
+
   const user = await prisma.user.findFirst({
     where: {
       OR: [{ email: studentInfo.email }, { studentNumber: studentId }],

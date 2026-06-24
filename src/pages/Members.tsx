@@ -10,6 +10,7 @@ import {
   CheckCircle,
   RefreshCw,
   ImageOff,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -196,6 +197,16 @@ export default function Members() {
   const utils = trpc.useUtils();
 
   const { data: members, isLoading, error } = trpc.user.members.useQuery();
+
+  const discordIds = (members ?? [])
+    .map((m) => m.discordId)
+    .filter((id): id is string => !!id);
+
+  const { data: discordValidation } = trpc.user.validateDiscordIds.useQuery(
+    { discordIds },
+    { enabled: discordIds.length > 0, staleTime: 5 * 60 * 1000 },
+  );
+
   const { data: syncStatus, refetch: refetchSyncStatus } =
     trpc.user.memberSyncStatus.useQuery(undefined, { refetchInterval: 10000 });
 
@@ -329,6 +340,7 @@ export default function Members() {
             <TableRow>
               <TableHead className="w-[220px]">User</TableHead>
               <TableHead>Student ID</TableHead>
+              <TableHead>Discord ID</TableHead>
               <TableHead>Group</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
@@ -350,9 +362,13 @@ export default function Members() {
               filtered.map((member) => {
                 const lastActive = member.sessions[0]?.updatedAt ?? null;
                 const isSelf = member.id === session?.user.id;
+                const inNotion = !!(member.studentNumber || member.group);
 
                 return (
-                  <TableRow key={member.id}>
+                  <TableRow
+                    key={member.id}
+                    className={!inNotion ? "opacity-60" : undefined}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <MemberAvatar member={member} />
@@ -368,17 +384,47 @@ export default function Members() {
                           <p className="text-xs text-muted-foreground truncate">
                             {member.email}
                           </p>
+                          {!inNotion && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                              Not found in Notion database
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">
                       {member.studentNumber ?? (
+                        <span className="text-muted-foreground">
+                          {inNotion ? "—" : "N/A"}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {member.discordId ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono">{member.discordId}</span>
+                          {discordValidation &&
+                            (discordValidation[member.discordId] === false ? (
+                              <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                Not found in Monash Server
+                              </span>
+                            ) : discordValidation[member.discordId] === true ? (
+                              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle className="h-3 w-3 shrink-0" />
+                                Verified
+                              </span>
+                            ) : null)}
+                        </div>
+                      ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">
                       {member.group?.name ?? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">
+                          {inNotion ? "—" : "N/A"}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -441,7 +487,12 @@ export default function Members() {
                               onClick={() =>
                                 syncOneMutation.mutate({ userId: member.id })
                               }
-                              disabled={syncOneMutation.isPending}
+                              disabled={syncOneMutation.isPending || !inNotion}
+                              title={
+                                !inNotion
+                                  ? "User not found in Notion database"
+                                  : undefined
+                              }
                             >
                               <RefreshCw className="mr-2 h-4 w-4" />
                               Refresh from Notion

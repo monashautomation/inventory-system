@@ -26,6 +26,17 @@ export function initMemberSync(notion: NotionClient, dbId: string): void {
   memberDbId = dbId;
 }
 
+export function getCachedMemberByStudentNumber(
+  studentNumber: string,
+): Member | null {
+  if (snapshot.size === 0) return null;
+  const key = studentNumber.trim().toLowerCase();
+  for (const member of snapshot.values()) {
+    if (member.student_number.trim().toLowerCase() === key) return member;
+  }
+  return null;
+}
+
 export function getMemberSyncStatus(): SyncStatus {
   return {
     lastSyncAt,
@@ -94,6 +105,7 @@ export async function syncAllMembers(): Promise<SyncResult> {
         data: {
           name: member.name || undefined,
           studentNumber: member.student_number || undefined,
+          discordId: member.discord_id || null,
         },
       });
 
@@ -143,6 +155,7 @@ export async function syncOneMember(
     data: {
       name: member.name || undefined,
       studentNumber: member.student_number || undefined,
+      discordId: member.discord_id || null,
     },
   });
 
