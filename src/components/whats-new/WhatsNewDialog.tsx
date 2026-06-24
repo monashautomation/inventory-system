@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.3.1";
 
 interface ChangeEntry {
   type: "new" | "improved" | "fixed";
@@ -26,6 +26,41 @@ interface VersionEntry {
 }
 
 const CHANGELOG: VersionEntry[] = [
+  {
+    version: "1.3.1",
+    date: "24 June 2026",
+    title: "Print Queue, Members & Profile",
+    changes: [
+      {
+        type: "new",
+        text: "Start anyway — when a print is held due to insufficient filament, a button lets the submitter confirm there is enough filament and release the job. The assigned printer's AMS is checked for a matching colour automatically; if no match is found, a slot picker lets you identify the correct spool manually.",
+      },
+      {
+        type: "improved",
+        text: "Plain-English hold messages — every held print now shows a clear explanation of why it is waiting and what action is needed, including colour names for colour-match holds and an offline warning when the assigned printer is disconnected.",
+      },
+      {
+        type: "improved",
+        text: "Targeting simplified — 'any available printer' removed from the queue submission form; jobs now target a specific model or printer, preventing unexpected dispatches.",
+      },
+      {
+        type: "fixed",
+        text: "Concurrent queue fetches no longer hammer Bambuddy — in-flight request coalescing means multiple users refreshing at the same time share a single request.",
+      },
+      {
+        type: "new",
+        text: "Members page — admins can view all members synced from Notion, manage admin access, and ban users.",
+      },
+      {
+        type: "new",
+        text: "Member data caching — member and Discord details are cached and automatically refreshed from Notion every hour, making the members page significantly faster.",
+      },
+      {
+        type: "new",
+        text: "Profile photos — your avatar now appears across all pages including the print queue and members list.",
+      },
+    ],
+  },
   {
     version: "1.2.0",
     date: "June 2025",
