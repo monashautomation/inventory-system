@@ -14,7 +14,7 @@ interface SyncStatus {
 }
 
 // Snapshot keyed by Notion page ID → the last-seen member data
-let snapshot = new Map<string, Member>();
+const snapshot = new Map<string, Member>();
 let lastSyncAt: Date | null = null;
 let isSyncing = false;
 let lastError: string | null = null;
