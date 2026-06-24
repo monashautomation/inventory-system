@@ -1,4 +1,5 @@
 import { router, userProcedure } from "@/server/trpc";
+import { resolveAvatarUrl } from "@/server/lib/avatar";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logger as rootLogger } from "@/server/lib/logger";
@@ -96,7 +97,9 @@ export const printStatsRouter = router({
           prisma.printQueueSubmission.count({ where }),
           prisma.printQueueSubmission.findMany({
             where,
-            include: { user: { select: { name: true } } },
+            include: {
+              user: { select: { id: true, name: true, image: true } },
+            },
             orderBy: { createdAt: "desc" },
             skip: input.page * input.pageSize,
             take: input.pageSize,
@@ -130,6 +133,8 @@ export const printStatsRouter = router({
               filamentColor: sub.capturedFilamentColor,
               filamentUsedGrams: sub.capturedFilamentGrams,
               createdByUsername: sub.user.name,
+              createdByUserId: sub.user.id,
+              createdByUserImage: resolveAvatarUrl(sub.user.id, sub.user.image),
               notionProjectName: sub.notionProjectName,
               personalUse: sub.personalUse,
               createdAt: sub.createdAt.toISOString(),

@@ -7,6 +7,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import Loading from "@/components/misc/loading";
+import { UserAvatar } from "@/components/user/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -41,6 +42,8 @@ interface PrintLogRow {
   filamentColor: string | null;
   filamentUsedGrams: number | null;
   createdByUsername: string | null;
+  createdByUserId: string | null;
+  createdByUserImage: string | null;
   notionProjectName: string | null;
   personalUse: boolean | null;
   createdAt: string;
@@ -141,6 +144,8 @@ export default function PrintHistory() {
     filamentColor: e.filamentColor,
     filamentUsedGrams: e.filamentUsedGrams,
     createdByUsername: e.createdByUsername,
+    createdByUserId: e.createdByUserId,
+    createdByUserImage: e.createdByUserImage,
     notionProjectName: e.notionProjectName,
     personalUse: e.personalUse,
     createdAt: e.createdAt,
@@ -236,9 +241,16 @@ export default function PrintHistory() {
         <DataTableColumnHeader column={column} title="User" />
       ),
       cell: ({ row }) => (
-        <span className="p-2 text-sm text-muted-foreground">
-          {row.original.createdByUsername ?? "—"}
-        </span>
+        <div className="flex items-center gap-2 p-2">
+          <UserAvatar
+            name={row.original.createdByUsername}
+            image={row.original.createdByUserImage}
+            size="sm"
+          />
+          <span className="text-sm text-muted-foreground">
+            {row.original.createdByUsername ?? "—"}
+          </span>
+        </div>
       ),
     },
     {

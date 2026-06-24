@@ -9,6 +9,7 @@ import {
   Ban,
   CheckCircle,
   RefreshCw,
+  ImageOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -244,6 +245,14 @@ export default function Members() {
     onError: (e) => toast.error(e.message),
   });
 
+  const removeAvatarMutation = trpc.user.removeAvatar.useMutation({
+    onSuccess: () => {
+      toast.success("Avatar removed");
+      void utils.user.members.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
   if (isLoading) return <Loading />;
   if (error) return <ErrorPage />;
@@ -457,6 +466,23 @@ export default function Members() {
                                 <ShieldCheck className="mr-2 h-4 w-4" />
                                 Make admin
                               </DropdownMenuItem>
+                            )}
+                            {member.image && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    removeAvatarMutation.mutate({
+                                      id: member.id,
+                                    })
+                                  }
+                                  disabled={removeAvatarMutation.isPending}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <ImageOff className="mr-2 h-4 w-4" />
+                                  Remove photo
+                                </DropdownMenuItem>
+                              </>
                             )}
                             <DropdownMenuSeparator />
                             {member.banned ? (

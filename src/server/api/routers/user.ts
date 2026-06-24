@@ -8,6 +8,7 @@ import {
   getMemberSyncStatus,
 } from "@/server/lib/member-sync";
 import { getBaseUrl } from "@/lib/utils";
+import { buildAvatarKey, deleteFile, fileExists } from "@/server/lib/s3";
 
 export const userRouter = router({
   create: adminProcedure.input(userInput).mutation(async ({ input }) => {
@@ -154,6 +155,19 @@ export const userRouter = router({
     .input(z.object({ userId: z.uuid() }))
     .mutation(async ({ input }) => {
       return syncOneMember(input.userId);
+    }),
+
+  removeAvatar: adminProcedure
+    .input(z.object({ id: z.uuid() }))
+    .mutation(async ({ input }) => {
+      const key = buildAvatarKey(input.id);
+      const exists = await fileExists(key);
+      if (exists) await deleteFile(key);
+      return prisma.user.update({
+        where: { id: input.id },
+        data: { image: null },
+        select: { id: true },
+      });
     }),
 
   getSelf: userProcedure.query(async ({ ctx }) => {

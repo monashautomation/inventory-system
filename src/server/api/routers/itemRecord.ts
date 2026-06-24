@@ -5,6 +5,26 @@ import {
   itemRecordUpdateInput,
   itemRecordInput,
 } from "@/server/schema/itemRecord.schema";
+import { resolveAvatarUrl } from "@/server/lib/avatar";
+
+function resolveUser<T extends { id: string; image: string | null }>(
+  user: T,
+): T {
+  return { ...user, image: resolveAvatarUrl(user.id, user.image) };
+}
+
+function resolveRecordUsers<
+  T extends {
+    actionBy: { id: string; image: string | null };
+    performedBy: { id: string; image: string | null } | null;
+  },
+>(record: T): T {
+  return {
+    ...record,
+    actionBy: resolveUser(record.actionBy),
+    performedBy: record.performedBy ? resolveUser(record.performedBy) : null,
+  };
+}
 
 export const itemRecordRouter = router({
   create: adminProcedure.input(itemRecordInput).mutation(async ({ input }) => {
@@ -25,7 +45,7 @@ export const itemRecordRouter = router({
     })
     .input(z.object({ id: z.uuid() }))
     .query(async ({ input }) => {
-      return prisma.itemRecord.findUnique({
+      const record = await prisma.itemRecord.findUnique({
         where: { id: input.id },
         include: {
           actionBy: true,
@@ -33,6 +53,7 @@ export const itemRecordRouter = router({
           item: { include: { location: true, consumable: true } },
         },
       });
+      return record ? resolveRecordUsers(record) : null;
     }),
 
   update: adminProcedure
@@ -77,26 +98,25 @@ export const itemRecordRouter = router({
     )
     .query(async ({ input }) => {
       const { page, pageSize } = input;
-      const [transactions, totalCount] = await Promise.all([
+      const [rawTransactions, totalCount] = await Promise.all([
         prisma.itemRecord.findMany({
-          // where,
           include: {
             actionBy: true,
             performedBy: true,
             item: { include: { location: true, consumable: true } },
           },
           orderBy: { createdAt: "desc" },
-          skip: page * pageSize, // Pagination: skip records
-          take: pageSize, // Pagination: limit records
+          skip: page * pageSize,
+          take: pageSize,
         }),
-        prisma.itemRecord.count(), // Get total count for pagination
+        prisma.itemRecord.count(),
       ]);
       return {
-        transactions,
+        transactions: rawTransactions.map(resolveRecordUsers),
         totalCount,
         page,
         pageSize,
-        pageCount: Math.ceil(totalCount / pageSize), // Calculate total pages
+        pageCount: Math.ceil(totalCount / pageSize),
       };
     }),
 

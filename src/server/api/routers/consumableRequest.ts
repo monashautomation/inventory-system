@@ -10,15 +10,37 @@ import {
 import { resolvePrimarySupplierId } from "../utils/consumableRequest/primarySupplier";
 import { emitRequestStatusNotification } from "../utils/notification/emit";
 import { writeAuditLog } from "../utils/audit/log";
+import { resolveAvatarUrl } from "@/server/lib/avatar";
 
 const requestInclude = {
   consumable: {
     include: { item: { select: { id: true, name: true, serial: true } } },
   },
-  requestedBy: { select: { id: true, name: true, email: true } },
-  purchasedBy: { select: { id: true, name: true, email: true } },
+  requestedBy: { select: { id: true, name: true, email: true, image: true } },
+  purchasedBy: { select: { id: true, name: true, email: true, image: true } },
   supplier: true,
 } as const;
+
+function resolveRequestUsers<
+  T extends {
+    requestedBy: { id: string; image: string | null };
+    purchasedBy: { id: string; image: string | null } | null;
+  },
+>(r: T): T {
+  return {
+    ...r,
+    requestedBy: {
+      ...r.requestedBy,
+      image: resolveAvatarUrl(r.requestedBy.id, r.requestedBy.image),
+    },
+    purchasedBy: r.purchasedBy
+      ? {
+          ...r.purchasedBy,
+          image: resolveAvatarUrl(r.purchasedBy.id, r.purchasedBy.image),
+        }
+      : null,
+  };
+}
 
 export const consumableRequestRouter = router({
   create: userProcedure
@@ -121,7 +143,7 @@ export const consumableRequestRouter = router({
       prisma.consumableRequest.count({ where }),
     ]);
 
-    return { items, totalCount };
+    return { items: items.map(resolveRequestUsers), totalCount };
   }),
 
   listMine: userProcedure
@@ -153,7 +175,7 @@ export const consumableRequestRouter = router({
         prisma.consumableRequest.count({ where }),
       ]);
 
-      return { items, totalCount };
+      return { items: items.map(resolveRequestUsers), totalCount };
     }),
 
   pendingCount: adminProcedure.query(async () => {

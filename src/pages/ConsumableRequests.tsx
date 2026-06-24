@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import type { RequestStatusType } from "@/server/schema/consumableRequest.schema";
 import type { AppRouter } from "@/server/api/routers/_app";
 import type { inferProcedureOutput } from "@trpc/server";
+import { UserAvatar } from "@/components/user/UserAvatar";
 
 type RequestRow = inferProcedureOutput<
   AppRouter["consumableRequest"]["list"]
@@ -221,7 +222,16 @@ export default function ConsumableRequests() {
                         ? `${r.fulfilledQty} / ${r.quantity}`
                         : r.quantity}
                     </TableCell>
-                    <TableCell>{r.requestedBy.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <UserAvatar
+                          name={r.requestedBy.name}
+                          image={r.requestedBy.image}
+                          size="sm"
+                        />
+                        <span>{r.requestedBy.name}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 max-w-[200px]">
                         <span className="truncate">{supplierName}</span>

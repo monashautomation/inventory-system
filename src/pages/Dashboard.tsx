@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserAvatar } from "@/components/user/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -252,8 +253,17 @@ function AdminPendingRequestsCard() {
                   <TableCell className="font-medium">
                     {req.consumable.item?.name}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {req.requestedBy.name}
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <UserAvatar
+                        name={req.requestedBy.name}
+                        image={req.requestedBy.image}
+                        size="sm"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {req.requestedBy.name}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">{req.quantity}</TableCell>
                   <TableCell className="text-right">
@@ -373,8 +383,19 @@ function AuditLogCard() {
                   <TableCell className="text-sm">
                     {ACTION_LABELS[log.action] ?? log.action}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {log.actor?.name ?? "System"}
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {log.actor && (
+                        <UserAvatar
+                          name={log.actor.name}
+                          image={log.actor.image}
+                          size="sm"
+                        />
+                      )}
+                      <span className="text-sm text-muted-foreground">
+                        {log.actor?.name ?? "System"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {fmt(log.createdAt)}

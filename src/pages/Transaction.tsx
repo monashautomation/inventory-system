@@ -6,6 +6,7 @@ import { trpc } from "@/client/trpc";
 import type { inferProcedureOutput } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 import Loading from "@/components/misc/loading";
+import { UserAvatar } from "@/components/user/UserAvatar";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { MoveUpLeft, MoveUpRight, Flame } from "lucide-react";
@@ -131,19 +132,27 @@ export default function Transactions() {
         <DataTableColumnHeader column={column} title="User" />
       ),
       cell: ({ row }) => {
+        const actionBy = row.original?.actionBy;
         const performedBy = row.original?.performedBy;
         return (
-          <span
+          <div
             onClick={() => handleRowClick(row.original)}
-            className="cursor-pointer hover:underline transition p-2 rounded flex flex-col items-center"
+            className="cursor-pointer hover:underline transition p-2 rounded flex items-center gap-2"
           >
-            {row.getValue("name")}
-            {performedBy && (
-              <span className="text-xs text-muted-foreground">
-                via {performedBy.name}
-              </span>
-            )}
-          </span>
+            <UserAvatar
+              name={actionBy?.name}
+              image={actionBy?.image}
+              size="sm"
+            />
+            <div className="flex flex-col">
+              <span>{row.getValue("name")}</span>
+              {performedBy && (
+                <span className="text-xs text-muted-foreground">
+                  via {performedBy.name}
+                </span>
+              )}
+            </div>
+          </div>
         );
       },
     },

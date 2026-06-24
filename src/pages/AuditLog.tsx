@@ -22,6 +22,7 @@ import {
 import Loading from "@/components/misc/loading";
 import ErrorPage from "@/pages/Error";
 import { authClient } from "@/auth/client";
+import { UserAvatar } from "@/components/user/UserAvatar";
 import { Navigate } from "react-router-dom";
 import { ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -124,12 +125,23 @@ function ExpandableRow({ row }: { row: AuditRow }) {
           <span className="block">{timeStr}</span>
         </TableCell>
         <TableCell>
-          <span className="text-sm">{row.actor?.name ?? "System"}</span>
-          {row.actor?.email && (
-            <span className="block text-xs text-muted-foreground">
-              {row.actor.email}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {row.actor ? (
+              <UserAvatar
+                name={row.actor.name}
+                image={row.actor.image}
+                size="sm"
+              />
+            ) : null}
+            <div>
+              <span className="text-sm">{row.actor?.name ?? "System"}</span>
+              {row.actor?.email && (
+                <span className="block text-xs text-muted-foreground">
+                  {row.actor.email}
+                </span>
+              )}
+            </div>
+          </div>
         </TableCell>
         <TableCell>
           <Badge className={cn("text-xs", actionMeta.className)}>
