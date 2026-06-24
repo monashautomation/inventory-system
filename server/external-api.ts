@@ -150,14 +150,18 @@ export function mountExternalApiRoutes(app: Hono): void {
             const maybeFile = fd.get("gcodeFile");
             if (maybeFile instanceof File) gcodeFile = maybeFile;
         } else {
-            const body = (await c.req.json()) as Record<string, unknown>;
-            studentId = (body.studentId as string) ?? "";
+            const body = (await c.req.json()) as {
+                studentId?: string;
+                archiveId?: number;
+                printerId?: string;
+                filamentTypes?: string[];
+                project?: string;
+            };
+            studentId = body.studentId ?? "";
             archiveId = body.archiveId != null ? Number(body.archiveId) : undefined;
-            printerId = body.printerId as string | undefined;
-            filamentTypes = Array.isArray(body.filamentTypes)
-                ? (body.filamentTypes as string[])
-                : [];
-            project = body.project as string | undefined;
+            printerId = body.printerId;
+            filamentTypes = Array.isArray(body.filamentTypes) ? body.filamentTypes : [];
+            project = body.project;
         }
 
         if (!studentId) {
@@ -322,8 +326,8 @@ export function mountExternalApiRoutes(app: Hono): void {
     // Errors: 400, 401, 404, 502
     app.post("/api/ext/printers/:printerId/pause", async (c) => {
         requireFypToken(c.req.raw);
-        const body = (await c.req.json()) as Record<string, unknown>;
-        const studentId = body.studentId as string | undefined;
+        const body = (await c.req.json()) as { studentId?: string };
+        const studentId = body.studentId;
         if (!studentId) throw new HTTPException(400, { message: "studentId is required" });
 
         await resolveUserByStudentId(studentId);
@@ -354,8 +358,8 @@ export function mountExternalApiRoutes(app: Hono): void {
     // Errors: 400, 401, 404, 502
     app.post("/api/ext/printers/:printerId/stop", async (c) => {
         requireFypToken(c.req.raw);
-        const body = (await c.req.json()) as Record<string, unknown>;
-        const studentId = body.studentId as string | undefined;
+        const body = (await c.req.json()) as { studentId?: string };
+        const studentId = body.studentId;
         if (!studentId) throw new HTTPException(400, { message: "studentId is required" });
 
         await resolveUserByStudentId(studentId);
@@ -490,9 +494,9 @@ export function mountExternalApiRoutes(app: Hono): void {
     // Errors: 400, 401, 404, 409 (already checked out)
     app.post("/api/ext/assets/checkout", async (c) => {
         requireFypToken(c.req.raw);
-        const body = (await c.req.json()) as Record<string, unknown>;
-        const studentId = body.studentId as string | undefined;
-        const serial = body.serial as string | undefined;
+        const body = (await c.req.json()) as { studentId?: string; serial?: string };
+        const studentId = body.studentId;
+        const serial = body.serial;
 
         if (!studentId) throw new HTTPException(400, { message: "studentId is required" });
         if (!serial) throw new HTTPException(400, { message: "serial is required" });
@@ -549,9 +553,9 @@ export function mountExternalApiRoutes(app: Hono): void {
     // Errors: 400, 401, 404, 409 (already in storage)
     app.post("/api/ext/assets/checkin", async (c) => {
         requireFypToken(c.req.raw);
-        const body = (await c.req.json()) as Record<string, unknown>;
-        const studentId = body.studentId as string | undefined;
-        const serial = body.serial as string | undefined;
+        const body = (await c.req.json()) as { studentId?: string; serial?: string };
+        const studentId = body.studentId;
+        const serial = body.serial;
 
         if (!studentId) throw new HTTPException(400, { message: "studentId is required" });
         if (!serial) throw new HTTPException(400, { message: "serial is required" });
