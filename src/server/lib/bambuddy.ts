@@ -17,6 +17,32 @@ function headers(apiKey: string): Record<string, string> {
   return { "X-API-Key": apiKey };
 }
 
+async function loginForBearer(): Promise<string> {
+  const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
+  const username = process.env.BAMBUDDY_USERNAME;
+  const password = process.env.BAMBUDDY_PASSWORD;
+  if (!endpoint || !username || !password) {
+    throw new Error(
+      "BAMBUDDY_ENDPOINT, BAMBUDDY_USERNAME, and BAMBUDDY_PASSWORD must be set for file uploads.",
+    );
+  }
+  const res = await fetch(`${endpoint}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`BamBuddy login failed (HTTP ${res.status}): ${body}`);
+  }
+  const data = (await res.json()) as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error("BamBuddy login response missing access_token");
+  }
+  return data.access_token;
+}
+
 interface BambuddyFilamentDeficit {
   slot_id: number;
   ams_id: number;
@@ -238,7 +264,8 @@ export async function uploadArchive(
   filename: string,
   fileBuffer: Buffer,
 ): Promise<number> {
-  const { endpoint, apiKey } = getConfig();
+  const { endpoint } = getConfig();
+  const bearer = await loginForBearer();
 
   const tmpPath = join(tmpdir(), `bambuddy_upload_${Date.now()}_${filename}`);
   await writeFile(tmpPath, fileBuffer);
@@ -255,7 +282,7 @@ export async function uploadArchive(
 
     const res = await fetch(`${endpoint}/api/v1/archives/upload`, {
       method: "POST",
-      headers: headers(apiKey),
+      headers: { Authorization: `Bearer ${bearer}` },
       body: form,
       signal: AbortSignal.timeout(120_000),
     });

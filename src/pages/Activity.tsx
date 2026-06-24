@@ -44,7 +44,10 @@ type AuditRow = inferProcedureOutput<
   AppRouter["auditLog"]["list"]
 >["items"][number];
 
-const ACTION_LABELS: Record<AuditActionType, { label: string; className: string }> = {
+const ACTION_LABELS: Record<
+  AuditActionType,
+  { label: string; className: string }
+> = {
   REQUEST_CREATED: {
     label: "Created",
     className: "bg-blue-500/15 text-blue-700 dark:text-blue-200",
@@ -71,7 +74,8 @@ const ALL_ACTIONS: AuditActionType[] = [
 ];
 
 function DiffCell({ before, after }: { before: unknown; after: unknown }) {
-  if (!before && !after) return <span className="text-muted-foreground">—</span>;
+  if (!before && !after)
+    return <span className="text-muted-foreground">—</span>;
 
   const renderObj = (obj: unknown) => {
     if (!obj || typeof obj !== "object") return null;
@@ -111,7 +115,10 @@ function AuditExpandableRow({ row }: { row: AuditRow }) {
   const [expanded, setExpanded] = useState(false);
   const ts = new Date(row.createdAt);
   const dateStr = ts.toLocaleDateString();
-  const timeStr = ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const timeStr = ts.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const actionMeta = ACTION_LABELS[row.action as AuditActionType] ?? {
     label: row.action,
     className: "bg-muted text-muted-foreground",
@@ -130,7 +137,11 @@ function AuditExpandableRow({ row }: { row: AuditRow }) {
         <TableCell>
           <div className="flex items-center gap-2">
             {row.actor ? (
-              <UserAvatar name={row.actor.name} image={row.actor.image} size="sm" />
+              <UserAvatar
+                name={row.actor.name}
+                image={row.actor.image}
+                size="sm"
+              />
             ) : null}
             <div>
               <span className="text-sm">{row.actor?.name ?? "System"}</span>
@@ -196,7 +207,8 @@ function TransactionsTab() {
         <DataTableColumnHeader column={column} title="Date & Time" />
       ),
       cell: ({ row }) => {
-        if (!row.original?.createdAt) return <div className="flex justify-center">-</div>;
+        if (!row.original?.createdAt)
+          return <div className="flex justify-center">-</div>;
         const date = new Date(row.original.createdAt);
         const formattedShort = date.toLocaleDateString("en-US", {
           weekday: "short",
@@ -282,7 +294,11 @@ function TransactionsTab() {
             onClick={() => openRow(row.original)}
             className="cursor-pointer hover:underline transition p-2 rounded flex items-center gap-2"
           >
-            <UserAvatar name={actionBy?.name} image={actionBy?.image} size="sm" />
+            <UserAvatar
+              name={actionBy?.name}
+              image={actionBy?.image}
+              size="sm"
+            />
             <div className="flex flex-col">
               <span>{row.getValue("name")}</span>
               {performedBy && (
@@ -386,7 +402,9 @@ function TransactionsTab() {
 }
 
 function AuditEventsTab() {
-  const [actionFilter, setActionFilter] = useState<"ALL" | AuditActionType>("ALL");
+  const [actionFilter, setActionFilter] = useState<"ALL" | AuditActionType>(
+    "ALL",
+  );
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
@@ -402,7 +420,9 @@ function AuditEventsTab() {
   if (error) return <ErrorPage message={error.message} />;
 
   const items = data?.items ?? [];
-  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / pageSize)) : 1;
+  const totalPages = data
+    ? Math.max(1, Math.ceil(data.totalCount / pageSize))
+    : 1;
 
   return (
     <>
@@ -454,7 +474,10 @@ function AuditEventsTab() {
               </TableRow>
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="text-center py-10 text-muted-foreground"
+                >
                   No audit entries
                 </TableCell>
               </TableRow>

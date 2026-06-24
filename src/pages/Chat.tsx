@@ -5,7 +5,9 @@ export default function Chat() {
     <div className="flex flex-col h-[94vh] w-full pt-4">
       <div className="mb-6 px-4">
         <h1 className="text-3xl font-bold text-left">Chat</h1>
-        <p className="text-muted-foreground">Ask questions about your inventory</p>
+        <p className="text-muted-foreground">
+          Ask questions about your inventory
+        </p>
       </div>
 
       <div className="flex flex-1 items-center justify-center">

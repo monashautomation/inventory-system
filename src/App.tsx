@@ -70,8 +70,14 @@ const App = () => {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/activity" element={<Activity />} />
-                <Route path="/transactions" element={<Navigate to="/activity" replace />} />
-                <Route path="/audit-log" element={<Navigate to="/activity" replace />} />
+                <Route
+                  path="/transactions"
+                  element={<Navigate to="/activity" replace />}
+                />
+                <Route
+                  path="/audit-log"
+                  element={<Navigate to="/activity" replace />}
+                />
                 <Route path="/assets/*" element={<Assets />} />
                 <Route
                   path="/consumables/requests"
