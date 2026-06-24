@@ -69,7 +69,14 @@ export const itemCheckout = async (
         performedByUserId,
         notes,
       );
-      await createItemRecord(ctx, tx, assetUpdates, true, performedByUserId, notes);
+      await createItemRecord(
+        ctx,
+        tx,
+        assetUpdates,
+        true,
+        performedByUserId,
+        notes,
+      );
     });
 
     return {

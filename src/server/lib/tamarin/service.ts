@@ -28,29 +28,34 @@ export function getTamarinService(): TamarinService | null {
   const guildId = process.env.AFTER_HOURS_GUILD_ID;
   const botToken = process.env.AFTER_HOURS_BOT_TOKEN;
 
-  if (
-    !notionToken ||
-    !membersDbId ||
-    !projectsDbId ||
-    !webhookUrl ||
-    !guildId ||
-    !botToken
-  ) {
+  const missing = [
+    !notionToken && "NOTION_TOKEN",
+    !membersDbId && "MEMBERS_DB_ID",
+    !projectsDbId && "PROJECTS_DB_ID",
+    !webhookUrl && "AFTER_HOURS_DISCORD_WEBHOOK",
+    !guildId && "AFTER_HOURS_GUILD_ID",
+    !botToken && "AFTER_HOURS_BOT_TOKEN",
+  ].filter(Boolean) as string[];
+
+  if (missing.length > 0) {
+    console.warn(
+      `[tamarin] Service disabled — missing env vars: ${missing.join(", ")}`,
+    );
     _service = null;
     return null;
   }
 
-  const notion = new NotionClient(notionToken);
+  const notion = new NotionClient(notionToken!);
   const cache = new MemberCache();
 
-  initMemberSync(notion, membersDbId);
+  initMemberSync(notion, membersDbId!);
 
   _service = {
     getMember: (studentNumber) =>
-      getMember(notion, membersDbId, studentNumber, cache),
-    getProjects: () => getProjects(notion, projectsDbId),
+      getMember(notion, membersDbId!, studentNumber, cache),
+    getProjects: () => getProjects(notion, projectsDbId!),
     postAfterHours: (body) =>
-      postAfterHours(webhookUrl, botToken, guildId, body),
+      postAfterHours(webhookUrl!, botToken!, guildId!, body),
   };
 
   return _service;
