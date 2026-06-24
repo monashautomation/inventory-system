@@ -54,7 +54,15 @@ interface SyncResult {
 
 export async function syncAllMembers(): Promise<SyncResult> {
   if (!notionClient || !memberDbId) {
-    throw new Error("Member sync not configured — missing Notion credentials");
+    const missing = [
+      !notionClient && "NOTION_TOKEN",
+      !memberDbId && "MEMBERS_DB_ID",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `Member sync not configured — missing env vars: ${missing}. Check server logs for full list.`,
+    );
   }
   if (isSyncing) {
     throw new Error("Sync already in progress");
@@ -132,7 +140,15 @@ export async function syncOneMember(
   userId: string,
 ): Promise<{ updated: boolean }> {
   if (!notionClient || !memberDbId) {
-    throw new Error("Member sync not configured — missing Notion credentials");
+    const missing = [
+      !notionClient && "NOTION_TOKEN",
+      !memberDbId && "MEMBERS_DB_ID",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `Member sync not configured — missing env vars: ${missing}. Check server logs for full list.`,
+    );
   }
 
   const user = await prisma.user.findUnique({
