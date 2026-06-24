@@ -99,3 +99,9 @@ export function resolveImageUrl(imageValue: string, expiresIn = 3600): string {
   }
   return imageValue;
 }
+
+// ─── User avatar ──────────────────────────────────────────────────────────────
+
+export function buildAvatarKey(userId: string): string {
+  return `avatars/${userId}/avatar.webp`;
+}

@@ -41,6 +41,7 @@ import {
 import { MoreHorizontal } from "lucide-react";
 import Loading from "@/components/misc/loading";
 import ErrorPage from "@/pages/Error";
+import { UserAvatar } from "@/components/user/UserAvatar";
 import type { AppRouter } from "@/server/api/routers/_app";
 import type { inferProcedureOutput } from "@trpc/server";
 
@@ -54,31 +55,8 @@ function formatDate(date: Date | string | null | undefined) {
   }).format(new Date(date));
 }
 
-function getInitials(name: string | null | undefined) {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 function MemberAvatar({ member }: { member: Member }) {
-  if (member.image) {
-    return (
-      <img
-        src={member.image}
-        alt={member.name ?? ""}
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    );
-  }
-  return (
-    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-muted-foreground">
-      {getInitials(member.name)}
-    </div>
-  );
+  return <UserAvatar name={member.name} image={member.image} size="sm" />;
 }
 
 interface BanDialogProps {

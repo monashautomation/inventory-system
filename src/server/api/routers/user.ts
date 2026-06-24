@@ -7,6 +7,7 @@ import {
   syncOneMember,
   getMemberSyncStatus,
 } from "@/server/lib/member-sync";
+import { getBaseUrl } from "@/lib/utils";
 
 export const userRouter = router({
   create: adminProcedure.input(userInput).mutation(async ({ input }) => {
@@ -70,7 +71,7 @@ export const userRouter = router({
     }),
 
   members: adminProcedure.query(async () => {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       select: {
         id: true,
         name: true,
@@ -91,6 +92,14 @@ export const userRouter = router({
       },
       orderBy: { name: "asc" },
     });
+
+    const base = getBaseUrl();
+    return users.map((u) => ({
+      ...u,
+      image: u.image?.startsWith("avatars/")
+        ? `${base}/api/users/${u.id}/avatar`
+        : u.image,
+    }));
   }),
 
   ban: adminProcedure
