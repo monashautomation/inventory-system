@@ -2,6 +2,8 @@ import * as http from "node:http";
 import {
   resolveBambuddyPrinterId,
   getBambuddyPrinterStatus,
+  getBambuddyCameraSnapshot,
+  getBambuddyStreamToken,
   listBambuddyPrinters,
 } from "@/server/lib/bambuddy";
 import { prisma } from "@/server/lib/prisma";
@@ -44,6 +46,40 @@ const statusCache = new Map<string, CachedPrinterStatus>();
 
 export function getAllCachedStatuses(): CachedPrinterStatus[] {
   return Array.from(statusCache.values());
+}
+
+// ─── Snapshot cache ───────────────────────────────────────────────────────────
+
+interface SnapshotEntry {
+  bytes: Uint8Array;
+  contentType: string;
+  fetchedAt: number;
+}
+
+const snapshotCache = new Map<string, SnapshotEntry>();
+// Maps our DB printerId → BamBuddy integer printer_id, populated during status polls
+const bambuddyIdByPrinterId = new Map<string, number>();
+
+export function getSnapshot(printerId: string): SnapshotEntry | null {
+  return snapshotCache.get(printerId) ?? null;
+}
+
+// ─── BamBuddy stream token ────────────────────────────────────────────────────
+
+let streamToken: string | null = null;
+let streamTokenExpiresAt = 0;
+
+async function getOrRefreshStreamToken(): Promise<string | null> {
+  if (!process.env.BAMBUDDY_ENDPOINT || !process.env.BAMBUDDY_API_KEY)
+    return null;
+  if (streamToken && Date.now() < streamTokenExpiresAt) return streamToken;
+  try {
+    streamToken = await getBambuddyStreamToken();
+    streamTokenExpiresAt = Date.now() + 55 * 60 * 1000; // 55 min (token valid 60)
+    return streamToken;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Prusa HTTP helper (no connection pooling) ────────────────────────────────
@@ -365,6 +401,9 @@ async function fetchBambuStatus(printer: {
     return;
   }
 
+  // bambuddyId is narrowed to number here — store for snapshot polling
+  bambuddyIdByPrinterId.set(printer.id, bambuddyId);
+
   let s: Awaited<ReturnType<typeof getBambuddyPrinterStatus>>;
   try {
     s = await getBambuddyPrinterStatus(bambuddyId);
@@ -595,6 +634,60 @@ async function pollAttribution(): Promise<void> {
   }
 }
 
+// ─── Snapshot polling ─────────────────────────────────────────────────────────
+
+const SNAPSHOT_TIMEOUT_MS = 8_000;
+let snapshotPollRunning = false;
+
+async function pollAllSnapshots(): Promise<void> {
+  if (snapshotPollRunning) return;
+  snapshotPollRunning = true;
+  try {
+    const printers = printerListCache;
+    if (printers.length === 0) return;
+
+    const token = await getOrRefreshStreamToken();
+
+    await Promise.allSettled(
+      printers.map(async (p) => {
+        if (p.type === "BAMBU") {
+          if (!token) return;
+          const bambuddyId = bambuddyIdByPrinterId.get(p.id);
+          if (!bambuddyId) return;
+          const result = await getBambuddyCameraSnapshot(bambuddyId, token);
+          if (result) {
+            snapshotCache.set(p.id, {
+              bytes: result.bytes,
+              contentType: result.contentType,
+              fetchedAt: Date.now(),
+            });
+          }
+        } else if (p.webcamUrl) {
+          const snapshotUrl = p.webcamUrl.includes("action=stream")
+            ? p.webcamUrl.replace("action=stream", "action=snapshot")
+            : p.webcamUrl;
+          let res: Response;
+          try {
+            res = await fetch(snapshotUrl, {
+              signal: AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
+              headers: { Accept: "image/*,*/*" },
+            });
+          } catch {
+            return;
+          }
+          if (!res.ok) return;
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          const contentType =
+            res.headers.get("content-type") ?? "image/jpeg";
+          snapshotCache.set(p.id, { bytes, contentType, fetchedAt: Date.now() });
+        }
+      }),
+    );
+  } finally {
+    snapshotPollRunning = false;
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 let started = false;
@@ -606,8 +699,14 @@ export function initPrintCamPoller(): void {
   void pollAllStatuses();
   setInterval(() => void pollAllStatuses(), 10_000);
   setInterval(() => void pollAttribution(), 30_000);
+  // Snapshots on a tighter cycle for live dashboard feel; runs after first status
+  // poll has a chance to populate printerListCache and bambuddyIdByPrinterId.
+  setTimeout(() => {
+    void pollAllSnapshots();
+    setInterval(() => void pollAllSnapshots(), 5_000);
+  }, 3_000);
 }
 
 export async function refreshPrintCamCache(): Promise<void> {
-  await Promise.allSettled([pollAllStatuses(), pollAttribution()]);
+  await Promise.allSettled([pollAllStatuses(), pollAttribution(), pollAllSnapshots()]);
 }

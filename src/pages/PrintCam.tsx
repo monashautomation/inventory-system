@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -28,6 +28,7 @@ interface PrinterCamData {
 
 const TILE_GAP = 10;
 const MIN_DESKTOP_WIDTH = 768;
+const OFFLINE_STATES = new Set(["UNREACHABLE", "UNKNOWN", "CONNECTING"]);
 
 function computeLayout(
   count: number,
@@ -73,9 +74,11 @@ function statusLabel(state: string, stateMessage: string): string {
 function WebcamTile({
   data,
   tileHeight,
+  snapshotTick,
 }: {
   data: PrinterCamData;
   tileHeight: number;
+  snapshotTick: number;
 }) {
   const accentColor = statusAccentColor(data.state);
   const isPrinting = data.state.toUpperCase() === "PRINTING";
@@ -87,11 +90,26 @@ function WebcamTile({
   const smallFontSize = Math.max(7, Math.round(9 * scale));
   const overlayPadding = Math.max(4, Math.round(8 * scale));
 
+  const snapshotSrc = `/api/webcam/${encodeURIComponent(data.printerId)}?mode=cached_snapshot&_t=${snapshotTick}`;
+
   return (
     <div
       className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900"
       style={{ height: tileHeight }}
     >
+      {/* Live snapshot image — hidden on error (no webcam / cache cold) */}
+      <img
+        src={snapshotSrc}
+        className="absolute inset-0 w-full h-full object-cover"
+        alt=""
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        }}
+        onLoad={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "";
+        }}
+      />
+
       {/* Status accent bar at top */}
       <div
         className="absolute top-0 inset-x-0 z-20 transition-colors duration-500"
@@ -231,6 +249,7 @@ export default function PrintCam() {
   const { setOpen } = useSidebar();
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
 
   useEffect(() => {
     setOpen(false);
@@ -250,7 +269,10 @@ export default function PrintCam() {
     return () => observer.disconnect();
   }, []);
 
-  const refreshMutation = trpc.print.refreshPrintCamCache.useMutation();
+  useEffect(() => {
+    const id = setInterval(() => setSnapshotTick(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
 
   const dashboardQuery = trpc.print.getPrintCamDashboard.useQuery(undefined, {
     staleTime: Infinity,
@@ -267,33 +289,31 @@ export default function PrintCam() {
     return () => clearInterval(statusInterval);
   }, []);
 
-  const handleRefreshAll = useCallback(async () => {
-    await refetchRef.current();
-    refreshMutation.mutate();
-  }, [refreshMutation]);
-
-  const printers = useMemo(
-    () =>
-      (dashboardQuery.data ?? []).sort(
-        (a, b) =>
-          a.printerType.localeCompare(b.printerType) ||
-          a.printerName.localeCompare(b.printerName),
-      ),
-    [dashboardQuery.data],
-  );
+  const { visiblePrinters, offlineCount } = useMemo(() => {
+    const sorted = (dashboardQuery.data ?? []).sort(
+      (a, b) =>
+        a.printerType.localeCompare(b.printerType) ||
+        a.printerName.localeCompare(b.printerName),
+    );
+    const visible = sorted.filter(
+      (p) => !OFFLINE_STATES.has(p.state.toUpperCase()),
+    );
+    const offline = sorted.length - visible.length;
+    return { visiblePrinters: visible, offlineCount: offline };
+  }, [dashboardQuery.data]);
 
   const isMobile = containerSize.w > 0 && containerSize.w < MIN_DESKTOP_WIDTH;
 
   const { cols, rows } = useMemo(() => {
     if (
-      printers.length === 0 ||
+      visiblePrinters.length === 0 ||
       containerSize.w === 0 ||
       containerSize.h === 0
     ) {
       return { cols: 1, rows: 1 };
     }
-    return computeLayout(printers.length, containerSize.w, containerSize.h);
-  }, [printers.length, containerSize]);
+    return computeLayout(visiblePrinters.length, containerSize.w, containerSize.h);
+  }, [visiblePrinters.length, containerSize]);
 
   const tileHeight = useMemo(() => {
     if (rows === 0 || containerSize.h === 0) return 200;
@@ -317,15 +337,14 @@ export default function PrintCam() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleRefreshAll}
-            disabled={refreshMutation.isPending}
-          >
-            Refresh All
-          </Button>
+          {offlineCount > 0 && (
+            <div className="flex items-center gap-1.5 rounded-full bg-zinc-800 border border-white/10 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+              <span className="text-xs text-zinc-400">
+                {offlineCount} cam{offlineCount !== 1 ? "s" : ""} offline
+              </span>
+            </div>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -345,8 +364,10 @@ export default function PrintCam() {
           <p className="text-sm text-red-500">
             Failed to load printer data: {dashboardQuery.error.message}
           </p>
-        ) : printers.length === 0 ? (
+        ) : visiblePrinters.length === 0 && offlineCount === 0 ? (
           <p className="text-sm text-muted-foreground">No printers found.</p>
+        ) : visiblePrinters.length === 0 ? (
+          <p className="text-sm text-muted-foreground">All printers offline.</p>
         ) : isMobile ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-center text-muted-foreground text-sm max-w-xs">
@@ -364,16 +385,19 @@ export default function PrintCam() {
               alignContent: "start",
             }}
           >
-            {printers.map((printer) => (
+            {visiblePrinters.map((printer) => (
               <WebcamTile
                 key={printer.printerId}
                 data={printer}
                 tileHeight={tileHeight}
+                snapshotTick={snapshotTick}
               />
             ))}
           </div>
         )}
       </div>
+
+
     </div>
   );
 }

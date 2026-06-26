@@ -21,6 +21,7 @@ import {
 import {
     initPrintCamPoller,
     syncBambuPrinters,
+    getSnapshot,
 } from "@/server/lib/printCamPoller";
 import { initPrintQueuePoller } from "@/server/lib/printQueuePoller";
 import sharp from "sharp";
@@ -461,6 +462,21 @@ app.get("/api/webcam/:printerId", async (c) => {
 
     const printerId = c.req.param("printerId");
     const mode = c.req.query("mode");
+
+    // Serve from in-memory snapshot cache — no DB hit, no upstream fetch.
+    if (mode === "cached_snapshot") {
+        const cached = getSnapshot(printerId);
+        if (cached) {
+            return new Response(cached.bytes, {
+                status: 200,
+                headers: {
+                    "Content-Type": cached.contentType,
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                },
+            });
+        }
+        // Cache is cold — fall through to live proxy below.
+    }
 
     let webcamUrl: string;
     let printerLabel: string;

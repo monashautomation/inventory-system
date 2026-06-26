@@ -1043,6 +1043,26 @@ export async function listInventorySpools(): Promise<InventorySpool[]> {
   return Array.isArray(data) ? (data as InventorySpool[]) : [];
 }
 
+export async function getBambuddyCameraSnapshot(
+  printerId: number,
+  token: string,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const { endpoint } = getConfig();
+  let res: Response;
+  try {
+    res = await fetch(
+      `${endpoint}/api/v1/printers/${printerId}/camera/snapshot?token=${encodeURIComponent(token)}`,
+      { signal: AbortSignal.timeout(8_000) },
+    );
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const contentType = res.headers.get("content-type") ?? "image/jpeg";
+  return { bytes, contentType };
+}
+
 export async function listFilamentTypes(): Promise<string[]> {
   const spools = await listInventorySpools();
   const fromSpools = spools
