@@ -5,6 +5,8 @@ import {
   getBambuddyCameraSnapshot,
   getBambuddyStreamToken,
   listBambuddyPrinters,
+  listQueue,
+  type PrintQueueItemResponse,
 } from "@/server/lib/bambuddy";
 import { prisma } from "@/server/lib/prisma";
 import {
@@ -38,6 +40,16 @@ export interface CachedPrinterStatus {
   jobStartedAt: Date | null;
   updatedAt: number;
 }
+
+// States for which a Bambu printer should show attribution.
+// Idle/offline printers must not leak the previous user's name.
+const BAMBU_ACTIVE_STATES = new Set([
+  "PRINTING",
+  "PAUSED",
+  "BUSY",
+  "FINISHED",
+  "ATTENTION",
+]);
 
 // ─── In-memory caches ────────────────────────────────────────────────────────
 
@@ -607,7 +619,6 @@ async function pollAttribution(): Promise<void> {
     const printerIds = Array.from(statusCache.keys());
     if (printerIds.length === 0) return;
 
-    // Split printers into Bambu (tracked via printQueueSubmission) and Prusa (gcodePrintJob)
     const bambuPrinterIds: string[] = [];
     const prusaPrinterIds: string[] = [];
     for (const printerId of printerIds) {
@@ -622,30 +633,87 @@ async function pollAttribution(): Promise<void> {
       .map((id) => bambuddyIdByPrinterId.get(id)!)
       .filter((id) => id != null);
 
-    const [recentJobs, recentQueueSubs] = await Promise.all([
-      prusaPrinterIds.length > 0
-        ? prisma.gcodePrintJob.findMany({
-            where: { printerId: { in: prusaPrinterIds }, status: "DISPATCHED" },
-            orderBy: { createdAt: "desc" },
-            include: { user: { select: { name: true, email: true } } },
-            take: prusaPrinterIds.length * 3,
-          })
-        : Promise.resolve([]),
-      bambuddyIds.length > 0
-        ? prisma.printQueueSubmission.findMany({
-            where: {
-              capturedPrinterId: { in: bambuddyIds },
-              capturedStatus: { not: null },
-            },
-            orderBy: { capturedStartedAt: "desc" },
+    // Fetch: (1) Bambuddy active queue items, (2) Prusa jobs, (3) completed Bambu submissions
+    const [activeQueueItems, recentJobs, completedQueueSubs] =
+      await Promise.all([
+        bambuddyIds.length > 0
+          ? listQueue({ status: "printing" }).catch(
+              (): PrintQueueItemResponse[] => [],
+            )
+          : Promise.resolve([] as PrintQueueItemResponse[]),
+        prusaPrinterIds.length > 0
+          ? prisma.gcodePrintJob.findMany({
+              where: {
+                printerId: { in: prusaPrinterIds },
+                status: "DISPATCHED",
+              },
+              orderBy: { createdAt: "desc" },
+              include: { user: { select: { name: true, email: true } } },
+              take: prusaPrinterIds.length * 3,
+            })
+          : Promise.resolve([]),
+        bambuddyIds.length > 0
+          ? prisma.printQueueSubmission.findMany({
+              where: {
+                capturedPrinterId: { in: bambuddyIds },
+                capturedStatus: { not: null },
+              },
+              orderBy: { capturedStartedAt: "desc" },
+              select: {
+                capturedPrinterId: true,
+                user: { select: { name: true, email: true } },
+              },
+              take: bambuddyIds.length * 3,
+            })
+          : Promise.resolve([]),
+      ]);
+
+    // Map: bambuddyPrinterId → active queue item ID (the item currently printing)
+    const activePrinterToQueueItemId = new Map<number, number>();
+    for (const item of activeQueueItems) {
+      if (
+        item.printer_id != null &&
+        !activePrinterToQueueItemId.has(item.printer_id)
+      ) {
+        activePrinterToQueueItemId.set(item.printer_id, item.id);
+      }
+    }
+
+    // Fetch our submissions for those active queue item IDs to get the releaser
+    const activeQueueItemIds = [...activePrinterToQueueItemId.values()];
+    const activeSubmissions =
+      activeQueueItemIds.length > 0
+        ? await prisma.printQueueSubmission.findMany({
+            where: { bambuddyQueueItemId: { in: activeQueueItemIds } },
             select: {
-              capturedPrinterId: true,
+              bambuddyQueueItemId: true,
               user: { select: { name: true, email: true } },
             },
-            take: bambuddyIds.length * 3,
           })
-        : Promise.resolve([]),
-    ]);
+        : [];
+
+    // Map: queue item ID → user (the person who released the print from our queue)
+    const releaserByQueueItemId = new Map<
+      number,
+      { name: string; email: string }
+    >();
+    for (const sub of activeSubmissions) {
+      releaserByQueueItemId.set(sub.bambuddyQueueItemId, sub.user);
+    }
+
+    // Fallback map for FINISHED state: most recent completed submission per printer
+    const completedUserByBambuddyId = new Map<
+      number,
+      { name: string; email: string }
+    >();
+    for (const sub of completedQueueSubs) {
+      if (
+        sub.capturedPrinterId !== null &&
+        !completedUserByBambuddyId.has(sub.capturedPrinterId)
+      ) {
+        completedUserByBambuddyId.set(sub.capturedPrinterId, sub.user);
+      }
+    }
 
     const jobByPrinter = new Map<string, (typeof recentJobs)[number]>();
     for (const job of recentJobs) {
@@ -654,30 +722,36 @@ async function pollAttribution(): Promise<void> {
       }
     }
 
-    const queueSubByBambuddyId = new Map<
-      number,
-      (typeof recentQueueSubs)[number]
-    >();
-    for (const sub of recentQueueSubs) {
-      if (
-        sub.capturedPrinterId !== null &&
-        !queueSubByBambuddyId.has(sub.capturedPrinterId)
-      ) {
-        queueSubByBambuddyId.set(sub.capturedPrinterId, sub);
-      }
-    }
-
     for (const [printerId, entry] of statusCache) {
       const bambuddyId = bambuddyIdByPrinterId.get(printerId);
       const isBambu = bambuddyId !== undefined;
 
       if (isBambu) {
-        const sub = queueSubByBambuddyId.get(bambuddyId);
+        const isActive = BAMBU_ACTIVE_STATES.has(entry.state.toUpperCase());
+        if (!isActive) {
+          statusCache.set(printerId, {
+            ...entry,
+            startedBy: null,
+            jobStartedAt: null,
+          });
+          continue;
+        }
+        // Prefer live queue attribution (active print), fall back to last completed (FINISHED)
+        const activeQueueItemId =
+          bambuddyId !== undefined
+            ? activePrinterToQueueItemId.get(bambuddyId)
+            : undefined;
+        const releaser =
+          (activeQueueItemId !== undefined
+            ? releaserByQueueItemId.get(activeQueueItemId)
+            : undefined) ??
+          (bambuddyId !== undefined
+            ? completedUserByBambuddyId.get(bambuddyId)
+            : undefined) ??
+          null;
         statusCache.set(printerId, {
           ...entry,
-          startedBy: sub
-            ? { name: sub.user.name, email: sub.user.email }
-            : null,
+          startedBy: releaser,
           jobStartedAt: null,
         });
       } else {

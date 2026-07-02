@@ -39,6 +39,8 @@ import {
   createInventorySpool,
   assignSpoolToSlot,
   unassignSpoolFromSlot,
+  listQueue,
+  type PrintQueueItemResponse,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -2248,33 +2250,74 @@ export const printRouter = router({
         jobByPrinter.set(job.printerId, job);
     }
 
-    // Bambu attribution: most recent completed print queue submission per Bambuddy printer ID
+    // Bambu attribution: active print via queue, completed job as fallback for FINISHED state
     const bambuddyPrinterIds = bambuddyPrinters.map((p) => p.id);
-    const recentQueueSubs = bambuddyPrinterIds.length
-      ? await ctx.prisma.printQueueSubmission.findMany({
-          where: {
-            capturedPrinterId: { in: bambuddyPrinterIds },
-            capturedStatus: { not: null },
-          },
-          orderBy: { capturedStartedAt: "desc" },
-          select: {
-            capturedPrinterId: true,
-            user: { select: { name: true, email: true } },
-          },
-          take: bambuddyPrinterIds.length * 3,
-        })
-      : [];
 
-    const queueSubByBambuPrinterId = new Map<
+    const [activeQueueItems, completedQueueSubs] = await Promise.all([
+      bambuddyPrinterIds.length > 0
+        ? listQueue({ status: "printing" }).catch(
+            (): PrintQueueItemResponse[] => [],
+          )
+        : Promise.resolve([] as PrintQueueItemResponse[]),
+      bambuddyPrinterIds.length > 0
+        ? ctx.prisma.printQueueSubmission.findMany({
+            where: {
+              capturedPrinterId: { in: bambuddyPrinterIds },
+              capturedStatus: { not: null },
+            },
+            orderBy: { capturedStartedAt: "desc" },
+            select: {
+              capturedPrinterId: true,
+              user: { select: { name: true, email: true } },
+            },
+            take: bambuddyPrinterIds.length * 3,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Map: bambuddyPrinterId → active queue item ID (currently printing)
+    const activePrinterToQueueItemId = new Map<number, number>();
+    for (const item of activeQueueItems) {
+      if (
+        item.printer_id != null &&
+        !activePrinterToQueueItemId.has(item.printer_id)
+      ) {
+        activePrinterToQueueItemId.set(item.printer_id, item.id);
+      }
+    }
+
+    // Fetch our submissions for active queue items to get the releaser's identity
+    const activeQueueItemIds = [...activePrinterToQueueItemId.values()];
+    const activeSubmissions =
+      activeQueueItemIds.length > 0
+        ? await ctx.prisma.printQueueSubmission.findMany({
+            where: { bambuddyQueueItemId: { in: activeQueueItemIds } },
+            select: {
+              bambuddyQueueItemId: true,
+              user: { select: { name: true, email: true } },
+            },
+          })
+        : [];
+
+    const releaserByQueueItemId = new Map<
       number,
-      (typeof recentQueueSubs)[number]
+      { name: string; email: string }
     >();
-    for (const sub of recentQueueSubs) {
+    for (const sub of activeSubmissions) {
+      releaserByQueueItemId.set(sub.bambuddyQueueItemId, sub.user);
+    }
+
+    // Fallback: most recent completed submission per printer (for FINISHED state)
+    const completedUserByBambuPrinterId = new Map<
+      number,
+      { name: string; email: string }
+    >();
+    for (const sub of completedQueueSubs) {
       if (
         sub.capturedPrinterId !== null &&
-        !queueSubByBambuPrinterId.has(sub.capturedPrinterId)
+        !completedUserByBambuPrinterId.has(sub.capturedPrinterId)
       ) {
-        queueSubByBambuPrinterId.set(sub.capturedPrinterId, sub);
+        completedUserByBambuPrinterId.set(sub.capturedPrinterId, sub.user);
       }
     }
 
@@ -2366,7 +2409,29 @@ export const printRouter = router({
         }
       }
 
-      const queueSub = queueSubByBambuPrinterId.get(bambuPrinter.id);
+      const bambuActive = [
+        "PRINTING",
+        "PAUSED",
+        "BUSY",
+        "FINISHED",
+        "ATTENTION",
+      ].includes(state);
+
+      let startedBy: { name: string; email: string } | null = null;
+      if (bambuActive) {
+        const activeQueueItemId = activePrinterToQueueItemId.get(
+          bambuPrinter.id,
+        );
+        const activeUser =
+          activeQueueItemId !== undefined
+            ? (releaserByQueueItemId.get(activeQueueItemId) ?? null)
+            : null;
+        startedBy =
+          activeUser ??
+          completedUserByBambuPrinterId.get(bambuPrinter.id) ??
+          null;
+      }
+
       return {
         printerId: localId,
         bambuddyId: bambuPrinter.id,
@@ -2393,9 +2458,7 @@ export const printRouter = router({
         ams: amsUnits,
         amsExists,
         awaitingPlateClear,
-        startedBy: queueSub
-          ? { name: queueSub.user.name, email: queueSub.user.email }
-          : null,
+        startedBy,
         jobStartedAt: null,
         updatedAt: Date.now(),
       };
