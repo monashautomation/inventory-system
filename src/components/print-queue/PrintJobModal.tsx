@@ -113,6 +113,10 @@ export function PrintJobModal({
   const [archiveId, setArchiveId] = useState<number | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0-100
+  const [uploadPhase, setUploadPhase] = useState<"sending" | "processing">(
+    "sending",
+  );
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -304,27 +308,73 @@ export function PrintJobModal({
   async function handleUpload() {
     if (!uploadFile) return;
     setUploading(true);
+    setUploadProgress(0);
+    setUploadPhase("sending");
     try {
-      const form = new FormData();
-      form.append("file", uploadFile);
-      const res = await fetch("/api/print-queue/upload-3mf", {
-        method: "POST",
-        body: form,
+      // Leg 1: browser → server via XHR for real upload progress (maps to 0–50%)
+      const jobId = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/print-queue/upload-3mf");
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 50));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const data = JSON.parse(xhr.responseText) as { jobId: string };
+            resolve(data.jobId);
+          } else {
+            reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error during upload"));
+        const form = new FormData();
+        form.append("file", uploadFile);
+        xhr.send(form);
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `HTTP ${res.status}`);
+
+      // Leg 2: server → BamBuddy; poll for progress (maps to 50–100%)
+      setUploadPhase("processing");
+      const POLL_INTERVAL = 1000;
+      const POLL_TIMEOUT = 5 * 60 * 1000;
+      const deadline = Date.now() + POLL_TIMEOUT;
+
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        const poll = await fetch(
+          `/api/print-queue/upload-status/${encodeURIComponent(jobId)}`,
+        );
+        if (!poll.ok) {
+          const text = await poll.text().catch(() => "");
+          throw new Error(text || `Poll HTTP ${poll.status}`);
+        }
+        const job = (await poll.json()) as
+          | { status: "pending"; progress: number }
+          | { status: "completed"; archiveId: number }
+          | { status: "failed"; error: string };
+
+        if (job.status === "completed") {
+          setUploadProgress(100);
+          setArchiveId(job.archiveId);
+          toast.success("File uploaded — proceeding to next step");
+          advance();
+          return;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.error);
+        }
+        // pending: map server-side byte progress to 50–99%
+        setUploadProgress(50 + Math.round(job.progress * 49));
       }
-      const data = (await res.json()) as { archiveId: number };
-      setArchiveId(data.archiveId);
-      toast.success("File uploaded — proceeding to next step");
-      advance();
+      throw new Error("Upload timed out waiting for BamBuddy");
     } catch (err) {
       toast.error(
         `Upload failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
@@ -635,25 +685,44 @@ export function PrintJobModal({
                         : "Drag & drop or click to select a .3mf file"}
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 min-w-0">
-                      <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate flex-1 min-w-0 text-sm">
-                        {uploadFile.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {(uploadFile.size / 1024 / 1024).toFixed(1)} MB
-                      </span>
-                      <button
-                        className="shrink-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setUploadFile(null);
-                          setArchiveId(null);
-                          if (fileInputRef.current)
-                            fileInputRef.current.value = "";
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 min-w-0">
+                        <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate flex-1 min-w-0 text-sm">
+                          {uploadFile.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {(uploadFile.size / 1024 / 1024).toFixed(1)} MB
+                        </span>
+                        {!uploading && (
+                          <button
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setUploadFile(null);
+                              setArchiveId(null);
+                              if (fileInputRef.current)
+                                fileInputRef.current.value = "";
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      {uploading && (
+                        <div className="space-y-1">
+                          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-primary h-1.5 rounded-full transition-all duration-300 ease-out"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {uploadPhase === "sending"
+                              ? `Sending… ${uploadProgress}%`
+                              : `Processing on printer server… ${uploadProgress}%`}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">
@@ -1268,7 +1337,7 @@ export function PrintJobModal({
               onClick={handleNext}
               disabled={!canAdvance() || uploading}
             >
-              {uploading ? "Uploading…" : "Next"}
+              {uploading ? `${uploadProgress}%` : "Next"}
               {!uploading && <ChevronRight className="h-4 w-4 ml-1" />}
             </Button>
           ) : (

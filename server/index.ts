@@ -46,6 +46,21 @@ const ALLOWED_IMAGE_TYPES = new Set([
     "image/gif",
 ]);
 
+// ─── In-memory 3MF upload job store ──────────────────────────────────────────
+// Tracks async BamBuddy upload jobs so the HTTP response can return immediately
+// (avoiding Cloudflare's 100s proxy timeout on large files).
+// Entries expire after 30 minutes to bound memory usage.
+type UploadJobState =
+    | { status: "pending"; progress: number } // 0–1 fraction of bytes sent to BamBuddy
+    | { status: "completed"; archiveId: number }
+    | { status: "failed"; error: string };
+
+const uploadJobs = new Map<string, UploadJobState>();
+
+function expireUploadJob(jobId: string): void {
+    setTimeout(() => uploadJobs.delete(jobId), 30 * 60 * 1000);
+}
+
 // Load environment variables
 config();
 
@@ -759,7 +774,7 @@ app.get("/api/bambu-stats-export", async (c) => {
     });
 });
 
-// ─── 3MF file upload to BamBuddy ─────────────────────────────────────────────
+// ─── 3MF file upload to BamBuddy (async to avoid Cloudflare's 100s timeout) ──
 app.post("/api/print-queue/upload-3mf", async (c) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session?.user?.id)
@@ -779,18 +794,51 @@ app.post("/api/print-queue/upload-3mf", async (c) => {
     if (bytes.byteLength > MAX_3MF_BYTES)
         throw new HTTPException(413, { message: "File exceeds 500 MB limit" });
 
-    try {
-        const archiveId = await uploadBambuddyArchive(
-            file.name,
-            Buffer.from(bytes),
-        );
-        return c.json({ archiveId });
-    } catch (err) {
-        logger.error({ err }, "Failed to upload 3MF to BamBuddy");
-        throw new HTTPException(502, {
-            message: `BamBuddy upload failed: ${err instanceof Error ? err.message : String(err)}`,
-        });
-    }
+    const jobId = crypto.randomUUID();
+    const buffer = Buffer.from(bytes);
+    const filename = file.name;
+
+    uploadJobs.set(jobId, { status: "pending", progress: 0 });
+    expireUploadJob(jobId);
+
+    // Fire-and-forget: upload runs after we've already responded to the client.
+    Promise.resolve().then(async () => {
+        try {
+            const archiveId = await uploadBambuddyArchive(
+                filename,
+                buffer,
+                (sent, total) => {
+                    uploadJobs.set(jobId, {
+                        status: "pending",
+                        progress: total > 0 ? sent / total : 0,
+                    });
+                },
+            );
+            uploadJobs.set(jobId, { status: "completed", archiveId });
+        } catch (err) {
+            logger.error({ err, jobId }, "Failed to upload 3MF to BamBuddy");
+            uploadJobs.set(jobId, {
+                status: "failed",
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    });
+
+    return c.json({ jobId }, 202);
+});
+
+// ─── 3MF upload status polling ────────────────────────────────────────────────
+app.get("/api/print-queue/upload-status/:jobId", async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.id)
+        throw new HTTPException(401, { message: "Authentication required" });
+
+    const jobId = c.req.param("jobId");
+    const job = uploadJobs.get(jobId);
+    if (!job)
+        throw new HTTPException(404, { message: "Upload job not found" });
+
+    return c.json(job);
 });
 
 // ─── Tamarin SDK routes (Notion + Discord) ───────────────────────────────────

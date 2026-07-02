@@ -1,7 +1,3 @@
-import { writeFile, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 function getConfig(): { endpoint: string; apiKey: string } {
   const endpoint = process.env.BAMBUDDY_ENDPOINT?.replace(/\/$/, "");
   const apiKey = process.env.BAMBUDDY_API_KEY;
@@ -259,46 +255,106 @@ export async function getBambuddyPrinterStatus(
   return res.json() as Promise<BambuddyPrinterStatus>;
 }
 
+/**
+ * Build a multipart/form-data ReadableStream for a single file field.
+ * Returns the stream, its content-type (with boundary), and the exact byte
+ * length so callers can set Content-Length on the request.
+ * The optional onProgress callback fires after each chunk is enqueued.
+ */
+function makeMultipartStream(
+  filename: string,
+  buffer: Buffer,
+  onProgress?: (sent: number, total: number) => void,
+): {
+  body: ReadableStream<Uint8Array>;
+  contentType: string;
+  contentLength: number;
+} {
+  // Reject filenames that could inject CRLF or other control characters into
+  // the Content-Disposition header. Expected input is a Bambu Studio export.
+  if (!/^[\w.\- ]{1,255}\.3mf$/i.test(filename)) {
+    throw new Error(`Invalid 3MF filename: "${filename}"`);
+  }
+
+  const boundary = `FormBoundary${crypto.randomUUID().replace(/-/g, "")}`;
+  // Allowlist above guarantees filename contains only [\w.\- ] — no quotes,
+  // no CRLF — so interpolating into a quoted-string is safe here.
+  const preamble = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+  );
+  const epilogue = Buffer.from(`\r\n--${boundary}--\r\n`);
+  const contentLength = preamble.length + buffer.length + epilogue.length;
+  const parts: Buffer[] = [preamble, buffer, epilogue];
+
+  const CHUNK = 64 * 1024;
+  let partIndex = 0;
+  let offset = 0;
+  let sent = 0;
+
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      while (partIndex < parts.length) {
+        const part = parts[partIndex];
+        if (offset < part.length) {
+          const end = Math.min(offset + CHUNK, part.length);
+          const chunk = part.subarray(offset, end);
+          controller.enqueue(new Uint8Array(chunk));
+          offset += chunk.length;
+          sent += chunk.length;
+          onProgress?.(sent, contentLength);
+          return;
+        }
+        partIndex++;
+        offset = 0;
+      }
+      controller.close();
+    },
+  });
+
+  return {
+    body,
+    contentType: `multipart/form-data; boundary=${boundary}`,
+    contentLength,
+  };
+}
+
 /** Upload a .3mf file to BambBuddy and return the archive_id. */
 export async function uploadArchive(
   filename: string,
   fileBuffer: Buffer,
+  onProgress?: (sent: number, total: number) => void,
 ): Promise<number> {
   const { endpoint } = getConfig();
   const bearer = await loginForBearer();
 
-  const tmpPath = join(tmpdir(), `bambuddy_upload_${Date.now()}_${filename}`);
-  await writeFile(tmpPath, fileBuffer);
+  const { body, contentType, contentLength } = makeMultipartStream(
+    filename,
+    fileBuffer,
+    onProgress,
+  );
 
-  try {
-    const form = new FormData();
-    form.append(
-      "file",
-      new Blob([new Uint8Array(fileBuffer)], {
-        type: "application/octet-stream",
-      }),
-      filename,
+  // 85s keeps us under Cloudflare's 100s proxy timeout so callers get a real
+  // 502 error rather than a silent CF 524.
+  const res = await fetch(`${endpoint}/api/v1/archives/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${bearer}`,
+      "Content-Type": contentType,
+      "Content-Length": String(contentLength),
+    },
+    body,
+    signal: AbortSignal.timeout(85_000),
+  });
+  await checkResponse(res, "upload archive");
+
+  const data = (await res.json()) as { id?: number; archive_id?: number };
+  const archiveId = data.id ?? data.archive_id;
+  if (typeof archiveId !== "number") {
+    throw new Error(
+      `BambBuddy upload response missing id: ${JSON.stringify(data)}`,
     );
-
-    const res = await fetch(`${endpoint}/api/v1/archives/upload`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${bearer}` },
-      body: form,
-      signal: AbortSignal.timeout(120_000),
-    });
-    await checkResponse(res, "upload archive");
-
-    const data = (await res.json()) as { id?: number; archive_id?: number };
-    const archiveId = data.id ?? data.archive_id;
-    if (typeof archiveId !== "number") {
-      throw new Error(
-        `BambBuddy upload response missing id: ${JSON.stringify(data)}`,
-      );
-    }
-    return archiveId;
-  } finally {
-    unlink(tmpPath).catch(() => undefined);
   }
+  return archiveId;
 }
 
 /** Send an uploaded archive to a printer. */
