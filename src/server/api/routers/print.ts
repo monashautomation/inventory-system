@@ -2664,8 +2664,8 @@ export const printRouter = router({
         }
         if ((s.hms_errors ?? []).length > 0) {
           state = "ATTENTION";
-          stateMessage = hmsErrorMessage(s.hms_errors as HMSError[]);
-          hmsErrors = describeHmsErrors(s.hms_errors as HMSError[]);
+          stateMessage = hmsErrorMessage(s.hms_errors);
+          hmsErrors = describeHmsErrors(s.hms_errors);
         }
         progress = s.progress ?? null;
         timeRemaining = s.remaining_time ?? null;
