@@ -1,4 +1,9 @@
-import { router, userProcedure, adminProcedure } from "@/server/trpc";
+import {
+  router,
+  userProcedure,
+  adminProcedure,
+  kioskProcedure,
+} from "@/server/trpc";
 import { logger as rootLogger } from "@/server/lib/logger";
 
 const logger = rootLogger.child({ module: "router:print" });
@@ -39,6 +44,8 @@ import {
   createInventorySpool,
   assignSpoolToSlot,
   unassignSpoolFromSlot,
+  listQueue,
+  type PrintQueueItemResponse,
   type AMSUnit,
   type BambuddyPrinter,
   type HMSError,
@@ -2248,33 +2255,74 @@ export const printRouter = router({
         jobByPrinter.set(job.printerId, job);
     }
 
-    // Bambu attribution: most recent completed print queue submission per Bambuddy printer ID
+    // Bambu attribution: active print via queue, completed job as fallback for FINISHED state
     const bambuddyPrinterIds = bambuddyPrinters.map((p) => p.id);
-    const recentQueueSubs = bambuddyPrinterIds.length
-      ? await ctx.prisma.printQueueSubmission.findMany({
-          where: {
-            capturedPrinterId: { in: bambuddyPrinterIds },
-            capturedStatus: { not: null },
-          },
-          orderBy: { capturedStartedAt: "desc" },
-          select: {
-            capturedPrinterId: true,
-            user: { select: { name: true, email: true } },
-          },
-          take: bambuddyPrinterIds.length * 3,
-        })
-      : [];
 
-    const queueSubByBambuPrinterId = new Map<
+    const [activeQueueItems, completedQueueSubs] = await Promise.all([
+      bambuddyPrinterIds.length > 0
+        ? listQueue({ status: "printing" }).catch(
+            (): PrintQueueItemResponse[] => [],
+          )
+        : Promise.resolve([] as PrintQueueItemResponse[]),
+      bambuddyPrinterIds.length > 0
+        ? ctx.prisma.printQueueSubmission.findMany({
+            where: {
+              capturedPrinterId: { in: bambuddyPrinterIds },
+              capturedStatus: { not: null },
+            },
+            orderBy: { capturedStartedAt: "desc" },
+            select: {
+              capturedPrinterId: true,
+              user: { select: { name: true, email: true } },
+            },
+            take: bambuddyPrinterIds.length * 3,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Map: bambuddyPrinterId → active queue item ID (currently printing)
+    const activePrinterToQueueItemId = new Map<number, number>();
+    for (const item of activeQueueItems) {
+      if (
+        item.printer_id != null &&
+        !activePrinterToQueueItemId.has(item.printer_id)
+      ) {
+        activePrinterToQueueItemId.set(item.printer_id, item.id);
+      }
+    }
+
+    // Fetch our submissions for active queue items to get the releaser's identity
+    const activeQueueItemIds = [...activePrinterToQueueItemId.values()];
+    const activeSubmissions =
+      activeQueueItemIds.length > 0
+        ? await ctx.prisma.printQueueSubmission.findMany({
+            where: { bambuddyQueueItemId: { in: activeQueueItemIds } },
+            select: {
+              bambuddyQueueItemId: true,
+              user: { select: { name: true, email: true } },
+            },
+          })
+        : [];
+
+    const releaserByQueueItemId = new Map<
       number,
-      (typeof recentQueueSubs)[number]
+      { name: string; email: string }
     >();
-    for (const sub of recentQueueSubs) {
+    for (const sub of activeSubmissions) {
+      releaserByQueueItemId.set(sub.bambuddyQueueItemId, sub.user);
+    }
+
+    // Fallback: most recent completed submission per printer (for FINISHED state)
+    const completedUserByBambuPrinterId = new Map<
+      number,
+      { name: string; email: string }
+    >();
+    for (const sub of completedQueueSubs) {
       if (
         sub.capturedPrinterId !== null &&
-        !queueSubByBambuPrinterId.has(sub.capturedPrinterId)
+        !completedUserByBambuPrinterId.has(sub.capturedPrinterId)
       ) {
-        queueSubByBambuPrinterId.set(sub.capturedPrinterId, sub);
+        completedUserByBambuPrinterId.set(sub.capturedPrinterId, sub.user);
       }
     }
 
@@ -2366,7 +2414,29 @@ export const printRouter = router({
         }
       }
 
-      const queueSub = queueSubByBambuPrinterId.get(bambuPrinter.id);
+      const bambuActive = [
+        "PRINTING",
+        "PAUSED",
+        "BUSY",
+        "FINISHED",
+        "ATTENTION",
+      ].includes(state);
+
+      let startedBy: { name: string; email: string } | null = null;
+      if (bambuActive) {
+        const activeQueueItemId = activePrinterToQueueItemId.get(
+          bambuPrinter.id,
+        );
+        const activeUser =
+          activeQueueItemId !== undefined
+            ? (releaserByQueueItemId.get(activeQueueItemId) ?? null)
+            : null;
+        startedBy =
+          activeUser ??
+          completedUserByBambuPrinterId.get(bambuPrinter.id) ??
+          null;
+      }
+
       return {
         printerId: localId,
         bambuddyId: bambuPrinter.id,
@@ -2393,9 +2463,7 @@ export const printRouter = router({
         ams: amsUnits,
         amsExists,
         awaitingPlateClear,
-        startedBy: queueSub
-          ? { name: queueSub.user.name, email: queueSub.user.email }
-          : null,
+        startedBy,
         jobStartedAt: null,
         updatedAt: Date.now(),
       };
@@ -2520,4 +2588,203 @@ export const printRouter = router({
       ),
     ];
   }),
+
+  getKioskPrinterStatuses: kioskProcedure.query(async ({ ctx }) => {
+    const [bambuddyPrinters, localPrinters] = await Promise.all([
+      listBambuddyPrinters().catch((): BambuddyPrinter[] => []),
+      ctx.prisma.printer.findMany({ orderBy: { createdAt: "desc" } }),
+    ]);
+
+    const bambuStatusResults = await Promise.allSettled(
+      bambuddyPrinters.map((p) => getBambuddyPrinterStatus(p.id)),
+    );
+
+    const localBySerial = new Map<string, (typeof localPrinters)[number]>();
+    const localByIp = new Map<string, (typeof localPrinters)[number]>();
+    for (const p of localPrinters) {
+      if (p.serialNumber) localBySerial.set(p.serialNumber, p);
+      localByIp.set(p.ipAddress, p);
+    }
+    const findLocal = (bp: BambuddyPrinter) =>
+      (bp.serial_number ? localBySerial.get(bp.serial_number) : undefined) ??
+      localByIp.get(bp.ip_address) ??
+      null;
+
+    const bambuResults = bambuddyPrinters.map((bambuPrinter, i) => {
+      const settled = bambuStatusResults[i];
+      const s = settled?.status === "fulfilled" ? settled.value : null;
+      const local = findLocal(bambuPrinter);
+      const localId = local?.id ?? `bambuddy-${bambuPrinter.id}`;
+
+      let state = "UNKNOWN";
+      let stateMessage = "Unknown";
+      let progress: number | null = null;
+      let timeRemaining: number | null = null;
+      let fileName: string | null = null;
+      let hmsErrors: { code: string; description: string }[] = [];
+      let awaitingPlateClear = false;
+
+      if (s === null) {
+        state = "UNREACHABLE";
+        stateMessage = "Could not reach BamBuddy.";
+      } else if (!s.connected) {
+        state = "CONNECTING";
+        stateMessage = "Connecting to Bambu printer…";
+      } else {
+        const rawState = (s.state ?? "IDLE").toUpperCase();
+        const pct = s.progress != null ? ` (${Math.round(s.progress)}%)` : "";
+        switch (rawState) {
+          case "RUNNING":
+          case "PRINTING":
+            state = "PRINTING";
+            stateMessage = `Printing in progress${pct}`;
+            break;
+          case "PAUSE":
+          case "PAUSED":
+            state = "PAUSED";
+            stateMessage = "Paused";
+            break;
+          case "FINISH":
+          case "FINISHED":
+            state = "FINISHED";
+            stateMessage = "Finished";
+            break;
+          case "FAILED":
+            state = "IDLE";
+            stateMessage = "Last print failed";
+            break;
+          case "PREPARE":
+            state = "BUSY";
+            stateMessage = "Preparing";
+            break;
+          default:
+            state = rawState === "IDLE" ? "IDLE" : rawState;
+            stateMessage = rawState === "IDLE" ? "Ready" : rawState;
+            break;
+        }
+        if ((s.hms_errors ?? []).length > 0) {
+          state = "ATTENTION";
+          stateMessage = hmsErrorMessage(s.hms_errors);
+          hmsErrors = describeHmsErrors(s.hms_errors);
+        }
+        progress = s.progress ?? null;
+        timeRemaining = s.remaining_time ?? null;
+        fileName = s.subtask_name ?? s.current_print ?? s.gcode_file ?? null;
+        awaitingPlateClear = s.awaiting_plate_clear ?? false;
+      }
+
+      return {
+        printerId: localId,
+        bambuddyId: bambuPrinter.id as number | null,
+        printerName: bambuPrinter.name,
+        printerModel: bambuPrinter.model,
+        printerType: "BAMBU" as const,
+        state,
+        stateMessage,
+        hmsErrors,
+        progress,
+        timeRemaining,
+        fileName,
+        awaitingPlateClear,
+      };
+    });
+
+    const prusaPrinters = localPrinters.filter((p) => p.type === "PRUSA");
+    const prusaResults = await Promise.allSettled(
+      prusaPrinters.map(async (printer) => {
+        let state = "UNKNOWN";
+        let stateMessage = "Unknown";
+        let progress: number | null = null;
+        let timeRemaining: number | null = null;
+        let fileName: string | null = null;
+
+        if (printer.authToken) {
+          try {
+            const [statusRes, jobRes] = await Promise.all([
+              fetch(`http://${printer.ipAddress}/api/v1/status`, {
+                headers: { "X-Api-Key": printer.authToken },
+                signal: AbortSignal.timeout(5000),
+              }),
+              fetch(`http://${printer.ipAddress}/api/v1/job`, {
+                headers: { "X-Api-Key": printer.authToken },
+                signal: AbortSignal.timeout(5000),
+              }),
+            ]);
+            if (!statusRes.ok) {
+              state = "UNREACHABLE";
+              stateMessage = `Status check failed (HTTP ${statusRes.status}).`;
+            } else {
+              const sParsed = prusaStatusResponseSchema.safeParse(
+                await statusRes.json(),
+              );
+              if (!sParsed.success) {
+                state = "UNREACHABLE";
+                stateMessage = "Printer returned unexpected status format.";
+              } else {
+                const sv = sParsed.data;
+                let j = null;
+                if (jobRes.status !== 204) {
+                  const jParsed = prusaJobResponseSchema.safeParse(
+                    await jobRes.json(),
+                  );
+                  if (jParsed.success) j = jParsed.data;
+                }
+                state = sv.printer?.state?.trim() ?? "UNKNOWN";
+                const pct =
+                  (sv.job?.progress ?? j?.progress) != null
+                    ? ` (${Math.round((sv.job?.progress ?? j?.progress)!)}%)`
+                    : "";
+                stateMessage = prusaStateMessage(state, pct);
+                progress = sv.job?.progress ?? j?.progress ?? null;
+                timeRemaining =
+                  sv.job?.time_remaining ?? j?.time_remaining ?? null;
+                fileName = j?.file?.display_name ?? j?.file?.name ?? null;
+              }
+            }
+          } catch {
+            state = "UNREACHABLE";
+            stateMessage = "Could not reach printer.";
+          }
+        } else {
+          stateMessage = "No auth token configured.";
+        }
+
+        return {
+          printerId: printer.id,
+          bambuddyId: null as number | null,
+          printerName: printer.name,
+          printerModel: null as string | null,
+          printerType: "PRUSA" as const,
+          state,
+          stateMessage,
+          hmsErrors: [] as { code: string; description: string }[],
+          progress,
+          timeRemaining,
+          fileName,
+          awaitingPlateClear: false,
+        };
+      }),
+    );
+
+    return [
+      ...bambuResults,
+      ...prusaResults.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : [],
+      ),
+    ];
+  }),
+
+  clearKioskBuildPlate: kioskProcedure
+    .input(z.object({ bambuddyId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const knownPrinters = await listBambuddyPrinters().catch(
+        (): BambuddyPrinter[] => [],
+      );
+      const isKnown = knownPrinters.some((p) => p.id === input.bambuddyId);
+      if (!isKnown) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      await clearBambuddyBuildPlate(input.bambuddyId);
+      return { success: true };
+    }),
 });

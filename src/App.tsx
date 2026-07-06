@@ -33,6 +33,7 @@ import KioskHome from "@/pages/kiosk/KioskHome";
 import KioskAfterHours from "@/pages/kiosk/KioskAfterHours";
 import KioskCheckout from "@/pages/kiosk/KioskCheckout";
 import KioskCheckin from "@/pages/kiosk/KioskCheckin";
+import KioskPrintStatus from "@/pages/kiosk/KioskPrintStatus";
 import KioskProvision from "@/pages/kiosk/KioskProvision";
 import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
 
@@ -65,6 +66,10 @@ const App = () => {
                 />
                 <Route path="/kiosk/checkout" element={<KioskCheckout />} />
                 <Route path="/kiosk/checkin" element={<KioskCheckin />} />
+                <Route
+                  path="/kiosk/print-status"
+                  element={<KioskPrintStatus />}
+                />
               </Route>
               <Route path="/" element={<ProtectedLayout />}>
                 <Route index element={<Navigate to="/dashboard" replace />} />

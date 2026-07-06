@@ -1,4 +1,4 @@
-import { router, userProcedure } from "@/server/trpc";
+import { router, userProcedure, kioskProcedure } from "@/server/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logger as rootLogger } from "@/server/lib/logger";
@@ -672,4 +672,46 @@ export const printQueueRouter = router({
         "Filament short override applied",
       );
     }),
+
+  getKioskQueue: kioskProcedure.query(async () => {
+    try {
+      const items = await listQueue();
+      const activeItems = items.filter(
+        (i) => i.status === "pending" || i.status === "printing",
+      );
+      const itemIds = activeItems.map((i) => i.id);
+      const submissions = await prisma.printQueueSubmission.findMany({
+        where: { bambuddyQueueItemId: { in: itemIds } },
+        select: {
+          bambuddyQueueItemId: true,
+          notionProjectName: true,
+          personalUse: true,
+          user: { select: { name: true } },
+        },
+      });
+      const subByItemId = new Map(
+        submissions.map((s) => [s.bambuddyQueueItemId, s]),
+      );
+      return activeItems.map((item) => {
+        const sub = subByItemId.get(item.id);
+        return {
+          id: item.id,
+          position: item.position,
+          status: item.status,
+          file_name: item.library_file_name ?? item.archive_name ?? null,
+          submitted_by: sub?.user.name ?? item.created_by_username ?? null,
+          project: sub?.personalUse
+            ? "Personal"
+            : (sub?.notionProjectName ?? null),
+          created_at: item.created_at,
+        };
+      });
+    } catch (err) {
+      logger.error({ err }, "Failed to list kiosk queue");
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Could not fetch print queue",
+      });
+    }
+  }),
 });

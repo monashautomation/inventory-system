@@ -3,9 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { useKiosk } from "@/contexts/kiosk-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { LogOut, Clock, PackageCheck, PackagePlus } from "lucide-react";
+import {
+  LogOut,
+  Clock,
+  PackageCheck,
+  PackagePlus,
+  Printer,
+} from "lucide-react";
 import logoTextDark from "@/assets/Horizontal White & Blue.svg";
 import logoTextLight from "@/assets/Horizontal Black & Blue.svg";
+import { motion } from "framer-motion";
 
 const actions = [
   {
@@ -26,6 +33,12 @@ const actions = [
     icon: PackageCheck,
     href: "/kiosk/checkin",
   },
+  {
+    label: "Printer Status",
+    description: "View live printer status and queue",
+    icon: Printer,
+    href: "/kiosk/print-status",
+  },
 ] as const;
 
 export default function KioskHome() {
@@ -41,7 +54,12 @@ export default function KioskHome() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <div className="border-b px-8 py-4 relative flex items-center justify-between">
+      <motion.div
+        className="border-b px-8 py-4 relative flex items-center justify-between"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
         <div>
           <p className="text-lg font-semibold">{session.student.name}</p>
           <p className="text-sm text-muted-foreground">
@@ -62,34 +80,59 @@ export default function KioskHome() {
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
         </Button>
-      </div>
+      </motion.div>
 
       {/* Actions */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-lg space-y-4">
-          <h2 className="text-xl font-semibold text-center mb-6">
+          <motion.h2
+            className="text-xl font-semibold text-center mb-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+          >
             What would you like to do?
-          </h2>
-          {actions.map((action) => {
+          </motion.h2>
+          {actions.map((action, i) => {
             const Icon = action.icon;
             return (
-              <Card
+              <motion.div
                 key={action.href}
-                className="cursor-pointer hover:bg-accent transition-colors"
-                onClick={() => navigate(action.href)}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.35,
+                  delay: 0.15 + i * 0.07,
+                  ease: "easeOut",
+                }}
+                whileHover={{ y: -2, scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <CardContent className="flex items-center gap-4 py-5">
-                  <div className="rounded-lg bg-primary/10 p-3">
-                    <Icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">{action.label}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {action.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                <Card
+                  className="cursor-pointer hover:bg-accent transition-colors"
+                  onClick={() => navigate(action.href)}
+                >
+                  <CardContent className="flex items-center gap-4 py-5">
+                    <motion.div
+                      className="rounded-lg bg-primary/10 p-3"
+                      whileHover={{ scale: 1.1 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 15,
+                      }}
+                    >
+                      <Icon className="w-6 h-6 text-primary" />
+                    </motion.div>
+                    <div>
+                      <p className="font-semibold">{action.label}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {action.description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             );
           })}
         </div>

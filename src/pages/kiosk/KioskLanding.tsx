@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { trpc } from "@/client/trpc";
 import { useKiosk } from "@/contexts/kiosk-context";
 import type { TRPCClientErrorLike } from "@trpc/client";
@@ -175,7 +176,12 @@ export default function KioskLanding() {
         </div>
       )}
       <div className="min-h-screen bg-background flex flex-col p-8">
-        <div className="flex justify-center pt-8">
+        <motion.div
+          className="flex justify-center pt-8"
+          initial={{ opacity: 0, y: -24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
           <img
             src={logoLight}
             alt="Monash Automation"
@@ -186,9 +192,14 @@ export default function KioskLanding() {
             alt="Monash Automation"
             className="h-12 w-auto hidden dark:block"
           />
-        </div>
+        </motion.div>
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-full max-w-sm space-y-8">
+          <motion.div
+            className="w-full max-w-sm space-y-8"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut", delay: 0.15 }}
+          >
             <div className="text-center space-y-2">
               <h1 className="text-3xl font-bold">Kiosk Terminal</h1>
               <p className="text-muted-foreground text-sm">
@@ -211,22 +222,24 @@ export default function KioskLanding() {
                 className="text-center text-lg h-14"
                 disabled={lookup.isPending}
               />
-              <Button
-                type="submit"
-                className="w-full h-12 text-base"
-                disabled={!studentId.trim() || lookup.isPending}
-              >
-                {lookup.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Looking up...
-                  </>
-                ) : (
-                  "Continue"
-                )}
-              </Button>
+              <motion.div whileTap={{ scale: 0.98 }}>
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-base"
+                  disabled={!studentId.trim() || lookup.isPending}
+                >
+                  {lookup.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Looking up...
+                    </>
+                  ) : (
+                    "Continue"
+                  )}
+                </Button>
+              </motion.div>
             </form>
-          </div>
+          </motion.div>
         </div>
       </div>
     </>
