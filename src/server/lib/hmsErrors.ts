@@ -2,13 +2,15 @@
  * Bambu Lab HMS (Hardware Management System) error code lookup.
  * Codes normalized to 8-digit lowercase hex (no 0x prefix).
  * Source: BambuStudio resources/hms/hms_en_*.json
- * 1082 entries covering models: 093, 094, 20P, 22E, 239, 26A, 31B
+ * 1092 entries covering models: 093, 094, 20P, 22E, 239, 26A, 31B
  */
 const HMS_ERROR_MAP: Record<string, string> = {
   "03004000": "Z axis homing failed; the task has been stopped.",
   "03004001":
     "The printer timed out waiting for the nozzle to cool down before homing.",
   "03004002": "Auto Bed Leveling failed; the task has been stopped.",
+  "03004003": "Nozzle temperature malfunction.",
+  "03004004": "Heatbed temperature malfunction.",
   "03004005": "The hotend cooling fan speed is abnormal.",
   "03004006": "The nozzle is clogged.",
   "03004008": "The AMS failed to change filament.",
@@ -73,10 +75,16 @@ const HMS_ERROR_MAP: Record<string, string> = {
     'Printing was paused for unknown reason. You can select "Resume" to resume the print job.',
   "03008001":
     "Printing paused due to the pause command added to the printing file.",
+  "03008002":
+    'First layer defects were detected. If the defects are acceptable, select "Resume" to resume the print job.',
   "03008003":
     "Spaghetti defects were detected by the AI Print Monitoring. Please check the quality of the printed model before continuing your print.",
+  "03008004":
+    'The filament ran out. Please load new filament and select "Resume" to resume the print job.',
   "03008005":
     "Toolhead front cover fell off. Please remount the front cover and check to make sure your print is going okay.",
+  "03008006":
+    'Build plate localization marker was not found. Please stop the print job and find the build plate. You can also select "Resume" to force-resume the print job.',
   "03008007":
     "There was an unfinished print job when the printer lost power. If the model is still adhered to the build plate, you can try resuming the print job.",
   "03008008": "Nozzle temperature malfunction",
@@ -93,6 +101,9 @@ const HMS_ERROR_MAP: Record<string, string> = {
     "The print file is not available. Please check to see if the storage media has been removed.",
   "0300800f": "The door seems to be open, so printing was paused.",
   "03008010": "The hotend cooling fan speed is abnormal.",
+  "03008011":
+    'The current build plate is not the same as in G-code. Please stop the print job and replace the build plate. You can also select "Resume" to force-resume the print job.',
+  "03008012": "",
   "03008013":
     'Printing was paused by the user. You can select "Resume" to continue printing.',
   "03008014":
@@ -1256,10 +1267,13 @@ const HMS_ERROR_MAP: Record<string, string> = {
     "The high-precision nozzle offset calibration has failed, possibly due to a damaged pattern or the similarity of the colors of the two selected filaments. Please clear the printed pattern and replace the filaments with higher color contrast before re-calibrating.",
   "0c004041":
     "Toolhead camera calibration failed. Please ensure the Calibration Marker on the heatbed or Height Calibration Marker on the homing area is clean and undamaged, then re-run the calibration process.",
+  "0c008001":
+    "First layer defects were detected. If the defects are acceptable, click resume icon to resume the print job.",
   "0c008002": "",
   "0c008005":
     "Purged filament has piled up in the waste chute, which may cause a tool head collision.",
   "0c008009": "Build plate localization marker was not found.",
+  "0c00800a": "The detected build plate is not the same as in G-code.",
   "0c00800b":
     "The heatbed marker was not detected. Please clear all objects and remove the mat. Make sure the marker is not obstructed.",
   "0c008015":
@@ -1282,6 +1296,7 @@ const HMS_ERROR_MAP: Record<string, string> = {
     "The AI print monitor has detected a spaghetti defect. Please check the print and take the necessary action.",
   "0c008043":
     "AI detected nozzle clumping. Please check the nozzle condition. Refer to assistant for solutions.",
+  "0c00c003": "Possible defects were detected in the first layer.",
   "0c00c004": "Possible spaghetti failure was detected.",
   "0c00c006": "Purged filament may have piled up in the waste chute.",
   "1000c001":
