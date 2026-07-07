@@ -662,7 +662,8 @@ export function PrintJobModal({
                     onChange={(e) => {
                       const f = e.target.files?.[0] ?? null;
                       if (f && !acceptUploadFile(f)) {
-                        if (fileInputRef.current) fileInputRef.current.value = "";
+                        if (fileInputRef.current)
+                          fileInputRef.current.value = "";
                         return;
                       }
                       setUploadFile(f);

@@ -1268,7 +1268,7 @@ const HMS_ERROR_MAP: Record<string, string> = {
   "0c004041":
     "Toolhead camera calibration failed. Please ensure the Calibration Marker on the heatbed or Height Calibration Marker on the homing area is clean and undamaged, then re-run the calibration process.",
   "0c008001":
-    'First layer defects were detected. If the defects are acceptable, click resume icon to resume the print job.',
+    "First layer defects were detected. If the defects are acceptable, click resume icon to resume the print job.",
   "0c008002": "",
   "0c008005":
     "Purged filament has piled up in the waste chute, which may cause a tool head collision.",
