@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export const APP_VERSION = "1.3.1";
+export const APP_VERSION = "1.4.0";
 
 interface ChangeEntry {
   type: "new" | "improved" | "fixed";
@@ -26,6 +26,49 @@ interface VersionEntry {
 }
 
 const CHANGELOG: VersionEntry[] = [
+  {
+    version: "1.4.0",
+    date: "7 July 2026",
+    title: "Kiosk Status, Queue Access & File Upload",
+    changes: [
+      {
+        type: "new",
+        text: "Print status page on the kiosk — walk up to a kiosk and see live progress for prints in the queue.",
+      },
+      {
+        type: "new",
+        text: "Upload progress bar — uploading a .gcode.3mf to the print queue now shows a real progress indicator instead of a blank wait.",
+      },
+      {
+        type: "improved",
+        text: "Queue actions (start, stop, cancel, delete) are now available to any signed-in member, not just admins.",
+      },
+      {
+        type: "improved",
+        text: "In-progress page replaces chat, with an activity log so you can see recent print and queue activity at a glance.",
+      },
+      {
+        type: "improved",
+        text: "Webcam view on the all-cameras dashboard loads instantly and holds up better when several people have it open at once.",
+      },
+      {
+        type: "fixed",
+        text: '"Printed by" now shows the correct member on the monitor page and for Bambu printer jobs.',
+      },
+      {
+        type: "fixed",
+        text: "Clearer error messages when a Notion lookup fails.",
+      },
+      {
+        type: "fixed",
+        text: "Print queue only accepts .gcode.3mf files now — uploading a plain .gcode is blocked with an explanation instead of failing silently later.",
+      },
+      {
+        type: "improved",
+        text: 'More printer error codes recognised, so HMS faults show an accurate description instead of "Unknown error".',
+      },
+    ],
+  },
   {
     version: "1.3.1",
     date: "24 June 2026",
