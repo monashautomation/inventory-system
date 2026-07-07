@@ -46,6 +46,21 @@ import {
 type TargetingMode = "any" | "model" | "printer";
 type ArchiveSource = "existing" | "upload";
 
+function acceptUploadFile(file: File): boolean {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".gcode")) {
+    toast.error(
+      "Plain .gcode files aren't accepted — export as .gcode.3mf from Bambu Studio or Orca Slicer",
+    );
+    return false;
+  }
+  if (!lower.endsWith(".gcode.3mf")) {
+    toast.error("Only .gcode.3mf files are accepted");
+    return false;
+  }
+  return true;
+}
+
 interface TypeSelection {
   mode: "any" | "color";
   colorHex?: string;
@@ -578,7 +593,7 @@ export function PrintJobModal({
                   }}
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Upload .3mf
+                  Upload .gcode.3mf
                 </button>
               </div>
 
@@ -642,10 +657,14 @@ export function PrintJobModal({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".3mf"
+                    accept=".gcode.3mf"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0] ?? null;
+                      if (f && !acceptUploadFile(f)) {
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                        return;
+                      }
                       setUploadFile(f);
                       setArchiveId(null);
                     }}
@@ -673,7 +692,7 @@ export function PrintJobModal({
                         e.stopPropagation();
                         setIsDraggingFile(false);
                         const f = e.dataTransfer.files[0] ?? null;
-                        if (f) {
+                        if (f && acceptUploadFile(f)) {
                           setUploadFile(f);
                           setArchiveId(null);
                         }
@@ -682,7 +701,7 @@ export function PrintJobModal({
                       <Upload className="h-8 w-8 mx-auto mb-2 opacity-40" />
                       {isDraggingFile
                         ? "Drop to upload"
-                        : "Drag & drop or click to select a .3mf file"}
+                        : "Drag & drop or click to select a .gcode.3mf file"}
                     </div>
                   ) : (
                     <div className="space-y-2">

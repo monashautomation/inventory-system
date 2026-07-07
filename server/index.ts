@@ -786,8 +786,12 @@ app.post("/api/print-queue/upload-3mf", async (c) => {
         throw new HTTPException(400, { message: "Missing file field" });
 
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith(".3mf"))
-        throw new HTTPException(400, { message: "Only .3mf files are accepted" });
+    if (lower.endsWith(".gcode"))
+        throw new HTTPException(400, {
+            message: "Plain .gcode files are not accepted — export as .gcode.3mf instead",
+        });
+    if (!lower.endsWith(".gcode.3mf"))
+        throw new HTTPException(400, { message: "Only .gcode.3mf files are accepted" });
 
     const MAX_3MF_BYTES = 500 * 1024 * 1024;
     const bytes = await file.arrayBuffer();
