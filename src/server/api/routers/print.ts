@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { isIP } from "node:net";
 import { Prisma } from "@prisma/client";
 import {
+  buildPrintUploadFilename,
   hashBufferSha256,
   sanitizeFilename,
   validateGcodePayload,
@@ -1506,11 +1507,16 @@ export const printRouter = router({
       }
 
       const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
+      const renamedFileName = buildPrintUploadFilename(
+        ctx.user.name,
+        "Personal",
+        input.fileName,
+      );
 
       try {
         validateUploadPayloadForPrinter(
           printer.type,
-          input.fileName,
+          renamedFileName,
           fileBuffer,
         );
       } catch (error) {
@@ -1524,7 +1530,7 @@ export const printRouter = router({
       }
 
       const sha256 = hashBufferSha256(fileBuffer);
-      const safeName = sanitizeFilename(input.fileName);
+      const safeName = sanitizeFilename(renamedFileName);
       const timestamp = Date.now();
       const storedName = `${timestamp}_${sha256.slice(0, 12)}_${safeName}`;
       const s3Key = buildPrintJobS3Key(
@@ -1541,7 +1547,7 @@ export const printRouter = router({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
-          originalFilename: input.fileName,
+          originalFilename: renamedFileName,
           storedFilename: storedName,
           s3Key,
           fileHashSha256: sha256,
@@ -1712,11 +1718,16 @@ export const printRouter = router({
       }
 
       const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
+      const renamedFileName = buildPrintUploadFilename(
+        ctx.user.name,
+        input.personalUse ? "Personal" : (input.notionProjectName ?? "Personal"),
+        input.fileName,
+      );
 
       try {
         validateUploadPayloadForPrinter(
           printer.type,
-          input.fileName,
+          renamedFileName,
           fileBuffer,
         );
       } catch (error) {
@@ -1730,7 +1741,7 @@ export const printRouter = router({
       }
 
       const sha256 = hashBufferSha256(fileBuffer);
-      const safeName = sanitizeFilename(input.fileName);
+      const safeName = sanitizeFilename(renamedFileName);
 
       // Check if a file with the same hash already exists for this printer
       const existingJob = await ctx.prisma.gcodePrintJob.findFirst({
@@ -1748,7 +1759,7 @@ export const printRouter = router({
           data: {
             userId: ctx.user.id,
             printerId: printer.id,
-            originalFilename: input.fileName,
+            originalFilename: renamedFileName,
             storedFilename: existingJob.storedFilename,
             s3Key: existingJob.s3Key,
             fileHashSha256: sha256,
@@ -1855,7 +1866,7 @@ export const printRouter = router({
             userId: ctx.user.id,
             printer: printer.name,
             ip: printer.ipAddress,
-            file: input.fileName,
+            file: renamedFileName,
             message,
           },
           "DISPATCH_FAILED",
@@ -1864,7 +1875,7 @@ export const printRouter = router({
           data: {
             userId: ctx.user.id,
             printerId: printer.id,
-            originalFilename: input.fileName,
+            originalFilename: renamedFileName,
             storedFilename: storedName,
             s3Key: s3Succeeded ? s3Key : null,
             fileHashSha256: sha256,
@@ -1886,7 +1897,7 @@ export const printRouter = router({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
-          originalFilename: input.fileName,
+          originalFilename: renamedFileName,
           storedFilename: storedName,
           s3Key: s3Succeeded ? s3Key : null,
           fileHashSha256: sha256,

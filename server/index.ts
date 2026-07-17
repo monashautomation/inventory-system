@@ -34,6 +34,7 @@ import {
     downloadFile,
 } from "@/server/lib/s3";
 import { uploadArchive as uploadBambuddyArchive } from "@/server/lib/bambuddy";
+import { buildPrintUploadFilename } from "@/server/api/utils/print/print.utils";
 import { mountTamarinRoutes } from "@/server/lib/tamarin";
 import { mountExternalApiRoutes } from "./external-api";
 import { startMemberSyncScheduler } from "@/server/lib/member-sync";
@@ -798,9 +799,20 @@ app.post("/api/print-queue/upload-3mf", async (c) => {
     if (bytes.byteLength > MAX_3MF_BYTES)
         throw new HTTPException(413, { message: "File exceeds 500 MB limit" });
 
+    const projectNameField = formData.get("projectName");
+    const personalUseField = formData.get("personalUse");
+    const projectName =
+        personalUseField === "true" || typeof projectNameField !== "string" || !projectNameField.trim()
+            ? "Personal"
+            : projectNameField;
+
     const jobId = crypto.randomUUID();
     const buffer = Buffer.from(bytes);
-    const filename = file.name;
+    const filename = buildPrintUploadFilename(
+        session.user.name,
+        projectName,
+        file.name,
+    );
 
     uploadJobs.set(jobId, { status: "pending", progress: 0 });
     expireUploadJob(jobId);
