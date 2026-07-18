@@ -13,6 +13,7 @@ import {
   prusaStatusResponseSchema,
   prusaJobResponseSchema,
 } from "@/server/lib/prusaSchemas";
+import { resolveStartedBy } from "@/server/api/utils/print/print.utils";
 import { logger as rootLogger } from "@/server/lib/logger";
 
 const logger = rootLogger.child({ module: "printCam" });
@@ -518,6 +519,58 @@ let printerListFetchedAt = 0;
 let statusPollRunning = false;
 let statusPollStartedAt = 0;
 
+// Self-healing cleanup for pre-existing duplicate rows (e.g. from an IP
+// change that predates the serial-matching fix below). Idempotent — no-op
+// once every serial has a single row. Keeps the most recently updated row
+// per serial, migrates job history off the stale rows, then deletes them.
+async function dedupeBambuPrintersBySerial(): Promise<void> {
+  const printers = await prisma.printer.findMany({
+    where: { type: "BAMBU", serialNumber: { not: null } },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const groups = new Map<string, typeof printers>();
+  for (const p of printers) {
+    const serial = p.serialNumber!;
+    const group = groups.get(serial);
+    if (group) group.push(p);
+    else groups.set(serial, [p]);
+  }
+
+  for (const [serial, group] of groups) {
+    if (group.length < 2) continue;
+    const [keeper, ...stale] = group;
+    const webcamUrl =
+      keeper.webcamUrl ?? stale.find((s) => s.webcamUrl)?.webcamUrl ?? null;
+    const authToken =
+      keeper.authToken ?? stale.find((s) => s.authToken)?.authToken ?? null;
+
+    try {
+      await prisma.$transaction([
+        prisma.printer.update({
+          where: { id: keeper.id },
+          data: { webcamUrl, authToken },
+        }),
+        ...stale.map((s) =>
+          prisma.gcodePrintJob.updateMany({
+            where: { printerId: s.id },
+            data: { printerId: keeper.id },
+          }),
+        ),
+        prisma.printer.deleteMany({
+          where: { id: { in: stale.map((s) => s.id) } },
+        }),
+      ]);
+      logger.info(
+        { serial, keeper: keeper.id, merged: stale.map((s) => s.id) },
+        "Merged duplicate printer rows",
+      );
+    } catch (err) {
+      logger.error({ serial, err }, "Failed to dedupe printer rows");
+    }
+  }
+}
+
 export async function syncBambuPrinters(): Promise<void> {
   if (!process.env.BAMBUDDY_ENDPOINT || !process.env.BAMBUDDY_API_KEY) return;
 
@@ -536,11 +589,40 @@ export async function syncBambuPrinters(): Promise<void> {
     })) ?? (await prisma.user.findFirst({ select: { id: true } }));
   if (!systemUser) return;
 
+  await dedupeBambuPrintersBySerial();
+
+  const existingBambuPrinters = await prisma.printer.findMany({
+    where: { type: "BAMBU" },
+  });
+  const existingBySerial = new Map(
+    existingBambuPrinters
+      .filter((p) => p.serialNumber)
+      .map((p) => [p.serialNumber!, p]),
+  );
+
   await Promise.allSettled(
     buddyPrinters
       .filter((p) => !!p.ip_address)
-      .map((p) =>
-        prisma.printer.upsert({
+      .map((p) => {
+        // Match by serial number first — a printer's IP can change (DHCP,
+        // server migration) without its serial changing. Falling back to
+        // ipAddress-only upsert would create a duplicate row per IP change.
+        const existing = p.serial_number
+          ? existingBySerial.get(p.serial_number)
+          : undefined;
+
+        if (existing) {
+          return prisma.printer.update({
+            where: { id: existing.id },
+            data: {
+              name: p.name,
+              ipAddress: p.ip_address,
+              serialNumber: p.serial_number || null,
+            },
+          });
+        }
+
+        return prisma.printer.upsert({
           where: { ipAddress: p.ip_address },
           update: {
             name: p.name,
@@ -553,8 +635,8 @@ export async function syncBambuPrinters(): Promise<void> {
             serialNumber: p.serial_number || null,
             createdByUserId: systemUser.id,
           },
-        }),
-      ),
+        });
+      }),
   );
 }
 
@@ -751,16 +833,17 @@ async function pollAttribution(): Promise<void> {
           null;
         statusCache.set(printerId, {
           ...entry,
-          startedBy: releaser,
+          startedBy: resolveStartedBy(releaser, entry.fileName),
           jobStartedAt: null,
         });
       } else {
         const job = jobByPrinter.get(printerId);
+        const fallback = job
+          ? { name: job.user.name, email: job.user.email }
+          : null;
         statusCache.set(printerId, {
           ...entry,
-          startedBy: job
-            ? { name: job.user.name, email: job.user.email }
-            : null,
+          startedBy: resolveStartedBy(fallback, entry.fileName),
           jobStartedAt: job?.createdAt ?? null,
         });
       }

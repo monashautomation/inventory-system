@@ -14,8 +14,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isIP } from "node:net";
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/server/lib/prisma";
 import {
+  buildPrintUploadFilename,
   hashBufferSha256,
+  parsePrintUploadFilename,
+  resolveStartedBy,
+  resolveUniqueFilename,
   sanitizeFilename,
   validateGcodePayload,
 } from "@/server/api/utils/print/print.utils";
@@ -61,6 +66,27 @@ import {
 } from "@/server/lib/prusaSchemas";
 
 const printerTypeSchema = z.enum(["PRUSA", "BAMBU"]);
+
+const printRatingTagSchema = z.enum([
+  "GOOD",
+  "FAILED",
+  "STOPPED",
+  "MECHANICAL_ISSUE",
+  "FILAMENT_ISSUE",
+  "WARPING",
+  "STRINGING",
+  "LAYER_SHIFT",
+  "OTHER",
+]);
+
+const printRatingInput = z.object({
+  bambuddyId: z.number().int().positive(),
+  printerName: z.string().max(200).optional(),
+  fileName: z.string().max(500).optional(),
+  smiley: z.enum(["GOOD", "OKAY", "BAD"]),
+  tags: z.array(printRatingTagSchema).default([]),
+  notes: z.string().max(1000).optional(),
+});
 
 interface AmsTrayInfo {
   trayId: number;
@@ -126,6 +152,14 @@ const sanitizeDbText = (value: string, maxLength = 4000) =>
   value.replace(NULL_CHAR_RE, "").slice(0, maxLength);
 
 const MAX_BAMBU_PRINT_FILE_SIZE_BYTES = 1024 * 1024 * 1024;
+
+const printJobFilenameExists = async (candidate: string): Promise<boolean> => {
+  const existing = await prisma.gcodePrintJob.findFirst({
+    where: { originalFilename: candidate },
+    select: { id: true },
+  });
+  return existing != null;
+};
 
 const validateUploadPayloadForPrinter = (
   printerType: "PRUSA" | "BAMBU",
@@ -880,7 +914,7 @@ export const printRouter = router({
         await pauseBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Pause failed: ${err instanceof Error ? err.message : err}`,
+            message: `Pause failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print paused." };
@@ -950,7 +984,7 @@ export const printRouter = router({
         await resumeBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Resume failed: ${err instanceof Error ? err.message : err}`,
+            message: `Resume failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print resumed." };
@@ -1020,7 +1054,7 @@ export const printRouter = router({
         await stopBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Cancel failed: ${err instanceof Error ? err.message : err}`,
+            message: `Cancel failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print cancelled." };
@@ -1077,6 +1111,15 @@ export const printRouter = router({
     .mutation(async ({ input }) => {
       await clearBambuddyBuildPlate(input.bambuddyId);
       return { success: true, message: "Build plate marked as cleared." };
+    }),
+
+  submitPrintRating: userProcedure
+    .input(printRatingInput)
+    .mutation(async ({ input, ctx }) => {
+      await ctx.prisma.printRating.create({
+        data: { ...input, userId: ctx.user?.id ?? null },
+      });
+      return { success: true };
     }),
 
   configureAmsSlot: userProcedure
@@ -1506,11 +1549,15 @@ export const printRouter = router({
       }
 
       const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
+      const renamedFileName = await resolveUniqueFilename(
+        buildPrintUploadFilename(ctx.user.name, "Personal", input.fileName),
+        printJobFilenameExists,
+      );
 
       try {
         validateUploadPayloadForPrinter(
           printer.type,
-          input.fileName,
+          renamedFileName,
           fileBuffer,
         );
       } catch (error) {
@@ -1524,7 +1571,7 @@ export const printRouter = router({
       }
 
       const sha256 = hashBufferSha256(fileBuffer);
-      const safeName = sanitizeFilename(input.fileName);
+      const safeName = sanitizeFilename(renamedFileName);
       const timestamp = Date.now();
       const storedName = `${timestamp}_${sha256.slice(0, 12)}_${safeName}`;
       const s3Key = buildPrintJobS3Key(
@@ -1541,7 +1588,7 @@ export const printRouter = router({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
-          originalFilename: input.fileName,
+          originalFilename: renamedFileName,
           storedFilename: storedName,
           s3Key,
           fileHashSha256: sha256,
@@ -1712,11 +1759,21 @@ export const printRouter = router({
       }
 
       const fileBuffer = Buffer.from(input.fileContentBase64, "base64");
+      const renamedFileName = await resolveUniqueFilename(
+        buildPrintUploadFilename(
+          ctx.user.name,
+          input.personalUse
+            ? "Personal"
+            : (input.notionProjectName ?? "Personal"),
+          input.fileName,
+        ),
+        printJobFilenameExists,
+      );
 
       try {
         validateUploadPayloadForPrinter(
           printer.type,
-          input.fileName,
+          renamedFileName,
           fileBuffer,
         );
       } catch (error) {
@@ -1730,7 +1787,7 @@ export const printRouter = router({
       }
 
       const sha256 = hashBufferSha256(fileBuffer);
-      const safeName = sanitizeFilename(input.fileName);
+      const safeName = sanitizeFilename(renamedFileName);
 
       // Check if a file with the same hash already exists for this printer
       const existingJob = await ctx.prisma.gcodePrintJob.findFirst({
@@ -1748,7 +1805,7 @@ export const printRouter = router({
           data: {
             userId: ctx.user.id,
             printerId: printer.id,
-            originalFilename: input.fileName,
+            originalFilename: renamedFileName,
             storedFilename: existingJob.storedFilename,
             s3Key: existingJob.s3Key,
             fileHashSha256: sha256,
@@ -1855,7 +1912,7 @@ export const printRouter = router({
             userId: ctx.user.id,
             printer: printer.name,
             ip: printer.ipAddress,
-            file: input.fileName,
+            file: renamedFileName,
             message,
           },
           "DISPATCH_FAILED",
@@ -1864,7 +1921,7 @@ export const printRouter = router({
           data: {
             userId: ctx.user.id,
             printerId: printer.id,
-            originalFilename: input.fileName,
+            originalFilename: renamedFileName,
             storedFilename: storedName,
             s3Key: s3Succeeded ? s3Key : null,
             fileHashSha256: sha256,
@@ -1886,7 +1943,7 @@ export const printRouter = router({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
-          originalFilename: input.fileName,
+          originalFilename: renamedFileName,
           storedFilename: storedName,
           s3Key: s3Succeeded ? s3Key : null,
           fileHashSha256: sha256,
@@ -1956,10 +2013,28 @@ export const printRouter = router({
         });
       }
 
+      // Rename to the person reprinting — keep the original project/file
+      // segments, only the uploader segment changes.
+      const parsedOriginalName = parsePrintUploadFilename(
+        originalJob.originalFilename,
+      );
+      const projectSegment = originalJob.personalUse
+        ? "Personal"
+        : (originalJob.notionProjectName ??
+          parsedOriginalName?.project ??
+          "Personal");
+      const fileSegment =
+        parsedOriginalName?.file ?? originalJob.originalFilename;
+      const renamedFileName = buildPrintUploadFilename(
+        ctx.user.name,
+        projectSegment,
+        fileSegment,
+      );
+
       try {
         validateUploadPayloadForPrinter(
           printer.type,
-          originalJob.originalFilename,
+          renamedFileName,
           fileBuffer,
         );
       } catch (error) {
@@ -1976,12 +2051,15 @@ export const printRouter = router({
         data: {
           userId: ctx.user.id,
           printerId: printer.id,
-          originalFilename: originalJob.originalFilename,
+          originalFilename: renamedFileName,
           storedFilename: originalJob.storedFilename,
           s3Key: originalJob.s3Key,
           fileHashSha256: originalJob.fileHashSha256,
           fileSizeBytes: originalJob.fileSizeBytes,
           status: "STORED",
+          notionProjectId: originalJob.notionProjectId,
+          notionProjectName: originalJob.notionProjectName,
+          personalUse: originalJob.personalUse,
         },
       });
 
@@ -1990,7 +2068,7 @@ export const printRouter = router({
           printerType: printer.type,
           ipAddress: printer.ipAddress,
           fileBuffer,
-          originalFilename: sanitizeFilename(originalJob.originalFilename),
+          originalFilename: sanitizeFilename(renamedFileName),
           authToken: printer.authToken,
           serialNumber: printer.serialNumber,
         });
@@ -2431,10 +2509,12 @@ export const printRouter = router({
           activeQueueItemId !== undefined
             ? (releaserByQueueItemId.get(activeQueueItemId) ?? null)
             : null;
-        startedBy =
+        startedBy = resolveStartedBy(
           activeUser ??
-          completedUserByBambuPrinterId.get(bambuPrinter.id) ??
-          null;
+            completedUserByBambuPrinterId.get(bambuPrinter.id) ??
+            null,
+          fileName,
+        );
       }
 
       return {
@@ -2572,9 +2652,10 @@ export const printRouter = router({
           ams: [] as AMSUnit[],
           amsExists: false,
           awaitingPlateClear: false,
-          startedBy: job
-            ? { name: job.user.name, email: job.user.email }
-            : null,
+          startedBy: resolveStartedBy(
+            job ? { name: job.user.name, email: job.user.email } : null,
+            fileName,
+          ),
           jobStartedAt: job?.createdAt ?? null,
           updatedAt: Date.now(),
         };
@@ -2785,6 +2866,15 @@ export const printRouter = router({
         throw new TRPCError({ code: "FORBIDDEN" });
       }
       await clearBambuddyBuildPlate(input.bambuddyId);
+      return { success: true };
+    }),
+
+  submitKioskPrintRating: kioskProcedure
+    .input(printRatingInput)
+    .mutation(async ({ input, ctx }) => {
+      await ctx.prisma.printRating.create({
+        data: { ...input, userId: null },
+      });
       return { success: true };
     }),
 });

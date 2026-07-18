@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { PrintRatingDialog } from "@/components/print/PrintRatingDialog";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -799,13 +800,7 @@ function PrinterDetail({
     onError: (error) => toast.error(error.message),
   });
 
-  const clearPlateMutation = trpc.print.clearBuildPlate.useMutation({
-    onSuccess: async (result) => {
-      toast.success(result.message);
-      await utils.print.getLivePrinterStatuses.invalidate();
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
 
   const [cameraMode, setCameraMode] = useState<CameraMode>("snapshot");
   const [snapshotTick, setSnapshotTick] = useState(() => Date.now());
@@ -1072,24 +1067,26 @@ function PrinterDetail({
             <Button
               variant="outline"
               size="sm"
-              disabled={clearPlateMutation.isPending}
-              onClick={() =>
-                clearPlateMutation.mutate({ bambuddyId: status.bambuddyId! })
-              }
+              onClick={() => setRatingDialogOpen(true)}
             >
-              {clearPlateMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Clearing...
-                </>
-              ) : (
-                <>
-                  <CheckSquare className="mr-2 h-4 w-4" />
-                  Mark Build Plate Cleared
-                </>
-              )}
+              <CheckSquare className="mr-2 h-4 w-4" />
+              Mark Build Plate Cleared
             </Button>
           </div>
+        ) : null}
+
+        {status.bambuddyId != null ? (
+          <PrintRatingDialog
+            open={ratingDialogOpen}
+            onOpenChange={setRatingDialogOpen}
+            bambuddyId={status.bambuddyId}
+            printerName={status.printerName}
+            fileName={status.fileName ?? undefined}
+            mode="user"
+            onCleared={() =>
+              void utils.print.getLivePrinterStatuses.invalidate()
+            }
+          />
         ) : null}
 
         {canCancel ? (
