@@ -1180,11 +1180,10 @@ export function PrintJobModal({
                                             )}
                                             <span className="flex-1 text-left min-w-0 overflow-hidden">
                                               <span className="block truncate">
-                                                {subBrands
-                                                  ? subBrands
-                                                  : idName
+                                                {subBrands ??
+                                                  (idName
                                                     ? `${idName} - ${type}`
-                                                    : type}
+                                                    : type)}
                                               </span>
                                               {subBrands && idName && (
                                                 <span className="block truncate text-xs opacity-50 font-mono">

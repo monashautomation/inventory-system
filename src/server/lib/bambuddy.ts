@@ -80,7 +80,9 @@ async function checkResponse(res: Response, context: string): Promise<void> {
       if (parsed?.detail && typeof parsed.detail === "object") {
         detail = parsed.detail;
       }
-    } catch {}
+    } catch {
+      // Body wasn't JSON — fall through with detail left null.
+    }
     const safeBody = (body || "<empty>").replace(/\s+/g, " ").slice(0, 1024);
     throw new BambuddyError(res.status, detail, safeBody, context);
   }

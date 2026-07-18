@@ -913,7 +913,7 @@ export const printRouter = router({
         await pauseBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Pause failed: ${err instanceof Error ? err.message : err}`,
+            message: `Pause failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print paused." };
@@ -983,7 +983,7 @@ export const printRouter = router({
         await resumeBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Resume failed: ${err instanceof Error ? err.message : err}`,
+            message: `Resume failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print resumed." };
@@ -1053,7 +1053,7 @@ export const printRouter = router({
         await stopBambuddyPrint(bambuddyId).catch((err: unknown) => {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Cancel failed: ${err instanceof Error ? err.message : err}`,
+            message: `Cancel failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         });
         return { success: true, message: "Print cancelled." };
