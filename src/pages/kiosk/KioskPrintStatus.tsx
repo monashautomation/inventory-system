@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { trpc } from "@/client/trpc";
+import { PrintRatingDialog } from "@/components/print/PrintRatingDialog";
 import { useKiosk } from "@/contexts/kiosk-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -126,17 +127,7 @@ function PrinterCard({
   index: number;
 }) {
   const utils = trpc.useUtils();
-  const clearPlate = trpc.print.clearKioskBuildPlate.useMutation({
-    onSuccess: () => {
-      toast.success("Build plate cleared", {
-        description: "Next job in queue will start automatically.",
-      });
-      void utils.print.getKioskPrinterStatuses.invalidate();
-    },
-    onError: () => {
-      toast.error("Failed to clear build plate");
-    },
-  });
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
 
   const isFinished = printer.state.toUpperCase() === "FINISHED";
   const isAttention = printer.state.toUpperCase() === "ATTENTION";
@@ -235,22 +226,32 @@ function PrinterCard({
                 size="sm"
                 variant="outline"
                 className="w-full gap-2"
-                disabled={clearPlate.isPending}
-                onClick={() =>
-                  clearPlate.mutate({ bambuddyId: printer.bambuddyId! })
-                }
+                onClick={() => setRatingDialogOpen(true)}
               >
-                {clearPlate.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <CheckSquare className="w-3.5 h-3.5" />
-                )}
+                <CheckSquare className="w-3.5 h-3.5" />
                 Confirm Build Plate Cleared
               </Button>
             </motion.div>
           )}
         </CardContent>
       </Card>
+
+      {printer.bambuddyId != null && (
+        <PrintRatingDialog
+          open={ratingDialogOpen}
+          onOpenChange={setRatingDialogOpen}
+          bambuddyId={printer.bambuddyId}
+          printerName={printer.printerName}
+          fileName={printer.fileName ?? undefined}
+          mode="kiosk"
+          onCleared={() => {
+            toast.success("Build plate cleared", {
+              description: "Next job in queue will start automatically.",
+            });
+            void utils.print.getKioskPrinterStatuses.invalidate();
+          }}
+        />
+      )}
     </motion.div>
   );
 }

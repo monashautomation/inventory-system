@@ -187,6 +187,7 @@ model User {
     Notifications         Notification[]       @relation("UserNotifications")
     AuditLogs             AuditLog[]           @relation("AuditActor")
     PrintQueueSubmissions PrintQueueSubmission[]
+    PrintRatings          PrintRating[]
 
     role             String    @default("user")
     banned           Boolean?
@@ -378,6 +379,41 @@ model PrintQueueSubmission {
     @@index([capturedStatus])
     @@index([capturedStartedAt, capturedPrinterId])
     @@index([capturedLogEntryId])
+}
+
+enum PrintRatingSmiley {
+    GOOD
+    OKAY
+    BAD
+}
+
+enum PrintRatingTag {
+    GOOD
+    FAILED
+    STOPPED
+    MECHANICAL_ISSUE
+    FILAMENT_ISSUE
+    WARPING
+    STRINGING
+    LAYER_SHIFT
+    OTHER
+}
+
+model PrintRating {
+    id          String            @id @default(uuid())
+    bambuddyId  Int
+    printerName String?
+    fileName    String?
+    smiley      PrintRatingSmiley
+    tags        PrintRatingTag[]
+    notes       String?
+    user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+    userId      String?
+    createdAt   DateTime          @default(now())
+
+    @@index([bambuddyId])
+    @@index([userId])
+    @@index([createdAt])
 }
 
 model AuditLog {

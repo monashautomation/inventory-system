@@ -346,6 +346,16 @@ export function PrintJobModal({
         xhr.onerror = () => reject(new Error("Network error during upload"));
         const form = new FormData();
         form.append("file", uploadFile);
+        form.append(
+          "projectName",
+          selectedProjectId === "__personal__"
+            ? ""
+            : (selectedProject?.name ?? ""),
+        );
+        form.append(
+          "personalUse",
+          String(selectedProjectId === "__personal__"),
+        );
         xhr.send(form);
       });
 
@@ -441,14 +451,13 @@ export function PrintJobModal({
   function canAdvance(): boolean {
     switch (step) {
       case "archive":
+        if (selectedProjectId === "") return false;
         if (archiveSource === "existing") return archiveId != null;
         return uploadFile != null;
       case "targeting":
         if (targetingMode === "model") return !!selectedModel;
         if (targetingMode === "printer") return selectedPrinterId != null;
         return true;
-      case "options":
-        return selectedProjectId !== "";
       default:
         return true;
     }
@@ -561,6 +570,103 @@ export function PrintJobModal({
           {/* ── Step: archive ── */}
           {step === "archive" && (
             <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Project</Label>
+                <Popover
+                  open={projectComboOpen}
+                  onOpenChange={(o) => {
+                    setProjectComboOpen(o);
+                    if (!o) setProjectSearch("");
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={projectComboOpen}
+                      disabled={projectsLoading}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {projectsLoading
+                          ? "Loading projects…"
+                          : selectedProjectId === "__personal__"
+                            ? "Personal / No project"
+                            : selectedProjectId
+                              ? ((projects ?? []).find(
+                                  (p) => p.id === selectedProjectId,
+                                )?.name ?? "Select a project")
+                              : "Select a project"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search projects…"
+                        value={projectSearch}
+                        onValueChange={setProjectSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No project found.</CommandEmpty>
+                        <CommandGroup>
+                          {(() => {
+                            const q = projectSearch.toLowerCase();
+                            const showPersonal =
+                              !q || "personal / no project".includes(q);
+                            const filtered = (projects ?? []).filter(
+                              (p) =>
+                                p.name.trim() !== "" &&
+                                (!q || p.name.toLowerCase().includes(q)),
+                            );
+                            return (
+                              <>
+                                {showPersonal && (
+                                  <CommandItem
+                                    value="__personal__"
+                                    onSelect={() => {
+                                      setSelectedProjectId("__personal__");
+                                      setProjectComboOpen(false);
+                                      setProjectSearch("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${selectedProjectId === "__personal__" ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    Personal / No project
+                                  </CommandItem>
+                                )}
+                                {filtered.map((project) => (
+                                  <CommandItem
+                                    key={project.id}
+                                    value={project.id}
+                                    onSelect={() => {
+                                      setSelectedProjectId(project.id);
+                                      setProjectComboOpen(false);
+                                      setProjectSearch("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${selectedProjectId === project.id ? "opacity-100" : "opacity-0"}`}
+                                    />
+                                    {project.name}
+                                  </CommandItem>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Chosen before upload — it's baked into the file name sent to
+                  the printer.
+                </p>
+              </div>
+
               <div className="flex gap-1 rounded-md border border-border p-1 bg-muted/50">
                 <button
                   className={`flex-1 flex items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -1074,11 +1180,10 @@ export function PrintJobModal({
                                             )}
                                             <span className="flex-1 text-left min-w-0 overflow-hidden">
                                               <span className="block truncate">
-                                                {subBrands
-                                                  ? subBrands
-                                                  : idName
+                                                {subBrands ??
+                                                  (idName
                                                     ? `${idName} - ${type}`
-                                                    : type}
+                                                    : type)}
                                               </span>
                                               {subBrands && idName && (
                                                 <span className="block truncate text-xs opacity-50 font-mono">
@@ -1126,98 +1231,6 @@ export function PrintJobModal({
           {/* ── Step: options ── */}
           {step === "options" && (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Project</Label>
-                <Popover
-                  open={projectComboOpen}
-                  onOpenChange={(o) => {
-                    setProjectComboOpen(o);
-                    if (!o) setProjectSearch("");
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={projectComboOpen}
-                      disabled={projectsLoading}
-                      className="w-full justify-between font-normal"
-                    >
-                      <span className="truncate">
-                        {projectsLoading
-                          ? "Loading projects…"
-                          : selectedProjectId === "__personal__"
-                            ? "Personal / No project"
-                            : selectedProjectId
-                              ? ((projects ?? []).find(
-                                  (p) => p.id === selectedProjectId,
-                                )?.name ?? "Select a project")
-                              : "Select a project"}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder="Search projects…"
-                        value={projectSearch}
-                        onValueChange={setProjectSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No project found.</CommandEmpty>
-                        <CommandGroup>
-                          {(() => {
-                            const q = projectSearch.toLowerCase();
-                            const showPersonal =
-                              !q || "personal / no project".includes(q);
-                            const filtered = (projects ?? []).filter(
-                              (p) =>
-                                p.name.trim() !== "" &&
-                                (!q || p.name.toLowerCase().includes(q)),
-                            );
-                            return (
-                              <>
-                                {showPersonal && (
-                                  <CommandItem
-                                    value="__personal__"
-                                    onSelect={() => {
-                                      setSelectedProjectId("__personal__");
-                                      setProjectComboOpen(false);
-                                      setProjectSearch("");
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 ${selectedProjectId === "__personal__" ? "opacity-100" : "opacity-0"}`}
-                                    />
-                                    Personal / No project
-                                  </CommandItem>
-                                )}
-                                {filtered.map((project) => (
-                                  <CommandItem
-                                    key={project.id}
-                                    value={project.id}
-                                    onSelect={() => {
-                                      setSelectedProjectId(project.id);
-                                      setProjectComboOpen(false);
-                                      setProjectSearch("");
-                                    }}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 ${selectedProjectId === project.id ? "opacity-100" : "opacity-0"}`}
-                                    />
-                                    {project.name}
-                                  </CommandItem>
-                                ))}
-                              </>
-                            );
-                          })()}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <Label>Manual start</Label>
