@@ -733,7 +733,7 @@ export function PrintJobModal({
                             #{archive.id}
                           </span>
                           <span className="break-words whitespace-normal flex-1 min-w-0">
-                            {archive.print_name ?? archive.filename}
+                            {archive.filename}
                           </span>
                           {archive.sliced_for_model && (
                             <Badge

@@ -274,12 +274,12 @@ function makeMultipartStream(
 } {
   // Reject filenames that could inject CRLF or other control characters into
   // the Content-Disposition header. Expected input is a Bambu Studio export.
-  if (!/^[\w.\- ]{1,255}\.3mf$/i.test(filename)) {
+  if (!/^[\w.\- ()]{1,255}\.3mf$/i.test(filename)) {
     throw new Error(`Invalid 3MF filename: "${filename}"`);
   }
 
   const boundary = `FormBoundary${crypto.randomUUID().replace(/-/g, "")}`;
-  // Allowlist above guarantees filename contains only [\w.\- ] — no quotes,
+  // Allowlist above guarantees filename contains only [\w.\- ()] — no quotes,
   // no CRLF — so interpolating into a quoted-string is safe here.
   const preamble = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
@@ -857,13 +857,21 @@ export async function getBambuddyArchive(
   return res.json() as Promise<BambuddyArchive>;
 }
 
+/**
+ * Chars like ()., : trip Bambuddy's Postgres tsquery parser (syntax error in
+ * tsquery) and its LIKE fallback then 500s on the aborted transaction instead
+ * of recovering — strip them client-side rather than depend on a server fix.
+ */
+const sanitizeBambuddySearchQuery = (query: string): string =>
+  query.replace(/[^a-zA-Z0-9 _-]/g, " ").trim();
+
 /** Full-text search across archives (matches filename, print_name, tags, etc). */
 export async function searchBambuddyArchives(
   query: string,
   opts?: { limit?: number },
 ): Promise<BambuddyArchive[]> {
   const { endpoint, apiKey } = getConfig();
-  const params = new URLSearchParams({ q: query });
+  const params = new URLSearchParams({ q: sanitizeBambuddySearchQuery(query) });
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   const res = await fetch(
     `${endpoint}/api/v1/archives/search?${params.toString()}`,
