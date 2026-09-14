@@ -1,5 +1,7 @@
+import "./otel"; // must load before prisma/other imports set up their clients
 import { config } from "dotenv";
 import { type Context, Hono } from "hono";
+import { httpInstrumentationMiddleware } from "@hono/otel";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "@/server/api/routers/_app";
@@ -93,6 +95,11 @@ process.on("exit", (code) => logger.info({ code }, "Process exiting"));
 // Initialize Hono app
 const app = new Hono();
 
+app.use(
+    httpInstrumentationMiddleware({
+        serviceName: "inventory-system",
+    }),
+);
 app.use(honoLogger());
 
 app.get("/health", (c) =>
