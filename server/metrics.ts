@@ -2,6 +2,7 @@
 // Combines all native metric collectors into a single Prometheus text response.
 
 import { collectInventoryMetrics } from "./metrics/inventoryCollector";
+import { collectHttpMetrics } from "./metrics/httpCollector";
 import { collectPrusaMetrics } from "./metrics/prusaCollector";
 import {
     collectBambuMetrics,
@@ -57,6 +58,9 @@ export async function collectMetrics(): Promise<string> {
             }),
         );
     }
+
+    // App health metrics: HTTP request latency + process uptime/memory
+    sections.push(Promise.resolve(collectHttpMetrics()));
 
     // Inventory metrics: pull from DB on each request
     const invStart = Date.now();
