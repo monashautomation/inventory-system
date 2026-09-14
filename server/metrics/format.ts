@@ -115,3 +115,37 @@ export function safeBool(value: unknown): number {
   if (["false", "0", "disable", "off", "no"].includes(lower)) return 0;
   return NaN;
 }
+
+/**
+ * Emit a complete histogram metric block (bucket/sum/count samples) for one
+ * or more label-series, Prometheus text-exposition style.
+ */
+export function formatHistogram(
+  name: string,
+  help: string,
+  bucketBoundsMs: number[],
+  series: {
+    cumulativeBucketCounts: number[]; // parallel to bucketBoundsMs
+    count: number;
+    sum: number;
+    labels?: Record<string, string>;
+  }[],
+): string {
+  const lines: string[] = [`# HELP ${name} ${help}`, `# TYPE ${name} histogram`];
+  for (const s of series) {
+    for (let i = 0; i < bucketBoundsMs.length; i++) {
+      lines.push(
+        formatSample(`${name}_bucket`, s.cumulativeBucketCounts[i], {
+          ...s.labels,
+          le: String(bucketBoundsMs[i]),
+        }),
+      );
+    }
+    lines.push(
+      formatSample(`${name}_bucket`, s.count, { ...s.labels, le: "+Inf" }),
+    );
+    lines.push(formatSample(`${name}_sum`, s.sum, s.labels));
+    lines.push(formatSample(`${name}_count`, s.count, s.labels));
+  }
+  return lines.join("\n");
+}

@@ -13,6 +13,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
+import { recordHttpRequest } from "./metrics/httpCollector";
 import {
     handleStatusJson,
     handleComponentsJson,
@@ -94,6 +95,16 @@ process.on("exit", (code) => logger.info({ code }, "Process exiting"));
 const app = new Hono();
 
 app.use(honoLogger());
+
+// Record request latency for the /metrics HTTP histogram. Skip /metrics
+// itself so scraping doesn't inflate its own numbers.
+app.use("*", async (c, next) => {
+    const start = Date.now();
+    await next();
+    if (c.req.path !== "/metrics") {
+        recordHttpRequest(c.req.method, c.res.status, Date.now() - start);
+    }
+});
 
 app.get("/health", (c) =>
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
