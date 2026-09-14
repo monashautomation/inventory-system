@@ -1,5 +1,6 @@
-import "./otel"; // must load before prisma/other imports set up their clients
 import { config } from "dotenv";
+config(); // must run before the ./otel import below — OTel reads its config from env vars
+import { OTEL_SERVICE_NAME, shutdownOtel } from "./otel"; // must load before prisma/other imports set up their clients
 import { type Context, Hono } from "hono";
 import { httpInstrumentationMiddleware } from "@hono/otel";
 import { cors } from "hono/cors";
@@ -70,9 +71,6 @@ function expireUploadJob(jobId: string): void {
     setTimeout(() => uploadJobs.delete(jobId), 30 * 60 * 1000);
 }
 
-// Load environment variables
-config();
-
 // ─── Process exit diagnostics ────────────────────────────────────────────────
 // Log WHY the process is dying so we can debug container restarts.
 process.on("uncaughtException", (err) => {
@@ -84,11 +82,11 @@ process.on("unhandledRejection", (reason) => {
 });
 process.on("SIGTERM", () => {
     logger.info("SIGTERM received — shutting down gracefully");
-    prisma.$disconnect().finally(() => process.exit(0));
+    Promise.all([prisma.$disconnect(), shutdownOtel()]).finally(() => process.exit(0));
 });
 process.on("SIGINT", () => {
     logger.info("SIGINT received — shutting down gracefully");
-    prisma.$disconnect().finally(() => process.exit(0));
+    Promise.all([prisma.$disconnect(), shutdownOtel()]).finally(() => process.exit(0));
 });
 process.on("exit", (code) => logger.info({ code }, "Process exiting"));
 
@@ -97,7 +95,7 @@ const app = new Hono();
 
 app.use(
     httpInstrumentationMiddleware({
-        serviceName: "inventory-system",
+        serviceName: OTEL_SERVICE_NAME,
     }),
 );
 app.use(honoLogger());
