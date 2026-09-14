@@ -6,11 +6,19 @@
 
 import { formatGaugeSingle, formatHistogram } from "./format";
 
-const BUCKET_BOUNDS_MS = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const BUCKET_BOUNDS_SECONDS = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
+// Fixed allowlist, not the raw request method: an HTTP client can send any
+// method token it likes, and every distinct one used to become a permanent
+// series in statsByMethodAndStatus — unbounded cardinality, never evicted.
+const KNOWN_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+function normalizeMethod(method: string): string {
+  return KNOWN_METHODS.has(method) ? method : "OTHER";
+}
 
 interface RouteStats {
   count: number;
-  cumulativeBucketCounts: number[]; // parallel to BUCKET_BOUNDS_MS
+  cumulativeBucketCounts: number[]; // parallel to BUCKET_BOUNDS_SECONDS
   sum: number;
 }
 
@@ -21,20 +29,21 @@ export function recordHttpRequest(
   status: number,
   durationMs: number,
 ): void {
-  const key = `${method} ${status}`;
+  const durationSeconds = durationMs / 1000;
+  const key = `${normalizeMethod(method)} ${status}`;
   let stats = statsByMethodAndStatus.get(key);
   if (!stats) {
     stats = {
       count: 0,
-      cumulativeBucketCounts: new Array<number>(BUCKET_BOUNDS_MS.length).fill(0),
+      cumulativeBucketCounts: new Array<number>(BUCKET_BOUNDS_SECONDS.length).fill(0),
       sum: 0,
     };
     statsByMethodAndStatus.set(key, stats);
   }
   stats.count += 1;
-  stats.sum += durationMs;
-  for (let i = 0; i < BUCKET_BOUNDS_MS.length; i++) {
-    if (durationMs <= BUCKET_BOUNDS_MS[i]) stats.cumulativeBucketCounts[i] += 1;
+  stats.sum += durationSeconds;
+  for (let i = 0; i < BUCKET_BOUNDS_SECONDS.length; i++) {
+    if (durationSeconds <= BUCKET_BOUNDS_SECONDS[i]) stats.cumulativeBucketCounts[i] += 1;
   }
 }
 
@@ -67,9 +76,9 @@ export function collectHttpMetrics(): string {
 
   lines.push(
     formatHistogram(
-      "inventory_http_request_duration_ms",
-      "HTTP request duration in milliseconds, labeled by method and response status",
-      BUCKET_BOUNDS_MS,
+      "inventory_http_request_duration_seconds",
+      "HTTP request duration in seconds, labeled by method and response status",
+      BUCKET_BOUNDS_SECONDS,
       [...statsByMethodAndStatus.entries()].map(([key, stats]) => {
         const [method, status] = key.split(" ");
         return { ...stats, labels: { method, status } };
