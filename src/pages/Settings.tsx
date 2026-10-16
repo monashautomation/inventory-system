@@ -1,4 +1,5 @@
 import { AvatarUploadCard } from "@/components/user/AvatarUploadCard";
+import { ApiTokensCard } from "@/components/user/ApiTokensCard";
 import { UpdateNameCard } from "@daveyplate/better-auth-ui";
 import { authClient } from "@/auth/client";
 import { useNavigate } from "react-router-dom";
@@ -37,6 +38,10 @@ export default function Settings() {
         <AvatarUploadCard />
         <UpdateNameCard />
       </div>
+
+      <Separator />
+
+      <ApiTokensCard />
 
       <Separator />
 

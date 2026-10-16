@@ -19,6 +19,7 @@ import { auditLogRouter } from "./auditLog";
 import { statusRouter } from "./status";
 import { printQueueRouter } from "./printQueue";
 import { printStatsRouter } from "./printStats";
+import { apiTokenRouter } from "./apiToken";
 
 export const appRouter = router({
   group: groupRouter,
@@ -39,6 +40,7 @@ export const appRouter = router({
   status: statusRouter,
   printQueue: printQueueRouter,
   printStats: printStatsRouter,
+  apiToken: apiTokenRouter,
   hello: userProcedure.query(() => {
     return "hello world";
   }),

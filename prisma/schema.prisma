@@ -188,6 +188,7 @@ model User {
     AuditLogs             AuditLog[]           @relation("AuditActor")
     PrintQueueSubmissions PrintQueueSubmission[]
     PrintRatings          PrintRating[]
+    ApiTokens             ApiToken[]     @relation("ApiTokenOwner")
 
     role             String    @default("user")
     banned           Boolean?
@@ -347,6 +348,8 @@ enum AuditAction {
     REQUEST_STATUS_CHANGED
     REQUEST_CANCELLED
     REQUEST_RECEIVED
+    TOKEN_CREATED
+    TOKEN_REVOKED
 }
 
 model PrintQueueSubmission {
@@ -431,4 +434,25 @@ model AuditLog {
     @@index([entityType, entityId, createdAt])
     @@index([actorId, createdAt])
     @@index([action, createdAt])
+}
+
+model ApiToken {
+    id         String    @id @default(uuid())
+    name       String
+    // SHA-256 of the token secret. The plaintext is shown exactly once at
+    // creation and never stored.
+    tokenHash  String    @unique
+    // Short display form, e.g. mai_a1b2…9f0e
+    preview    String
+    // Read-only tokens may call tRPC queries but never mutations.
+    readOnly   Boolean   @default(true)
+    owner      User      @relation("ApiTokenOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+    ownerId    String
+    createdAt  DateTime  @default(now())
+    expiresAt  DateTime?
+    lastUsedAt DateTime?
+    revokedAt  DateTime?
+
+    @@index([ownerId])
+    @@index([revokedAt])
 }
