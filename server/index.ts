@@ -13,6 +13,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { createMcpServer } from "trpc-to-mcp";
 import { basicAuth } from "hono/basic-auth";
 import { collectMetrics, initBambuMetricsListener } from "./metrics";
+import { recordHttpRequest } from "./metrics/httpCollector";
 import {
     handleStatusJson,
     handleComponentsJson,
@@ -94,6 +95,27 @@ process.on("exit", (code) => logger.info({ code }, "Process exiting"));
 const app = new Hono();
 
 app.use(honoLogger());
+
+// Record request latency for the /metrics HTTP histogram. Skip /metrics
+// itself (scraping shouldn't inflate its own numbers) and the streaming
+// proxy routes (webcam/bambu-stream never return — recording "duration" at
+// handler-return would just measure stream setup, not the actual stream).
+// No-ops entirely when METRICS_ENABLED isn't set, so disabling metrics
+// actually disables the collection work too, not just the /metrics route.
+const METRICS_EXCLUDED_PREFIXES = ["/metrics", "/api/webcam/", "/api/bambu-stream/"];
+app.use("*", async (c, next) => {
+    // `metricsEnabled` is declared further down this file; safe to reference
+    // here since this closure only runs on requests, after module init.
+    if (!metricsEnabled) {
+        await next();
+        return;
+    }
+    const start = performance.now();
+    await next();
+    if (!METRICS_EXCLUDED_PREFIXES.some((p) => c.req.path.startsWith(p))) {
+        recordHttpRequest(c.req.method, c.res.status, performance.now() - start);
+    }
+});
 
 app.get("/health", (c) =>
     c.json({ status: "ok", timestamp: new Date().toISOString() }),
