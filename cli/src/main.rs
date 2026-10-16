@@ -439,10 +439,24 @@ enum StatsAction {
         page_size: u32,
         #[arg(long)]
         printer_id: Option<u32>,
+        /// completed | failed | missed | pending | all
         #[arg(long)]
         status: Option<String>,
         #[arg(long, short = 'f')]
         search: Option<String>,
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Failed prints with who submitted them (stats log --status failed)
+    Failures {
+        #[arg(long, default_value_t = 0)]
+        page: u32,
+        #[arg(long, short = 'n', default_value_t = 20)]
+        page_size: u32,
+        #[arg(long)]
+        printer_id: Option<u32>,
         #[arg(long)]
         from: Option<String>,
         #[arg(long)]
@@ -991,6 +1005,18 @@ fn build_query(cmd: &Command) -> Result<(String, Option<Value>), String> {
                 opt_into(o, "dateTo", to);
                 ("printStats.printLog".into(), Some(input))
             }
+            StatsAction::Failures { page, page_size, printer_id, from, to } => {
+                let mut input = json!({
+                    "page": page,
+                    "pageSize": page_size,
+                    "status": "failed",
+                });
+                let o = input.as_object_mut().unwrap();
+                opt_into(o, "printerId", printer_id);
+                opt_into(o, "dateFrom", from);
+                opt_into(o, "dateTo", to);
+                ("printStats.printLog".into(), Some(input))
+            }
             StatsAction::Timeseries { days } => (
                 "printStats.filamentTimeSeries".into(),
                 Some(json!({"days": days})),
@@ -1235,6 +1261,16 @@ mod tests {
         assert_eq!(i["dateFrom"], json!("2026-01-01"));
         assert_eq!(i["dateTo"], json!("2026-02-01"));
         assert_eq!(i["status"], json!("completed"));
+    }
+
+    #[test]
+    fn stats_failures_forces_failed_status() {
+        let cli = parse(&["maims", "stats", "failures", "--printer-id", "3"]);
+        let (path, input) = build_query(&cli.command).unwrap();
+        assert_eq!(path, "printStats.printLog");
+        let i = input.unwrap();
+        assert_eq!(i["status"], json!("failed"));
+        assert_eq!(i["printerId"], json!(3));
     }
 
     #[test]

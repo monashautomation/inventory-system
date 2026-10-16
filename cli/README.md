@@ -48,11 +48,11 @@ maims requests list|mine|pending-count|get
 maims records list|for-item|for-user|recent
 maims users list|get                (admin)
 maims dashboard stats|loans|low-stock|overdue
-maims printers list|active|status|jobs|filament|ams|ratings|history|stored
-maims queue list|jobs|upcoming|job
-maims stats overview|daily|usage|filament|filament-usage|filament-history|failures|top-failures|users|printers|duration|queue-duration|errors|error-breakdown|ratings|summary
-maims notifications list|unread|count
-maims audit list|for-entity|recent  (admin)
+maims printers list|status|active|jobs|live|cam|projects|spools|filament-types|bambuddy|slots
+maims queue printers|connectivity|ams|filaments|filaments-for|requirements|archives|list
+maims stats overview|log|failures|timeseries|leaderboard|usage|catalog|printers|by-project|by-person
+maims notifications list|count
+maims audit list|for-entity         (admin)
 maims outages                       uptime/status-page incidents
 maims tokens list|create|revoke     manage your own API tokens
 maims call <path> [json]            any read-only query, escape hatch
@@ -61,16 +61,19 @@ maims call <path> [json]            any read-only query, escape hatch
 Flags: `--json` for machine-readable output, `-u`/`-t` to override the
 saved config.
 
+`stats log --status` filters by `completed | failed | missed | pending | all`;
+`stats failures` is shorthand for `stats log --status failed`.
+
 ### Examples
 
 ```sh
 maims printers active               # what's printing right now, and for whom
-maims printers filament             # spool levels per printer
+maims printers slots                # AMS spool levels per printer
 maims queue list                    # the BamBuddy print queue
-maims stats users --limit 10        # who prints the most
+maims stats failures                # which prints failed, and whose they were
+maims stats by-person               # filament usage attributed per person
 maims items list --search soldering --limit 20
-maims audit recent                  # latest admin-visible activity
-maims call item.countByName '{"name":"Drill"}'
+maims call print.getAllPrintJobs '{"limit":50}'
 ```
 
 ## Token model
