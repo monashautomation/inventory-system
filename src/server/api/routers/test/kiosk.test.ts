@@ -26,6 +26,7 @@ const createCaller = createCallerFactory(kioskRouter);
 const caller = createCaller({
   prisma: prismaMock as never,
   user: undefined,
+  apiToken: null,
   req: new Request("http://localhost", {
     headers: { "x-kiosk-token": KIOSK_SECRET },
   }),

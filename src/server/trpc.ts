@@ -6,7 +6,8 @@ import type { Context } from "hono";
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { prisma } from "./lib/prisma";
 import { auth } from "./auth";
-import { type McpMeta } from "trpc-to-mcp";
+import { bearerFromHeaders, verifyApiToken } from "./lib/apiTokens";
+import type { McpMeta } from "trpc-to-mcp";
 import { logger } from "./lib/logger";
 
 // Create the tRPC context, compatible with Hono and tRPC
@@ -24,19 +25,41 @@ export const createContext = async (
     headers: headers,
   });
 
+  // Fall back to a bearer API token (created via Settings → API Tokens or
+  // `maims tokens create`). Read-only tokens are enforced in the procedures.
+  let apiToken: Awaited<ReturnType<typeof verifyApiToken>> = null;
+  if (!authSession?.user?.id) {
+    const bearer = bearerFromHeaders(headers);
+    if (bearer) {
+      try {
+        apiToken = await verifyApiToken(bearer);
+      } catch (err) {
+        logger.warn({ err }, "API token verification failed");
+      }
+    }
+  }
+
+  const user =
+    authSession?.user ??
+    (apiToken
+      ? {
+          id: apiToken.owner.id,
+          name: apiToken.owner.name,
+          email: apiToken.owner.email,
+          role: apiToken.owner.role,
+        }
+      : undefined);
+
   const source = headers.get("x-trpc-source");
-  const username =
-    authSession?.user?.name ??
-    authSession?.user?.email ??
-    source ??
-    "anonymous";
+  const username = user?.name ?? user?.email ?? source ?? "anonymous";
   logger.debug({ username }, "tRPC request");
 
   return {
     req: opts.req, // Use tRPC's req for compatibility
     res: c.res, // Use Hono's response object
     prisma,
-    user: authSession?.user,
+    user,
+    apiToken,
   };
 };
 
@@ -88,7 +111,37 @@ export const kioskProcedure = t.procedure.use(({ ctx, next }) => {
 });
 
 // Protected procedure for authenticated users
-export const userProcedure = t.procedure.use(({ ctx, next }) => {
+export const userProcedure = t.procedure.use(({ ctx, type, next }) => {
+  if (!ctx.user?.id) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  // Read-only API tokens (the `maims` CLI default) may call queries but
+  // never mutations — enforced server-side, not just client-side.
+  // Token housekeeping (create/revoke) uses tokenHousekeepingProcedure
+  // instead; tokens minted through a token are forced read-only in the
+  // router, so that exemption can never escalate scope.
+  if (ctx.apiToken?.readOnly && type === "mutation") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This API token is read-only.",
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+/**
+ * Authenticated, but exempt from the read-only-token mutation guard.
+ * ONLY for API-token housekeeping (apiToken.create / apiToken.revoke) so a
+ * CLI token can be rotated without a browser session. The apiToken router
+ * forces any token created through an API token to be read-only, so this
+ * cannot be used to escalate scope.
+ */
+export const tokenHousekeepingProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.user?.id) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
@@ -101,9 +154,15 @@ export const userProcedure = t.procedure.use(({ ctx, next }) => {
 });
 
 // Protected procedure for admin users
-export const adminProcedure = t.procedure.use(({ ctx, next }) => {
+export const adminProcedure = t.procedure.use(({ ctx, type, next }) => {
   if (!ctx.user?.id || !ctx.user?.role || ctx.user.role !== "admin") {
     throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  if (ctx.apiToken?.readOnly && type === "mutation") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This API token is read-only.",
+    });
   }
   return next({
     ctx: {
