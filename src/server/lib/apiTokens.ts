@@ -47,9 +47,7 @@ export interface VerifiedToken {
  * Returns the token + its owner (with role) when valid, null otherwise.
  * Expired and revoked tokens fail closed.
  */
-export async function verifyApiToken(
-  secret: string,
-): Promise<
+export async function verifyApiToken(secret: string): Promise<
   | (VerifiedToken & {
       owner: { id: string; name: string; email: string; role: string };
     })
