@@ -1,6 +1,7 @@
 import { prisma } from "@/server/lib/prisma";
 import { getQueueItem, getPrintLog } from "@/server/lib/bambuddy";
 import { logger } from "@/server/lib/logger";
+import { notifyPrintFailure } from "@/server/lib/printFailures";
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -37,6 +38,7 @@ async function runPoll(): Promise<void> {
       id: true,
       bambuddyQueueItemId: true,
       bambuddyQueueCreatedAt: true,
+      archiveName: true,
       createdAt: true,
     },
   });
@@ -68,6 +70,10 @@ async function runPoll(): Promise<void> {
             },
             "Queue item gone before stats captured",
           );
+          await notifyPrintFailure(submission.id, "missed", {
+            printName: submission.archiveName,
+            createdAt: submission.createdAt,
+          });
         }
         continue;
       }
@@ -117,6 +123,23 @@ async function runPoll(): Promise<void> {
           capturedPrinterName: item.printer_name ?? null,
         },
       });
+
+      // One short Discord line per failure, at the moment we capture it.
+      if (item.status === "failed") {
+        await notifyPrintFailure(submission.id, item.status, {
+          printName: submission.archiveName ?? item.archive_name,
+          printerName: item.printer_name,
+          username: item.created_by_username,
+          createdAt: submission.createdAt,
+          startedAt: capturedStartedAt,
+          completedAt: item.completed_at ? new Date(item.completed_at) : null,
+          filamentGrams: item.filament_used_grams,
+          filamentType: item.filament_type,
+          errorMessage: item.error_message,
+          waitingReason: item.waiting_reason,
+          filamentShort: item.filament_short,
+        });
+      }
 
       // Resolve the Bambuddy print log entry ID for reliable history matching.
       if (capturedStartedAt && item.printer_id) {

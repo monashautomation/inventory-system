@@ -2,7 +2,7 @@ export interface AfterHoursRequest {
   message: string;
 }
 
-async function resolveUsernameToId(
+export async function resolveUsernameToId(
   botToken: string,
   guildId: string,
   username: string,
