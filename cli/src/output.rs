@@ -14,6 +14,30 @@ pub fn print_value<W: Write>(out: &mut W, value: &Value, as_json: bool) -> std::
         Value::Array(items) if !items.is_empty() && items.iter().all(Value::is_object) => {
             write_table(out, items)
         }
+        // Paginated envelopes like { total, items: [...] } — render the
+        // items as the table and the scalars (total, page…) as a header.
+        Value::Object(obj)
+            if obj.get("items").is_some_and(|v| {
+                v.as_array()
+                    .is_some_and(|a| !a.is_empty() && a.iter().all(Value::is_object))
+            }) =>
+        {
+            let items = obj["items"].as_array().unwrap();
+            let meta: Vec<(String, String)> = obj
+                .iter()
+                .filter(|(k, v)| k.as_str() != "items" && is_scalar(v))
+                .map(|(k, v)| (k.clone(), cell(Some(v))))
+                .collect();
+            if !meta.is_empty() {
+                let pairs = meta
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join("  ");
+                writeln!(out, "{pairs}")?;
+            }
+            write_table(out, items)
+        }
         Value::Object(obj) => {
             let flat = flatten_scalar(obj);
             if flat.is_empty() {
@@ -30,7 +54,9 @@ pub fn print_value<W: Write>(out: &mut W, value: &Value, as_json: bool) -> std::
     }
 }
 
-/// Pick display columns from the first row, preferring human-friendly keys.
+/// Pick display columns: wanted keys first (in wanted order), then any
+/// remaining keys the cell renderer can show (scalars, or objects with a
+/// name/email/id like `startedBy`). Caps at 8 so the table stays readable.
 pub fn pick_columns(items: &[Value], wanted: &[&str]) -> Vec<String> {
     let first = match items.first() {
         Some(v) => v,
@@ -45,10 +71,28 @@ pub fn pick_columns(items: &[Value], wanted: &[&str]) -> Vec<String> {
         .filter(|w| keys.iter().any(|k| k == *w))
         .map(|w| w.to_string())
         .collect();
-    if cols.is_empty() {
-        cols = keys.into_iter().filter(|k| is_scalar(&first[k])).take(8).collect();
+    for k in &keys {
+        if cols.len() >= 8 {
+            break;
+        }
+        if cols.iter().any(|c| c == k) {
+            continue;
+        }
+        let v = &first[k];
+        if is_scalar(v) || renderable_object(v) {
+            cols.push(k.clone());
+        }
     }
     cols
+}
+
+/// Nested objects we can render meaningfully in a cell (like the UI does).
+fn renderable_object(v: &Value) -> bool {
+    v.as_object().is_some_and(|o| {
+        ["name", "email", "id"]
+            .iter()
+            .any(|k| matches!(o.get(*k), Some(Value::String(_))))
+    })
 }
 
 fn is_scalar(v: &Value) -> bool {
@@ -66,6 +110,9 @@ fn write_table<W: Write>(out: &mut W, items: &[Value]) -> std::io::Result<()> {
 
 const DEFAULT_COLS: &[&str] = &[
     "name",
+    "printName",
+    "createdByUsername",
+    "printerName",
     "serial",
     "status",
     "state",
@@ -163,6 +210,7 @@ fn flatten_scalar(obj: &serde_json::Map<String, Value>) -> Vec<(String, String)>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn items() -> Vec<Value> {
         vec![
@@ -174,14 +222,29 @@ mod tests {
     #[test]
     fn prefers_named_columns() {
         let cols = pick_columns(&items(), &["name", "serial", "loaned"]);
-        assert_eq!(cols, vec!["name", "serial", "loaned"]);
+        // wanted keys lead in wanted order, remaining renderable keys follow
+        assert_eq!(&cols[..3], ["name", "serial", "loaned"]);
+        assert!(cols.contains(&"id".to_string()));
     }
 
     #[test]
-    fn falls_back_to_scalar_keys() {
-        let cols = pick_columns(&items(), &["nonexistent"]);
+    fn wanted_first_then_fill_rest() {
+        let cols = pick_columns(&items(), &["loaned"]);
+        // wanted column leads, then the rest of the renderable keys follow
+        assert_eq!(cols[0], "loaned");
         assert!(cols.contains(&"name".to_string()));
-        assert!(!cols.contains(&"location".to_string()));
+        assert!(cols.contains(&"serial".to_string()));
+        // nested objects with a name are renderable cells now
+        assert!(cols.contains(&"location".to_string()));
+    }
+
+    #[test]
+    fn column_cap_is_eight() {
+        let wide: Vec<Value> = vec![json!(
+            (1..=20).map(|i| (format!("k{}", i), json!(i))).collect::<serde_json::Map<String, Value>>()
+        )];
+        let cols = pick_columns(&wide, &[]);
+        assert_eq!(cols.len(), 8);
     }
 
     #[test]
@@ -231,6 +294,24 @@ mod tests {
         assert!(s.contains("total"));
         assert!(s.contains("10"));
         assert!(!s.contains("nested"));
+    }
+
+    #[test]
+    fn paginated_envelope_renders_items_table() {
+        let env = serde_json::json!({
+            "total": 227,
+            "items": [
+                {"printName": "bracket", "status": "failed", "createdByUsername": "Kyran"},
+                {"printName": "clamp", "status": "failed", "createdByUsername": "Ada"}
+            ]
+        });
+        let mut buf = Vec::new();
+        print_value(&mut buf, &env, false).unwrap();
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.contains("total=227"));
+        assert!(s.contains("bracket"));
+        assert!(s.contains("Kyran"));
+        assert!(s.contains("2 row(s)"));
     }
 
     #[test]
