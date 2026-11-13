@@ -27,3 +27,15 @@ export const LEGACY_PRINT_REDIRECTS: Record<string, string> = {
 export function isPrintingPath(pathname: string): boolean {
   return pathname === "/printing" || pathname.startsWith("/printing/");
 }
+
+/** Sections shown in the Printing tab strip, in display order. */
+export const PRINTING_TABS = [
+  { title: "Overview", url: PRINTING_ROUTES.root },
+  { title: "Monitor", url: PRINTING_ROUTES.monitor },
+  { title: "Queue", url: PRINTING_ROUTES.queue },
+  { title: "Send G-code", url: PRINTING_ROUTES.send },
+  { title: "Cameras", url: PRINTING_ROUTES.cameras },
+  { title: "History", url: PRINTING_ROUTES.history },
+  { title: "Stats", url: PRINTING_ROUTES.stats },
+  { title: "Printers", url: PRINTING_ROUTES.printers },
+] as const;

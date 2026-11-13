@@ -5,6 +5,7 @@ import { Plus, Info } from "lucide-react";
 import { PrintQueuePanel } from "@/components/print-queue/PrintQueuePanel";
 import { PrintJobModal } from "@/components/print-queue/PrintJobModal";
 import { trpc } from "@/client/trpc";
+import { PageHeader } from "@/components/printing/PageHeader";
 
 const STATUS_TABS = [
   { value: undefined, label: "All" },
@@ -40,18 +41,16 @@ export default function PrintQueue() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Print Queue</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage queued Bambu printer jobs
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Queue job
-        </Button>
-      </div>
+      <PageHeader
+        title="Queue"
+        description="Manage queued Bambu printer jobs"
+        actions={
+          <Button size="sm" onClick={() => setModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Queue job
+          </Button>
+        }
+      />
 
       <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-3">
         <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />

@@ -24,6 +24,7 @@ import {
   History,
   Video,
   LayoutGrid,
+  LayoutDashboard,
   ArrowLeft,
 } from "lucide-react";
 import { authClient } from "@/auth/client";
@@ -59,6 +60,7 @@ const coreItems = [
 ];
 
 const printingItems = [
+  { title: "Overview", url: PRINTING_ROUTES.root, icon: LayoutDashboard },
   { title: "Monitor", url: PRINTING_ROUTES.monitor, icon: Monitor },
   { title: "Queue", url: PRINTING_ROUTES.queue, icon: ListOrdered },
   { title: "Send G-code", url: PRINTING_ROUTES.send, icon: Printer },
@@ -127,8 +129,10 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           asChild
                           isActive={
-                            pathname === item.url ||
-                            pathname.startsWith(`${item.url}/`)
+                            item.url === PRINTING_ROUTES.root
+                              ? pathname === item.url
+                              : pathname === item.url ||
+                                pathname.startsWith(`${item.url}/`)
                           }
                         >
                           <a onClick={() => void navigate(item.url)}>
@@ -156,8 +160,10 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           asChild
                           isActive={
-                            pathname === item.url ||
-                            pathname.startsWith(`${item.url}/`)
+                            item.url === PRINTING_ROUTES.root
+                              ? pathname === item.url
+                              : pathname === item.url ||
+                                pathname.startsWith(`${item.url}/`)
                           }
                         >
                           <a onClick={() => void navigate(item.url)}>
