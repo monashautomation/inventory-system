@@ -1,3 +1,4 @@
+import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Button } from "@/components/ui/button";
@@ -353,7 +354,7 @@ export default function PrintCam() {
             variant="secondary"
             size="sm"
             onClick={() => {
-              window.location.href = "/print-monitor";
+              window.location.href = PRINTING_ROUTES.monitor;
             }}
           >
             ← Back

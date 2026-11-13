@@ -1,3 +1,4 @@
+import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1459,7 +1460,7 @@ export default function PrintMonitoring() {
             variant="secondary"
             size="sm"
             onClick={() => {
-              window.location.href = "/print-cam";
+              window.location.href = PRINTING_ROUTES.cameras;
             }}
           >
             <Video className="mr-2 h-4 w-4" />

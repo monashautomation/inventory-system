@@ -1,3 +1,4 @@
+import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import {
   type FormEvent,
   useState,
@@ -170,7 +171,7 @@ export default function PrintGcode() {
 
   useEffect(() => {
     if (isBambu) {
-      void navigate("/print-queue?open=upload");
+      void navigate(`${PRINTING_ROUTES.queue}?open=upload`);
     }
   }, [isBambu, navigate]);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -124,7 +125,7 @@ export default function PrintStats() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void navigate("/print-history")}
+            onClick={() => void navigate(PRINTING_ROUTES.history)}
           >
             <History className="h-4 w-4 mr-1" />
             Full History
@@ -241,7 +242,7 @@ export default function PrintStats() {
                 variant="ghost"
                 size="sm"
                 className="text-xs"
-                onClick={() => void navigate("/print-history")}
+                onClick={() => void navigate(PRINTING_ROUTES.history)}
               >
                 View all →
               </Button>
