@@ -1,4 +1,10 @@
-import { Route, BrowserRouter, Routes, Navigate } from "react-router-dom";
+import {
+  Route,
+  BrowserRouter,
+  Routes,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import Assets from "@/pages/Assets";
 import Consumables from "@/pages/Consumables";
 import ConsumableRequests from "@/pages/ConsumableRequests";
@@ -36,6 +42,13 @@ import KioskCheckin from "@/pages/kiosk/KioskCheckin";
 import KioskPrintStatus from "@/pages/kiosk/KioskPrintStatus";
 import KioskProvision from "@/pages/kiosk/KioskProvision";
 import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
+import { LEGACY_PRINT_REDIRECTS, PRINTING_ROUTES } from "@/lib/printingRoutes";
+
+/** Redirect to `to`, preserving the query string and hash (e.g. ?open=upload). */
+const RedirectPreserve = ({ to }: { to: string }) => {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
+};
 
 const App = () => {
   React.useEffect(() => {
@@ -98,16 +111,28 @@ const App = () => {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/checkin" element={<CheckIn />} />
-                <Route path="/print" element={<PrintGcode />} />
-                <Route path="/print-monitor" element={<PrintMonitoring />} />
-                <Route path="/print-cam" element={<PrintCam />} />
                 <Route
-                  path="/printer-management"
+                  path="/printing"
+                  element={<Navigate to={PRINTING_ROUTES.monitor} replace />}
+                />
+                <Route path="/printing/send" element={<PrintGcode />} />
+                <Route path="/printing/queue" element={<PrintQueue />} />
+                <Route path="/printing/monitor" element={<PrintMonitoring />} />
+                <Route path="/printing/cameras" element={<PrintCam />} />
+                <Route path="/printing/stats" element={<PrintStats />} />
+                <Route path="/printing/history" element={<PrintHistory />} />
+                <Route
+                  path="/printing/printers"
                   element={<PrinterManagement />}
                 />
-                <Route path="/print-queue" element={<PrintQueue />} />
-                <Route path="/print-stats" element={<PrintStats />} />
-                <Route path="/print-history" element={<PrintHistory />} />
+                {/* Legacy URLs: kept permanently so old links keep working */}
+                {Object.entries(LEGACY_PRINT_REDIRECTS).map(([from, to]) => (
+                  <Route
+                    key={from}
+                    path={from}
+                    element={<RedirectPreserve to={to} />}
+                  />
+                ))}
               </Route>
             </Routes>
           </KioskProvider>
