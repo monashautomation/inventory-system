@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { PageHeader } from "@/components/printing/PageHeader";
 import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/client/trpc";
@@ -1447,27 +1449,20 @@ export default function PrintMonitoring() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Printer Monitoring</h1>
-          <p className="text-muted-foreground">
-            Overview of all printers. Click a printer for full telemetry and
-            camera feed.
-          </p>
-        </div>
-        {hasAnyWebcam ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              window.location.href = PRINTING_ROUTES.cameras;
-            }}
-          >
-            <Video className="mr-2 h-4 w-4" />
-            View All Webcams
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Monitor"
+        description="Overview of all printers. Click a printer for full telemetry and camera feed."
+        actions={
+          hasAnyWebcam ? (
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={PRINTING_ROUTES.cameras}>
+                <Video className="mr-2 h-4 w-4" />
+                View All Webcams
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-3">
         <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />

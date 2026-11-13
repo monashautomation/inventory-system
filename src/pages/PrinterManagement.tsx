@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/printing/PageHeader";
 import { type FormEvent, useState } from "react";
 import { trpc } from "@/client/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -289,10 +290,10 @@ export default function PrinterManagement() {
   if (!isAdmin) {
     return (
       <div className="p-6">
-        <h1 className="text-3xl font-bold">Printer Management</h1>
-        <p className="mt-2 text-muted-foreground">
-          You do not have permission to manage printers. Contact an admin.
-        </p>
+        <PageHeader
+          title="Printers"
+          description="You do not have permission to manage printers. Contact an admin."
+        />
       </div>
     );
   }
@@ -301,16 +302,13 @@ export default function PrinterManagement() {
     <div className="p-6 space-y-8">
       {/* ── Prusa printers ── */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Printer Management</h1>
-            <p className="text-muted-foreground">
-              Manage Prusa printers. Bambu printers are read-only - configure
-              them in BamBuddy.
-            </p>
-          </div>
-          <AddPrinterDialog onSuccess={() => void printersQuery.refetch()} />
-        </div>
+        <PageHeader
+          title="Printers"
+          description="Manage Prusa printers. Bambu printers are read-only - configure them in BamBuddy."
+          actions={
+            <AddPrinterDialog onSuccess={() => void printersQuery.refetch()} />
+          }
+        />
 
         {prusaPrinters.length === 0 ? (
           <Card>

@@ -1,4 +1,5 @@
-"use client";
+import { PageHeader } from "@/components/printing/PageHeader";
+("use client");
 
 import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useState } from "react";
@@ -93,45 +94,43 @@ export default function PrintStats() {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Print Statistics</h1>
-          <p className="text-sm text-muted-foreground">
-            Filament usage, print history, and performance metrics
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={preset}
-            onValueChange={(v) => setPreset(v as DatePreset)}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRESETS.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {exportAvailable && (
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="h-4 w-4 mr-1" />
-              Export CSV
+      <PageHeader
+        title="Stats"
+        description="Filament usage, print history, and performance metrics"
+        actions={
+          <div className="flex items-center gap-2">
+            <Select
+              value={preset}
+              onValueChange={(v) => setPreset(v as DatePreset)}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRESETS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {exportAvailable && (
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" />
+                Export CSV
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void navigate(PRINTING_ROUTES.history)}
+            >
+              <History className="h-4 w-4 mr-1" />
+              Full History
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void navigate(PRINTING_ROUTES.history)}
-          >
-            <History className="h-4 w-4 mr-1" />
-            Full History
-          </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
       {isLoading ? (
