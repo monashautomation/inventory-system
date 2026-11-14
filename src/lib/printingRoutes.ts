@@ -2,6 +2,7 @@
 export const PRINTING_ROUTES = {
   root: "/printing",
   send: "/printing/send",
+  myPrints: "/printing/my-prints",
   queue: "/printing/queue",
   monitor: "/printing/monitor",
   cameras: "/printing/cameras",
@@ -31,6 +32,7 @@ export function isPrintingPath(pathname: string): boolean {
 /** Sections shown in the Printing tab strip, in display order. */
 export const PRINTING_TABS = [
   { title: "Overview", url: PRINTING_ROUTES.root },
+  { title: "My prints", url: PRINTING_ROUTES.myPrints },
   { title: "Monitor", url: PRINTING_ROUTES.monitor },
   { title: "Queue", url: PRINTING_ROUTES.queue },
   { title: "Send G-code", url: PRINTING_ROUTES.send },

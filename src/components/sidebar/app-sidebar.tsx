@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import logoHorizontalDark from "@/assets/Horizontal White & Blue.svg";
 import logoHorizontalLight from "@/assets/Horizontal Black & Blue.svg";
@@ -18,12 +17,12 @@ import {
   FileText,
   ScrollText,
   Users,
-  ChevronDown,
   ListOrdered,
   BarChart2,
   History,
   Video,
   LayoutDashboard,
+  UserRound,
 } from "lucide-react";
 import { authClient } from "@/auth/client";
 import { trpc } from "@/client/trpc";
@@ -56,6 +55,7 @@ const coreItems = [
 
 const printingItems = [
   { title: "Overview", url: PRINTING_ROUTES.root, icon: LayoutDashboard },
+  { title: "My prints", url: PRINTING_ROUTES.myPrints, icon: UserRound },
   { title: "Monitor", url: PRINTING_ROUTES.monitor, icon: Monitor },
   { title: "Queue", url: PRINTING_ROUTES.queue, icon: ListOrdered },
   { title: "Send G-code", url: PRINTING_ROUTES.send, icon: Printer },
@@ -66,7 +66,6 @@ const printingItems = [
 ];
 
 export function AppSidebar() {
-  const [adminOpen, setAdminOpen] = useState(false);
   const { itemCount } = useCart();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -140,10 +139,10 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           asChild
                           isActive={
-                            item.url === PRINTING_ROUTES.root
-                              ? pathname === item.url
-                              : pathname === item.url ||
-                                pathname.startsWith(`${item.url}/`)
+                            (pathname === item.url ||
+                              pathname.startsWith(`${item.url}/`)) &&
+                            // Requests is its own entry under Administration
+                            !pathname.startsWith("/consumables/requests")
                           }
                         >
                           <a onClick={() => void navigate(item.url)}>
@@ -172,57 +171,51 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   </SidebarMenu>
 
-                  {/* Administration group - admins only */}
+                  {/* Administration group - admins only. Always expanded so the
+                      pending-requests badge is visible without a click. */}
                   {isAdmin && (
                     <div className="mt-2">
-                      <button
-                        onClick={() => setAdminOpen((o) => !o)}
-                        className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-                      >
-                        <span className="uppercase tracking-wider">
-                          Administration
-                        </span>
-                        <ChevronDown
-                          className={cn(
-                            "h-3 w-3 transition-transform duration-200",
-                            !adminOpen && "-rotate-90",
-                          )}
-                        />
-                      </button>
-                      {adminOpen && (
-                        <SidebarMenu className="mt-0.5">
-                          <SidebarMenuItem>
-                            <SidebarMenuButton asChild>
-                              <a
-                                onClick={() =>
-                                  void navigate("/consumables/requests")
-                                }
-                                className="flex items-center gap-2"
-                              >
-                                <ClipboardList />
-                                <span>Requests</span>
-                                {pendingRequestCount &&
-                                pendingRequestCount > 0 ? (
-                                  <span className="ml-auto h-5 min-w-5 rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-200 leading-5 text-center tabular-nums">
-                                    {pendingRequestCount}
-                                  </span>
-                                ) : null}
-                              </a>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                          <SidebarMenuItem>
-                            <SidebarMenuButton asChild>
-                              <a
-                                onClick={() => void navigate("/members")}
-                                className="flex items-center gap-2"
-                              >
-                                <Users />
-                                <span>Members</span>
-                              </a>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        </SidebarMenu>
-                      )}
+                      <SidebarGroupLabel>Administration</SidebarGroupLabel>
+                      <SidebarMenu>
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={pathname.startsWith(
+                              "/consumables/requests",
+                            )}
+                          >
+                            <a
+                              onClick={() =>
+                                void navigate("/consumables/requests")
+                              }
+                              className="flex items-center gap-2"
+                            >
+                              <ClipboardList />
+                              <span>Requests</span>
+                              {pendingRequestCount &&
+                              pendingRequestCount > 0 ? (
+                                <span className="ml-auto h-5 min-w-5 rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-200 leading-5 text-center tabular-nums">
+                                  {pendingRequestCount}
+                                </span>
+                              ) : null}
+                            </a>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={pathname.startsWith("/members")}
+                          >
+                            <a
+                              onClick={() => void navigate("/members")}
+                              className="flex items-center gap-2"
+                            >
+                              <Users />
+                              <span>Members</span>
+                            </a>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      </SidebarMenu>
                     </div>
                   )}
                 </>

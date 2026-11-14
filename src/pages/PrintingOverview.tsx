@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ListOrdered, Monitor, Printer, Video } from "lucide-react";
+import { ListOrdered, Printer, UserRound, Video } from "lucide-react";
 import { trpc } from "@/client/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,10 +36,10 @@ const quickActions = [
     icon: Printer,
   },
   {
-    title: "Monitor",
-    description: "Full telemetry and controls",
-    url: PRINTING_ROUTES.monitor,
-    icon: Monitor,
+    title: "My prints",
+    description: "Your jobs, status and reprints",
+    url: PRINTING_ROUTES.myPrints,
+    icon: UserRound,
   },
   {
     title: "Cameras",

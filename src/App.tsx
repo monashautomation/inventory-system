@@ -45,6 +45,7 @@ import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
 import { LEGACY_PRINT_REDIRECTS } from "@/lib/printingRoutes";
 import PrintingLayout from "@/layouts/PrintingLayout";
 import PrintingOverview from "@/pages/PrintingOverview";
+import MyPrints from "@/pages/MyPrints";
 
 /** Redirect to `to`, preserving the query string and hash (e.g. ?open=upload). */
 const RedirectPreserve = ({ to }: { to: string }) => {
@@ -115,6 +116,7 @@ const App = () => {
                 <Route path="/checkin" element={<CheckIn />} />
                 <Route path="/printing" element={<PrintingLayout />}>
                   <Route index element={<PrintingOverview />} />
+                  <Route path="my-prints" element={<MyPrints />} />
                   <Route path="send" element={<PrintGcode />} />
                   <Route path="queue" element={<PrintQueue />} />
                   <Route path="monitor" element={<PrintMonitoring />} />

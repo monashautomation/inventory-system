@@ -378,6 +378,29 @@ export const printQueueRouter = router({
       }
     }),
 
+  // The signed-in user's own Bambu queue submissions, straight from our DB
+  // (no BamBuddy round-trip) so it is cheap enough to poll from "My prints".
+  listMine: userProcedure.query(({ ctx }) => {
+    return prisma.printQueueSubmission.findMany({
+      where: { userId: ctx.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        archiveName: true,
+        notionProjectName: true,
+        personalUse: true,
+        createdAt: true,
+        capturedStatus: true,
+        capturedStartedAt: true,
+        capturedCompletedAt: true,
+        capturedFilamentGrams: true,
+        capturedFilamentType: true,
+        capturedPrinterName: true,
+      },
+    });
+  }),
+
   addToQueue: userProcedure
     .input(addToQueueInputSchema)
     .mutation(async ({ input, ctx }) => {
