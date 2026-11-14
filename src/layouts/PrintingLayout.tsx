@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { PRINTING_ROUTES, PRINTING_TABS } from "@/lib/printingRoutes";
+import printingLogo from "@/assets/ma-3d-print.svg";
 
 /**
  * Shared shell for every /printing/* page: a tab strip for quick switching
@@ -18,8 +19,12 @@ export default function PrintingLayout() {
     <div>
       <nav
         aria-label="Printing sections"
-        className="overflow-x-auto border-b px-4 sm:px-6"
+        className="flex items-center gap-3 overflow-x-auto border-b px-4 sm:px-6"
       >
+        <div className="flex shrink-0 items-center gap-2 py-2 pr-2 font-semibold">
+          <img src={printingLogo} alt="" className="h-6 w-6 rounded-[28%]" />
+          <span>Printing</span>
+        </div>
         <ul className="flex min-w-max gap-1">
           {PRINTING_TABS.map((tab) => (
             <li key={tab.url}>

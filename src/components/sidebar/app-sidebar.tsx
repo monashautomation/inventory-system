@@ -23,9 +23,7 @@ import {
   BarChart2,
   History,
   Video,
-  LayoutGrid,
   LayoutDashboard,
-  ArrowLeft,
 } from "lucide-react";
 import { authClient } from "@/auth/client";
 import { trpc } from "@/client/trpc";
@@ -42,13 +40,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/sidebar/theme-toggle";
+import { WorkspaceSwitcher } from "@/components/sidebar/workspace-switcher";
 import { useCart } from "@/contexts/cart-context";
 import { cn } from "@/lib/utils";
 import { PRINTING_ROUTES, isPrintingPath } from "@/lib/printingRoutes";
-
-// Authentik application library, the central launcher for all our apps.
-const AUTHENTIK_LIBRARY_URL =
-  "https://auth.monashautomation.com/if/user/#/library";
 
 const coreItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
@@ -108,17 +103,9 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col justify-between grow">
             <SidebarGroupContent>
-              {/* Workspace switcher: Authentik stays the launcher, this just links across */}
-              <SidebarMenu className="mb-2">
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <a href={AUTHENTIK_LIBRARY_URL}>
-                      <LayoutGrid />
-                      <span>All apps</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
+              <WorkspaceSwitcher
+                current={inPrinting ? "printing" : "inventory"}
+              />
 
               {inPrinting ? (
                 <>
@@ -142,18 +129,11 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
-                    <SidebarMenuItem className="mt-2">
-                      <SidebarMenuButton asChild>
-                        <a onClick={() => void navigate("/dashboard")}>
-                          <ArrowLeft />
-                          <span>Back to Inventory</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
                   </SidebarMenu>
                 </>
               ) : (
                 <>
+                  <SidebarGroupLabel>Inventory</SidebarGroupLabel>
                   <SidebarMenu>
                     {coreItems.map((item) => (
                       <SidebarMenuItem key={item.title}>
@@ -192,16 +172,6 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   </SidebarMenu>
 
-                  <SidebarMenu className="mt-2">
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild>
-                        <a onClick={() => void navigate(PRINTING_ROUTES.root)}>
-                          <Printer />
-                          <span>Printing</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
                   {/* Administration group - admins only */}
                   {isAdmin && (
                     <div className="mt-2">

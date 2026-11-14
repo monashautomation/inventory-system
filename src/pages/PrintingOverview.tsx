@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/printing/PageHeader";
 import { PRINTING_ROUTES } from "@/lib/printingRoutes";
+import printingLogo from "@/assets/ma-3d-print.svg";
 
 const BUSY_STATES = ["PRINTING", "PAUSED", "BUSY"];
 const READY_STATES = ["IDLE", "READY", "FINISHED"];
@@ -74,10 +75,17 @@ export default function PrintingOverview() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <PageHeader
-        title="Printing"
-        description="Live printer status and shortcuts to start a print."
-      />
+      <div className="flex items-center gap-4">
+        <img
+          src={printingLogo}
+          alt=""
+          className="h-14 w-14 shrink-0 rounded-[28%] shadow-sm"
+        />
+        <PageHeader
+          title="Printing"
+          description="Live printer status and shortcuts to start a print."
+        />
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {quickActions.map((action) => (

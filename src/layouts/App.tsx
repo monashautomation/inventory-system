@@ -1,4 +1,5 @@
-import { PRINTING_ROUTES } from "@/lib/printingRoutes";
+import { PRINTING_ROUTES, isPrintingPath } from "@/lib/printingRoutes";
+import { useWorkspaceBranding } from "@/hooks/use-workspace-branding";
 import { useEffect, useState } from "react";
 import { useParams, useLocation, Link, Outlet } from "react-router-dom";
 import {
@@ -57,6 +58,7 @@ async function loadBreadcrumbTrail(id: string): Promise<Location[]> {
 export default function Layout() {
   const { locationId } = useParams();
   const { pathname } = useLocation();
+  useWorkspaceBranding(isPrintingPath(pathname) ? "printing" : "inventory");
   const hideSidebarTrigger = pathname === PRINTING_ROUTES.cameras;
   const [breadcrumbTrail, setBreadcrumbTrail] = useState<Location[] | null>(
     null,
