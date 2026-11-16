@@ -39,6 +39,45 @@ Both are launched from [Authentik](https://goauthentik.io/), which is also the o
 - **MCP endpoint** at `/mcp` for AI integration, and a Prometheus `/metrics` endpoint
 - **Dark mode**: Follows the system preference
 
+## Screenshots
+
+Captured from the running app with sample data (not real inventory).
+
+| | |
+|---|---|
+| ![Dashboard Home](docs/screenshots/dashboard.png) **Home**: quick actions, your loans and requests | ![Admin overview](docs/screenshots/admin-overview.png) **Admin overview**: pending requests, low stock, activity |
+| ![Assets](docs/screenshots/assets.png) **Assets**: searchable table with loan status and add-to-cart | ![Item page with QR](docs/screenshots/item-qr.png) **Item page**: details, QR code and label printing |
+| ![Restock requests](docs/screenshots/restock-requests.png) **Requests**: Order, Receive or Cancel | ![Check in](docs/screenshots/check-in.png) **Check-in**: return loans, with a QR scan option |
+
+## How QR codes work
+
+Every item has a QR code that opens that item's page, so a phone camera or the in-app scanner is the fastest way to look something up, borrow it or return it.
+
+<img src="docs/screenshots/phone-scan.png" alt="Item page on a phone after scanning" width="240" align="right">
+
+**What a QR contains.** A URL of the form `<site origin>/qr/<item id>`. The id is the item's database UUID (not its serial or name). The `/qr/*` route turns it into `/item/<id>`.
+
+**Scanning with a phone.** Point the normal camera app at a label and tap the link. If you are signed in you land on the item page: name, serial, location, tags, whether it is in storage or on loan (and with whom), notes, cost and, for consumables, the quantity. If you are signed out you are sent to the Authentik sign-in page first, and the scanned path is carried along as `redirectTo`. A QR only ever opens a page behind sign-in, so a label on a shelf exposes no data.
+
+**Scanning inside the app.** Check-in (**Scan QR**) and the kiosk use the device camera through the ZXing library. They read the id from the `qr` path segment (or the last segment), so they keep working even if the domain changes.
+
+**Printing labels.** On an item page, pick a label type (standard, small or cable) and a quantity, then **Print**. The app sends the item to the label-printer server at `PRINTER_URL` (authorised with `PRINTER_TOKEN`), which builds and prints the sticker from the item's id, name and serial. The QR shown on the page is rendered at the highest error-correction level (H), so a scuffed or partly covered code still scans.
+
+**Keeping labels working long term**
+
+- The id is a UUID that never changes or gets reused, so renaming, moving or retagging an item does not invalidate its sticker. Deleting an item only soft-deletes it.
+- Every item also has a unique serial, and items can be looked up by it, so a damaged code is not a dead end.
+- The URL contains the site's hostname. Keep serving (or redirecting) the production domain for as long as stickers are in use, and prefer a short, stable domain you control. If the domain ever changes, old labels still work in the in-app scanner but will not open from a phone camera unless the old domain redirects.
+- The on-screen QR uses the origin of the page you are viewing, so view item pages on the production URL (not localhost or a preview) before printing or sharing a code. After setting up or moving the label-printer server, scan a fresh label to confirm it opens the item on the production domain.
+- Location QR codes are not implemented yet (see the TODOs in `src/server/api/routers/qr.ts`).
+
+## Key workflows
+
+1. **Borrow:** find an item in Assets (or scan it), add it to the cart, check out. Admins can also check items out on a member's behalf. Every movement is stored as an `ItemRecord`.
+2. **Return:** Check-in lists your loans; select them or scan their QR codes, then check in.
+3. **Restock:** a member requests a consumable; an admin marks it Ordered, then Received (with the quantity actually received) or Cancelled with a reason. The requester is notified and each step is written to the audit log. The Admin overview shows low stock against each consumable's minimum.
+4. **Kiosk:** on a shared terminal a student enters their ID, scans items to check them out or in, and can log after-hours lab access with a supervisor.
+
 ## Routes
 
 | Area | Routes |
@@ -144,8 +183,9 @@ S3_SECRET_ACCESS_KEY="password123"
 BAMBUDDY_ENDPOINT=""
 BAMBUDDY_API_KEY=""
 
-# Label printer
+# Label printer server (item QR labels)
 PRINTER_URL="http://localhost:6767/printer"
+PRINTER_TOKEN=""
 
 # Notion / Discord integrations (all required to enable them)
 NOTION_TOKEN=""
