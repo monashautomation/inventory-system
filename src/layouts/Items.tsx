@@ -1,4 +1,3 @@
-import { ShoppingCart, Pencil, Trash2, PackagePlus } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +18,9 @@ import { DataTableColumnHeader } from "@/components/data-table/data-table-column
 import type { AppRouter } from "@/server/api/routers/_app";
 import type { inferProcedureOutput } from "@trpc/server";
 import { Badge } from "@/components/ui/badge";
+import { ItemStatusBadge } from "@/components/data-table/item-status-badge";
+import { ItemRowActions } from "@/components/data-table/item-row-actions";
+import { getLoanState } from "@/lib/loan";
 import type React from "react";
 import { Route, Routes } from "react-router-dom";
 import ItemDetails from "@/pages/ItemDetails";
@@ -37,6 +39,7 @@ interface ItemProps {
   isDeleting?: boolean;
   callback?: () => void;
   isAdmin?: boolean;
+  currentUserId?: string;
   disableFieldSorting?: boolean;
 }
 
@@ -49,6 +52,7 @@ function Items({
   isDeleting,
   callback,
   isAdmin,
+  currentUserId,
   disableFieldSorting = false,
 }: ItemProps) {
   const columns: ColumnDef<GetItemsOutput>[] = [
@@ -102,7 +106,9 @@ function Items({
         return (
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="link">{row.getValue("name")}</Button>
+              <Button variant="link" className="font-semibold text-foreground">
+                {row.getValue("name")}
+              </Button>
             </SheetTrigger>
             <SheetContent className="sm:max-w-3xl p-0 overflow-hidden">
               <div className="flex flex-col h-full max-h-screen">
@@ -171,7 +177,9 @@ function Items({
         return (
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="link">{row.getValue("location")}</Button>
+              <Button variant="link" className="text-foreground">
+                {row.getValue("location")}
+              </Button>
             </SheetTrigger>
             <SheetContent className="w-[400px] sm:w-[540px]">
               <SheetHeader>
@@ -207,105 +215,30 @@ function Items({
           id: "status",
           header: () => "Status",
           cell: ({ row }) => {
-            const records = row.original.ItemRecords;
-            const latest = records
-              ?.slice()
-              .sort(
-                (a, b) =>
-                  new Date(b.createdAt).getTime() -
-                  new Date(a.createdAt).getTime(),
-              )[0];
-            const isLabUse = row.original.stored === false;
-            const isInUse = latest?.loaned ?? false;
-            const label = isLabUse
-              ? "Lab Use"
-              : isInUse
-                ? "On Loan"
-                : "In Storage";
-            return (
-              <Badge
-                variant={
-                  isLabUse ? "default" : isInUse ? "destructive" : "secondary"
-                }
-                className={
-                  isLabUse ? "bg-blue-600 text-white hover:bg-blue-700" : ""
-                }
-              >
-                {label}
-              </Badge>
+            const { state, heldByMe } = getLoanState(
+              row.original,
+              currentUserId,
             );
+            return <ItemStatusBadge state={state} heldByMe={heldByMe} />;
           },
         },
     {
       id: "actions",
       cell: ({ row }) => {
         const item = row.original;
-
-        let cartDisabled = false;
-        let cartLabel = consumable ? "Request More" : "Add to Cart";
-
-        if (!consumable) {
-          const inCart = itemInCart(item.id);
-          const isLabUse = item.stored === false;
-          const latest = item.ItemRecords?.slice().sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-          )[0];
-          const isOnLoan = latest?.loaned ?? false;
-
-          if (isLabUse) {
-            cartDisabled = true;
-            cartLabel = "In Use";
-          } else if (isOnLoan) {
-            cartDisabled = true;
-            cartLabel = "Loaned";
-          } else if (inCart) {
-            cartDisabled = true;
-            cartLabel = "In Cart";
-          }
-        }
-
+        const { state, heldByMe } = getLoanState(item, currentUserId);
         return (
-          <div className="flex items-center justify-between gap-2 min-w-[200px]">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => onAddToCart(item)}
-              disabled={cartDisabled}
-              title={cartLabel}
-            >
-              {consumable ? (
-                <PackagePlus className="h-3.5 w-3.5" />
-              ) : (
-                <ShoppingCart className="h-3.5 w-3.5" />
-              )}
-              {cartLabel}
-            </Button>
-            {isAdmin && (
-              <div className="flex items-center gap-1 ml-auto">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => onModify(item)}
-                  title="Modify item"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => onDelete(item)}
-                  disabled={isDeleting}
-                  title="Delete item"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
+          <ItemRowActions
+            consumable={consumable}
+            loanState={state}
+            heldByMe={heldByMe}
+            inCart={itemInCart(item.id)}
+            isAdmin={isAdmin}
+            isDeleting={isDeleting}
+            onAddToCart={() => onAddToCart(item)}
+            onModify={() => onModify(item)}
+            onDelete={() => onDelete(item)}
+          />
         );
       },
     },

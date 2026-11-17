@@ -12,13 +12,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  ChevronDown,
-  ChevronRight,
-  ShoppingCart,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { ItemStatusBadge } from "@/components/data-table/item-status-badge";
+import { ItemRowActions } from "@/components/data-table/item-row-actions";
+import { getLoanState } from "@/lib/loan";
 import type { inferProcedureOutput } from "@trpc/server";
 import type { AppRouter } from "@/server/api/routers/_app";
 import type React from "react";
@@ -35,6 +32,7 @@ export interface AssetActionProps {
   getCartQuantity: (id: string) => number;
   isDeleting?: boolean;
   isAdmin?: boolean;
+  currentUserId?: string;
   callback?: () => void;
 }
 
@@ -57,38 +55,12 @@ function AssetChildRow({
   itemInCart,
   isDeleting,
   isAdmin,
+  currentUserId,
   callback,
 }: { row: ItemRow } & Omit<AssetActionProps, "getCartQuantity">) {
   const item = row.original;
-  const records = item.ItemRecords;
-  const latest = records
-    ?.slice()
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )[0];
-  const isLabUse = item.stored === false;
-  const isOnLoan = latest?.loaned ?? false;
-  const statusLabel = isLabUse
-    ? "Lab Use"
-    : isOnLoan
-      ? "On Loan"
-      : "In Storage";
-
+  const { state, heldByMe } = getLoanState(item, currentUserId);
   const inCart = itemInCart(item.id);
-
-  let cartDisabled = false;
-  let cartLabel = "Add to Cart";
-  if (isLabUse) {
-    cartDisabled = true;
-    cartLabel = "In Use";
-  } else if (isOnLoan) {
-    cartDisabled = true;
-    cartLabel = "Loaned";
-  } else if (inCart) {
-    cartDisabled = true;
-    cartLabel = "In Cart";
-  }
 
   return (
     <TableRow
@@ -116,7 +88,10 @@ function AssetChildRow({
       <TableCell className="pl-10">
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="link" className="p-0 h-auto">
+            <Button
+              variant="link"
+              className="h-auto p-0 font-semibold text-foreground"
+            >
               {item.name}
             </Button>
           </SheetTrigger>
@@ -168,54 +143,22 @@ function AssetChildRow({
 
       {/* status */}
       <TableCell className="pl-10">
-        <Badge
-          variant={
-            isLabUse ? "default" : isOnLoan ? "destructive" : "secondary"
-          }
-          className={isLabUse ? "bg-blue-600 text-white hover:bg-blue-700" : ""}
-        >
-          {statusLabel}
-        </Badge>
+        <ItemStatusBadge state={state} heldByMe={heldByMe} />
       </TableCell>
 
       {/* actions */}
       <TableCell className="pl-10">
-        <div className="flex items-center justify-between gap-2 min-w-[200px]">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => onAddToCart(item)}
-            disabled={cartDisabled}
-            title={cartLabel}
-          >
-            <ShoppingCart className="h-3.5 w-3.5" />
-            {cartLabel}
-          </Button>
-          {isAdmin && (
-            <div className="flex items-center gap-1 ml-auto">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onModify(item)}
-                title="Modify item"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onDelete(item)}
-                disabled={isDeleting}
-                title="Delete item"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
+        <ItemRowActions
+          consumable={false}
+          loanState={state}
+          heldByMe={heldByMe}
+          inCart={inCart}
+          isAdmin={isAdmin}
+          isDeleting={isDeleting}
+          onAddToCart={() => onAddToCart(item)}
+          onModify={() => onModify(item)}
+          onDelete={() => onDelete(item)}
+        />
       </TableCell>
     </TableRow>
   );
@@ -233,6 +176,7 @@ function GroupRow({
   itemInCart,
   isDeleting,
   isAdmin,
+  currentUserId,
   callback,
 }: GroupRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -273,7 +217,10 @@ function GroupRow({
             ) : (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
-            <Button variant="link" className="px-0 pointer-events-none">
+            <Button
+              variant="link"
+              className="pointer-events-none px-0 font-semibold text-foreground"
+            >
               {group.name}
             </Button>
           </div>
@@ -299,7 +246,10 @@ function GroupRow({
 
         {/* location */}
         <TableCell>
-          <Button variant="link" className="pointer-events-none">
+          <Button
+            variant="link"
+            className="pointer-events-none text-foreground"
+          >
             {locationDisplay}
           </Button>
         </TableCell>
@@ -322,6 +272,7 @@ function GroupRow({
             itemInCart={itemInCart}
             isDeleting={isDeleting}
             isAdmin={isAdmin}
+            currentUserId={currentUserId}
             callback={callback}
           />
         ))}
@@ -338,6 +289,7 @@ export function AssetDataRows({
   getCartQuantity,
   isDeleting,
   isAdmin,
+  currentUserId,
   callback,
 }: AssetDataRowsProps) {
   const rows = table.getRowModel().rows;
@@ -398,6 +350,7 @@ export function AssetDataRows({
             getCartQuantity={getCartQuantity}
             isDeleting={isDeleting}
             isAdmin={isAdmin}
+            currentUserId={currentUserId}
             callback={callback}
           />
         );

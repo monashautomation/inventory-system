@@ -1,5 +1,6 @@
+"use client";
+
 import { PageHeader } from "@/components/printing/PageHeader";
-("use client");
 
 import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import { useState } from "react";

@@ -140,6 +140,7 @@ const Consumables = () => {
         isDeleting: deleteMut.isPending,
         callback: onRestock,
         isAdmin,
+        currentUserId: session?.user.id,
       }),
     [
       handleAddToCart,
@@ -149,6 +150,7 @@ const Consumables = () => {
       getCartQuantity,
       deleteMut.isPending,
       isAdmin,
+      session?.user.id,
     ],
   );
 
