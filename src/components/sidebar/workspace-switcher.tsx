@@ -1,6 +1,12 @@
 import { Link } from "react-router-dom";
-import { LayoutGrid } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown, LayoutGrid } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { WORKSPACES, type Workspace } from "@/lib/workspaces";
 
 // Authentik application library, the central launcher for all our apps.
@@ -8,68 +14,63 @@ const AUTHENTIK_LIBRARY_URL =
   "https://auth.monashautomation.com/if/user/#/library";
 
 /**
- * Shows which app you are in (big logo + name) and lets you hop to the other
- * one. Authentik remains the launcher; "All apps" links back to it.
+ * Shows which app you are in (logo + name) and switches to the other one.
+ * Authentik remains the launcher; "All apps" links back to it.
  */
-export function WorkspaceSwitcher({ current }: { current: Workspace }) {
+export function WorkspaceSwitcher({
+  current,
+  onNavigate,
+}: {
+  current: Workspace;
+  onNavigate?: () => void;
+}) {
   const active = WORKSPACES[current];
 
   return (
-    <div className="mb-3 space-y-2 px-1">
-      <div className="flex items-center gap-3">
-        <img
-          src={active.logo}
-          alt=""
-          className="h-11 w-11 shrink-0 rounded-[28%] shadow-sm"
-        />
-        <div className="min-w-0">
-          <div className="truncate text-base font-semibold leading-tight">
-            {active.label}
-          </div>
-          <div className="text-xs text-sidebar-foreground/60">
-            Operation Tamarin
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/50 p-1"
-        role="group"
-        aria-label="Switch app"
-      >
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg p-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          aria-label={`Current app: ${active.label}. Switch app`}
+        >
+          <img
+            src={active.logo}
+            alt=""
+            className="h-10 w-10 shrink-0 rounded-[28%] shadow-sm"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base font-bold leading-tight">
+              {active.label}
+            </span>
+            <span className="block text-xs text-sidebar-foreground/60">
+              Operation Tamarin
+            </span>
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-60">
         {(Object.keys(WORKSPACES) as Workspace[]).map((key) => {
           const ws = WORKSPACES[key];
-          const isActive = key === current;
           return (
-            <Link
-              key={key}
-              to={ws.home}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] transition-colors",
-                isActive
-                  ? "bg-background font-medium shadow-sm ring-1 ring-[#1393FF]/60"
-                  : "text-sidebar-foreground/70 hover:bg-background/60 hover:text-sidebar-foreground",
-              )}
-            >
-              <img
-                src={ws.logo}
-                alt=""
-                className="h-5 w-5 shrink-0 rounded-[28%]"
-              />
-              <span>{ws.label}</span>
-            </Link>
+            <DropdownMenuItem key={key} asChild onSelect={onNavigate}>
+              <Link to={ws.home}>
+                <img src={ws.logo} alt="" className="h-5 w-5 rounded-[28%]" />
+                <span className="flex-1">{ws.label}</span>
+                {key === current ? <Check className="h-4 w-4" /> : null}
+              </Link>
+            </DropdownMenuItem>
           );
         })}
-      </div>
-
-      <a
-        href={AUTHENTIK_LIBRARY_URL}
-        className="flex items-center gap-1.5 px-1 text-xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground"
-      >
-        <LayoutGrid className="h-3 w-3" />
-        All apps
-      </a>
-    </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href={AUTHENTIK_LIBRARY_URL}>
+            <LayoutGrid className="h-4 w-4" />
+            All apps
+          </a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

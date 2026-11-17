@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/client/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/printing/PageHeader";
-import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 
 type Tone = "good" | "bad" | "busy" | "neutral";
 
@@ -211,14 +209,6 @@ export default function MyPrints() {
       <PageHeader
         title="My prints"
         description="Everything you've queued or sent to a printer, newest first."
-        actions={
-          <Button size="sm" asChild>
-            <Link to={`${PRINTING_ROUTES.queue}?open=upload`}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New print
-            </Link>
-          </Button>
-        }
       />
 
       {isLoading ? (

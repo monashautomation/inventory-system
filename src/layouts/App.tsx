@@ -11,6 +11,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
+import { MobileTabBar } from "@/components/sidebar/mobile-tab-bar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { OutageBanner } from "@/components/OutageBanner";
 import { WhatsNewDialog } from "@/components/whats-new/WhatsNewDialog";
@@ -82,7 +83,7 @@ export default function Layout() {
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <OutageBanner />
-          <main className="m-4 min-w-0">
+          <main className="m-4 min-w-0 pb-24 md:pb-0">
             <div className="flex flex-row items-center gap-2">
               {!hideSidebarTrigger && <SidebarTrigger />}
               <Breadcrumb>
@@ -107,6 +108,7 @@ export default function Layout() {
             <Outlet />
           </main>
         </div>
+        <MobileTabBar />
       </SidebarProvider>
     </div>
   );

@@ -43,7 +43,6 @@ import KioskPrintStatus from "@/pages/kiosk/KioskPrintStatus";
 import KioskProvision from "@/pages/kiosk/KioskProvision";
 import { KioskGuardLayout } from "@/pages/kiosk/KioskGuardLayout";
 import { LEGACY_PRINT_REDIRECTS } from "@/lib/printingRoutes";
-import PrintingLayout from "@/layouts/PrintingLayout";
 import PrintingOverview from "@/pages/PrintingOverview";
 import MyPrints from "@/pages/MyPrints";
 
@@ -114,7 +113,7 @@ const App = () => {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/checkin" element={<CheckIn />} />
-                <Route path="/printing" element={<PrintingLayout />}>
+                <Route path="/printing">
                   <Route index element={<PrintingOverview />} />
                   <Route path="my-prints" element={<MyPrints />} />
                   <Route path="send" element={<PrintGcode />} />

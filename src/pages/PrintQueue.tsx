@@ -45,7 +45,11 @@ export default function PrintQueue() {
         title="Queue"
         description="Manage queued Bambu printer jobs"
         actions={
-          <Button size="sm" onClick={() => setModalOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setModalOpen(true)}
+          >
             <Plus className="h-4 w-4 mr-1.5" />
             Queue job
           </Button>
