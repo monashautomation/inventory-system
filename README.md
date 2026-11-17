@@ -55,20 +55,21 @@ Every item has a QR code that opens that item's page, so a phone camera or the i
 
 <img src="docs/screenshots/phone-scan.png" alt="Item page on a phone after scanning" width="240" align="right">
 
-**What a QR contains.** A URL of the form `<site origin>/qr/<item id>`. The id is the item's database UUID (not its serial or name). The `/qr/*` route turns it into `/item/<id>`.
+**What a QR contains.** A URL of the form `<base URL>/qr/<item id>`. The id is the item's database UUID (not its serial or name). The `/qr/*` route turns it into `/item/<id>`. The base URL is chosen on the server: `QR_BASE_URL` if set, otherwise `FRONTEND_URL` (trailing slashes are ignored).
 
 **Scanning with a phone.** Point the normal camera app at a label and tap the link. If you are signed in you land on the item page: name, serial, location, tags, whether it is in storage or on loan (and with whom), notes, cost and, for consumables, the quantity. If you are signed out you are sent to the Authentik sign-in page first, and the scanned path is carried along as `redirectTo`. A QR only ever opens a page behind sign-in, so a label on a shelf exposes no data.
 
 **Scanning inside the app.** Check-in (**Scan QR**) and the kiosk use the device camera through the ZXing library. They read the id from the `qr` path segment (or the last segment), so they keep working even if the domain changes.
 
-**Printing labels.** On an item page, pick a label type (standard, small or cable) and a quantity, then **Print**. The app sends the item to the label-printer server at `PRINTER_URL` (authorised with `PRINTER_TOKEN`), which builds and prints the sticker from the item's id, name and serial. The QR shown on the page is rendered at the highest error-correction level (H), so a scuffed or partly covered code still scans.
+**Printing labels.** On an item page, pick a label type (standard, small or cable) and a quantity, then **Print**. The app sends the item to the label-printer server at `PRINTER_URL` (authorised with `PRINTER_TOKEN`), which builds and prints the sticker from the item's id, name and serial. The QR shown on the page is rendered at the highest error-correction level (H), so a scuffed or partly covered code still scans. The label-printer server builds its own QR from the item id it is sent, so configure it with the same base URL as `QR_BASE_URL`; this app does not pass the URL to it.
 
 **Keeping labels working long term**
 
 - The id is a UUID that never changes or gets reused, so renaming, moving or retagging an item does not invalidate its sticker. Deleting an item only soft-deletes it.
 - Every item also has a unique serial, and items can be looked up by it, so a damaged code is not a dead end.
-- The URL contains the site's hostname. Keep serving (or redirecting) the production domain for as long as stickers are in use, and prefer a short, stable domain you control. If the domain ever changes, old labels still work in the in-app scanner but will not open from a phone camera unless the old domain redirects.
-- The on-screen QR uses the origin of the page you are viewing, so view item pages on the production URL (not localhost or a preview) before printing or sharing a code. After setting up or moving the label-printer server, scan a fresh label to confirm it opens the item on the production domain.
+- The URL contains the site's hostname. Set `QR_BASE_URL` to a short, stable address you control and keep serving (or redirecting) it for as long as stickers are in use. If the domain ever changes, old labels still work in the in-app scanner but will not open from a phone camera unless the old domain redirects. Changing `QR_BASE_URL` only affects QR codes generated afterwards, never stickers already printed.
+- If `QR_BASE_URL` is set to something that is not a valid http(s) URL, the server logs a warning and falls back to `FRONTEND_URL`.
+- After setting up or moving the label-printer server, scan a fresh label to confirm it opens the item on the production domain.
 - Location QR codes are not implemented yet (see the TODOs in `src/server/api/routers/qr.ts`).
 
 ## Key workflows
@@ -154,6 +155,7 @@ Copy `.env.example` to `.env` and fill it in. The main groups are:
 # Core
 DATABASE_URL="postgresql://postgres:password@localhost:5432/mydb?schema=public"
 FRONTEND_URL="http://localhost:5173"   # CORS and trusted origin
+QR_BASE_URL=""                         # optional: base URL encoded in item QR codes (defaults to FRONTEND_URL)
 PORT=3000
 BETTER_AUTH_URL="http://localhost:3000"
 BETTER_AUTH_SECRET=""
