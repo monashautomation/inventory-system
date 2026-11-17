@@ -39,15 +39,20 @@ Both are launched from [Authentik](https://goauthentik.io/), which is also the o
 - **MCP endpoint** at `/mcp` for AI integration, and a Prometheus `/metrics` endpoint
 - **Dark mode**: Follows the system preference
 
+## UI and brand
+
+The look and behaviour of both apps follows the Monash Automation brand guidelines. See [`docs/ui-brand-guidelines.md`](docs/ui-brand-guidelines.md) for the colours, fonts, button hierarchy, navigation tiers and a checklist for new screens.
+
 ## Screenshots
 
 Captured from the running app with sample data (not real inventory).
 
 | | |
 |---|---|
-| ![Dashboard Home](docs/screenshots/dashboard.png) **Home**: quick actions, your loans and requests | ![Admin overview](docs/screenshots/admin-overview.png) **Admin overview**: pending requests, low stock, activity |
-| ![Assets](docs/screenshots/assets.png) **Assets**: searchable table with loan status and add-to-cart | ![Item page with QR](docs/screenshots/item-qr.png) **Item page**: details, QR code and label printing |
+| ![Home](docs/screenshots/dashboard.png) **Home**: the app's primary action, daily menu, your loans and requests | ![Admin overview](docs/screenshots/admin-overview.png) **Admin overview**: pending requests, low stock, activity |
+| ![Assets](docs/screenshots/assets.png) **Assets**: one action per row (Add to cart, Return, or none) | ![Item page](docs/screenshots/item-qr.png) **Item page**: status, a single primary action, history, QR and label printing |
 | ![Restock requests](docs/screenshots/restock-requests.png) **Requests**: Order, Receive or Cancel | ![Check in](docs/screenshots/check-in.png) **Check-in**: return loans, with a QR scan option |
+| ![My prints](docs/screenshots/my-prints.png) **My prints** (Printing app): your queued and sent jobs | <img src="docs/screenshots/phone-menu.png" alt="Phone menu" width="220"> **On a phone**: bottom bar with Scan in the middle, full menu behind More |
 
 ## How QR codes work
 
