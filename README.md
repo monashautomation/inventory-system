@@ -1,23 +1,98 @@
 # Inventory Management System
 
-A modern, full-stack inventory management system built with React, TypeScript, tRPC, and PostgreSQL. Features comprehensive asset tracking, consumables management, transaction history, QR code scanning, and AI-powered chat assistance.
+A full-stack inventory and 3D-printing system for student teams, built with React, TypeScript, tRPC, and PostgreSQL. It is really two apps in one codebase that share sign-in, users and the database:
+
+- **Inventory** (`/dashboard`): assets, consumables, loans, restock requests, activity log
+- **Printing** (`/printing`): printer monitoring, the Bambu print queue, G-code sending, print history and statistics
+
+Both are launched from [Authentik](https://goauthentik.io/), which is also the only sign-in method. The sidebar shows the navigation for whichever app you are in, with a switcher and an "All apps" link back to the Authentik library.
 
 ## Features
 
+### Inventory
+
 - **Asset Management**: Track items with serial numbers, locations, images, tags, and cost
-- **Consumables Tracking**: Monitor available and total quantities of consumable items
-- **Transaction System**: Record loans, returns, and other item movements with full audit trail
-- **QR Code Support**: Generate and scan QR codes for quick item identification
-- **Location Hierarchy**: Organize items using nested location structures
-- **Tag System**: Categorize items with color-coded tags and tag groups
-- **User Management**: Role-based access control with user groups and ban system
-- **Shopping Cart**: Add multiple items for batch operations
-- **Check-in System**: Streamlined process for returning items
-- **Dashboard**: Visual analytics with charts and statistics
-- **AI Chat Assistant**: Integrated chat interface powered by LangChain and Ollama
-- **Dark Mode**: Automatic theme switching based on system preferences
-- **G-code Printing**: Upload, hash, archive, and dispatch G-code jobs to configured Prusa/Bambu printers by IP
-- **Print Validation & Audit**: Enforces G-code extension/size checks and stores per-user print job statuses
+- **Consumables**: Monitor available and total quantities, restock, and track suppliers
+- **Loans**: Cart-based checkout, check-in, and a full per-item transaction history
+- **Restock Requests**: Members request consumables; admins mark them Ordered, Received or Cancelled (with notifications)
+- **QR Codes**: Generate item labels and scan QR codes for quick lookup, checkout and return
+- **Location Hierarchy and Tags**: Nested locations, color-coded tags and tag groups
+- **Members**: Role-based access, user groups, bans, and member sync
+- **Dashboard**: A personal Home tab and, for admins, an Admin overview tab with charts, low stock and the audit feed
+- **Activity and Audit Log**: Transactions plus audit events (requests, API tokens)
+- **Kiosk**: Shared terminals for student-ID checkout/check-in, after-hours lab access logging and printer status
+- **AI Assistant** (`/chat`): Chat interface powered by LangChain and Ollama, with tool access through the MCP endpoint
+
+### Printing
+
+- **Print Queue**: Upload a 3MF, pick a printer or model, map AMS filaments and queue it on Bambu printers through BamBuddy
+- **Send G-code**: Upload, hash, archive and dispatch G-code to configured Prusa printers, with extension and size validation (Bambu jobs go through the Print Queue)
+- **My prints**: Your queued and sent jobs with status, plus reprint for stored files
+- **Monitor and Cameras**: Live telemetry, pause/resume/cancel, AMS spool assignment, build-plate clearing and print ratings, and a webcam wall
+- **History and Stats**: Per-job log, filament usage by person and project, success rate, leaderboard and CSV export
+- **Failure alerts**: Failed prints post a short diagnosis to a Discord webhook
+- **Printers** (admin): Register Prusa printers; Bambu printers sync from BamBuddy
+
+### Platform
+
+- **API tokens and CLI**: API tokens (Settings → API tokens) and the read-only `maims` command-line client, see [`cli/README.md`](cli/README.md)
+- **MCP endpoint** at `/mcp` for AI integration, and a Prometheus `/metrics` endpoint
+- **Dark mode**: Follows the system preference
+
+## UI and brand
+
+The look and behaviour of both apps follows the Monash Automation brand guidelines. See [`docs/ui-brand-guidelines.md`](docs/ui-brand-guidelines.md) for the colours, fonts, button hierarchy, navigation tiers and a checklist for new screens.
+
+## Screenshots
+
+Captured from the running app with sample data (not real inventory).
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/dashboard.png) **Home**: the app's primary action, daily menu, your loans and requests | ![Admin overview](docs/screenshots/admin-overview.png) **Admin overview**: pending requests, low stock, activity |
+| ![Assets](docs/screenshots/assets.png) **Assets**: one action per row (Add to cart, Return, or none) | ![Item page](docs/screenshots/item-qr.png) **Item page**: status, a single primary action, history, QR and label printing |
+| ![Restock requests](docs/screenshots/restock-requests.png) **Requests**: Order, Receive or Cancel | ![Check in](docs/screenshots/check-in.png) **Check-in**: return loans, with a QR scan option |
+| ![My prints](docs/screenshots/my-prints.png) **My prints** (Printing app): your queued and sent jobs | <img src="docs/screenshots/phone-menu.png" alt="Phone menu" width="220"> **On a phone**: bottom bar with Scan in the middle, full menu behind More |
+
+## How QR codes work
+
+Every item has a QR code that opens that item's page, so a phone camera or the in-app scanner is the fastest way to look something up, borrow it or return it.
+
+<img src="docs/screenshots/phone-scan.png" alt="Item page on a phone after scanning" width="240" align="right">
+
+**What a QR contains.** A URL of the form `<base URL>/qr/<item id>`. The id is the item's database UUID (not its serial or name). The `/qr/*` route turns it into `/item/<id>`. The base URL is chosen on the server: `QR_BASE_URL` if set, otherwise `FRONTEND_URL` (trailing slashes are ignored).
+
+**Scanning with a phone.** Point the normal camera app at a label and tap the link. If you are signed in you land on the item page: name, serial, location, tags, whether it is in storage or on loan (and with whom), notes, cost and, for consumables, the quantity. If you are signed out you are sent to the Authentik sign-in page first, and the scanned path is carried along as `redirectTo`. A QR only ever opens a page behind sign-in, so a label on a shelf exposes no data.
+
+**Scanning inside the app.** Check-in (**Scan QR**) and the kiosk use the device camera through the ZXing library. They read the id from the `qr` path segment (or the last segment), so they keep working even if the domain changes.
+
+**Printing labels.** On an item page, pick a label type (standard, small or cable) and a quantity, then **Print**. The app sends the item to the label-printer server at `PRINTER_URL` (authorised with `PRINTER_TOKEN`), which builds and prints the sticker from the item's id, name and serial. The QR shown on the page is rendered at the highest error-correction level (H), so a scuffed or partly covered code still scans. The label-printer server builds its own QR from the item id it is sent, so configure it with the same base URL as `QR_BASE_URL`; this app does not pass the URL to it.
+
+**Keeping labels working long term**
+
+- The id is a UUID that never changes or gets reused, so renaming, moving or retagging an item does not invalidate its sticker. Deleting an item only soft-deletes it.
+- Every item also has a unique serial, and items can be looked up by it, so a damaged code is not a dead end.
+- The URL contains the site's hostname. Set `QR_BASE_URL` to a short, stable address you control and keep serving (or redirecting) it for as long as stickers are in use. If the domain ever changes, old labels still work in the in-app scanner but will not open from a phone camera unless the old domain redirects. Changing `QR_BASE_URL` only affects QR codes generated afterwards, never stickers already printed.
+- If `QR_BASE_URL` is set to something that is not a valid http(s) URL, the server logs a warning and falls back to `FRONTEND_URL`.
+- After setting up or moving the label-printer server, scan a fresh label to confirm it opens the item on the production domain.
+- Location QR codes are not implemented yet (see the TODOs in `src/server/api/routers/qr.ts`).
+
+## Key workflows
+
+1. **Borrow:** find an item in Assets (or scan it), add it to the cart, check out. Admins can also check items out on a member's behalf. Every movement is stored as an `ItemRecord`.
+2. **Return:** Check-in lists your loans; select them or scan their QR codes, then check in.
+3. **Restock:** a member requests a consumable; an admin marks it Ordered, then Received (with the quantity actually received) or Cancelled with a reason. The requester is notified and each step is written to the audit log. The Admin overview shows low stock against each consumable's minimum.
+4. **Kiosk:** on a shared terminal a student enters their ID, scans items to check them out or in, and can log after-hours lab access with a supervisor.
+
+## Routes
+
+| Area | Routes |
+|---|---|
+| Inventory | `/dashboard` (`?tab=admin` for admins), `/assets`, `/consumables`, `/consumables/requests` (admin), `/my-requests`, `/checkin`, `/cart`, `/activity`, `/members` (admin), `/item/:id`, `/qr/*`, `/chat`, `/settings` |
+| Printing | `/printing` (overview), `/printing/my-prints`, `/printing/queue`, `/printing/send`, `/printing/monitor`, `/printing/cameras`, `/printing/history`, `/printing/stats`, `/printing/printers` (admin) |
+| Kiosk | `/kiosk`, `/kiosk/home`, `/kiosk/checkout`, `/kiosk/checkin`, `/kiosk/after-hours`, `/kiosk/print-status`, `/kiosk/provision` |
+
+The old top-level print URLs (`/print`, `/print-queue`, `/print-monitor`, `/print-cam`, `/print-stats`, `/print-history`, `/printer-management`) redirect permanently to their `/printing/*` equivalents, so existing bookmarks and links keep working. Route constants live in `src/lib/printingRoutes.ts`.
 
 ## Tech Stack
 
@@ -57,7 +132,9 @@ A modern, full-stack inventory management system built with React, TypeScript, t
 ## Prerequisites
 
 - [Bun](https://bun.sh/) (v1.0 or later)
-- [Docker](https://www.docker.com/) and Docker Compose (for database)
+- [Docker](https://www.docker.com/) and Docker Compose (PostgreSQL and MinIO)
+- An [Authentik](https://goauthentik.io/) OAuth2/OpenID application for sign-in (see Authentication)
+- Optional: a BamBuddy instance for Bambu printers
 - [Node.js](https://nodejs.org/) (v18 or later) - if not using Bun
 
 ## Getting Started
@@ -77,47 +154,75 @@ bun install
 
 ### 3. Set up environment variables
 
-Create a `.env` file in the root directory:
+Copy `.env.example` to `.env` and fill it in. The main groups are:
 
 ```env
-# Database
+# Core
 DATABASE_URL="postgresql://postgres:password@localhost:5432/mydb?schema=public"
-
-# Frontend URL (for CORS)
-FRONTEND_URL="http://localhost:5173"
-
-# Server Port
+FRONTEND_URL="http://localhost:5173"   # CORS and trusted origin
+QR_BASE_URL=""                         # optional: base URL encoded in item QR codes (defaults to FRONTEND_URL)
 PORT=3000
+BETTER_AUTH_URL="http://localhost:3000"
+BETTER_AUTH_SECRET=""
 
-# MCP Password (for Model Context Protocol endpoint)
+# Sign-in (Authentik OAuth2/OpenID application with slug "inventory-system")
+AUTHENTIK_CLIENT_ID=""
+AUTHENTIK_CLIENT_SECRET=""
+
+# Kiosk terminals
+KIOSK_SECRET=""
+VITE_KIOSK_SECRET=""
+
+# AI assistant and MCP
+OLLAMA_URL=""
+OLLAMA_MODEL=""
+OLLAMA_AUTH_TOKEN=""
+MCP_ENDPOINT=""
 MCP_PASSWORD="your-secure-password-here"
 
-# Better Auth (add your auth configuration)
-# See Better Auth documentation for required variables
+# G-code storage (MinIO / S3)
+S3_ENDPOINT="http://localhost:9000"
+S3_BUCKET="gcode-vault"
+S3_ACCESS_KEY_ID="admin"
+S3_SECRET_ACCESS_KEY="password123"
 
-# Optional: Bambu dispatch bridge webhook (required for BAMBU printer type dispatch)
-BAMBU_BRIDGE_URL="http://localhost:8081/bambu/dispatch"
+# Bambu printers via BamBuddy
+BAMBUDDY_ENDPOINT=""
+BAMBUDDY_API_KEY=""
 
-# Optional: Prometheus metrics endpoint (/metrics)
-METRICS_ENABLED=true
-METRICS_USERNAME="metrics-user"
-METRICS_PASSWORD="metrics-pass"
+# Label printer server (item QR labels)
+PRINTER_URL="http://localhost:6767/printer"
+PRINTER_TOKEN=""
+
+# Notion / Discord integrations (all required to enable them)
+NOTION_TOKEN=""
+MEMBERS_DB_ID=""
+PROJECTS_DB_ID=""
+TAMARIN_API_BEARER_TOKEN=""
+AFTER_HOURS_DISCORD_WEBHOOK=""
+AFTER_HOURS_GUILD_ID=""
+AFTER_HOURS_BOT_TOKEN=""
+PRINT_FAILURES_DISCORD_WEBHOOK=""      # inert when unset
+
+# Prometheus metrics (/metrics)
+METRICS_ENABLED=false
+METRICS_USERNAME=""
+METRICS_PASSWORD=""
 METRICS_PRUSA_ENABLED=true
 METRICS_BAMBU_ENABLED=true
-
-# Bambu metrics source:
-# - legacy: mapped bambulab_* metrics from Bambuddy /status polling
-# - prometheus: pass through Bambuddy /api/v1/metrics metrics directly
-METRICS_BAMBU_SOURCE="prometheus"
+METRICS_BAMBU_SOURCE="prometheus"      # or "legacy"
 ```
+
+Several variables are only read in specific places (for example `PRINTER_PROFILES_JSON`, `UPTIME_KUMA_*` for the status banner, and `LOG_LEVEL`); search the code for `process.env` if you need the full list.
 
 ### 4. Start the database
 
 ```bash
 bun run db
+docker-compose up -d minio createbuckets   # G-code storage (optional unless you use Send G-code)
 ```
 
-This will start a PostgreSQL database using Docker Compose.
+`bun run db` starts PostgreSQL using Docker Compose. MinIO provides the `gcode-vault` bucket used for stored G-code files.
 
 ### 5. Run database migrations
 
@@ -157,6 +262,7 @@ This will start both the frontend (Vite) and backend (Hono) servers concurrently
 - `bun run db` - Start PostgreSQL database with Docker
 - `bun run backend` - Start only the backend server
 - `bun run generate` - Generate sample data
+- `bun run seed:printers` - Seed printers (see `config/printers.example.json`)
 - `bun run test` - Run tests
 - `bun run test:watch` - Run tests in watch mode
 - `bun run lint` - Lint code
@@ -169,40 +275,52 @@ inventory-system/
 ├── prisma/
 │   ├── schema.prisma          # Database schema
 │   └── migrations/            # Database migrations
-├── server/
-│   ├── index.ts               # Hono server entry point
-│   ├── api/                   # tRPC routers
-│   ├── auth/                  # Authentication configuration
-│   └── trpc/                  # tRPC setup
+├── server/                    # Hono entry point (index.ts), health, metrics, seed scripts
+├── cli/                       # maims: Rust command-line client
+├── config/                    # Example printer config
 ├── src/
-│   ├── pages/                 # Page components
-│   ├── components/            # Reusable components
-│   ├── server/                # tRPC server-side code
+│   ├── pages/                 # Page components (inventory, printing, kiosk)
+│   ├── layouts/               # App shell, Items, and the Printing layout
+│   ├── components/            # Reusable components (sidebar, print-queue, print-stats, ...)
+│   ├── server/                # tRPC routers (api/routers), lib (BamBuddy, pollers), schema, auth
 │   ├── client/                # tRPC client setup
 │   ├── auth/                  # Auth components and providers
-│   ├── contexts/              # React contexts
+│   ├── contexts/              # React contexts (cart, kiosk)
 │   ├── hooks/                 # Custom React hooks
-│   └── lib/                   # Utility functions
+│   └── lib/                   # Utilities, route constants, workspaces
 ├── public/                    # Static assets
-└── docker-compose.yml         # Docker configuration
+└── docker-compose.yml         # Postgres + MinIO for local development
 ```
 
 ## Database Schema
 
-The system uses the following main models:
+Everything lives in one PostgreSQL database and one Prisma schema. The two apps share only users, sessions, notifications, the audit log and API tokens; no print table references an inventory table.
 
-- **Item**: Core inventory items with serial numbers, locations, tags, and cost
-- **Consumable**: Tracks available/total quantities for consumable items
-- **Location**: Hierarchical location structure
-- **Tag**: Categorization system with colors and groups
-- **User**: User accounts with groups, roles, and ban management
-- **ItemRecord**: Transaction history for all item movements
-- **Group**: User groups with parent-child relationships
+**Inventory**
+
+- **Item**, **Consumable**, **ConsumableSupplier**, **ConsumableRequest**: items, stock and the restock request lifecycle
+- **ItemRecord**: transaction history for loans, returns and consumption
+- **Location**, **Tag**, **TagGroup**, **Group**: hierarchy, categorisation and user groups
 - **Chat**: AI conversation storage
+
+**Printing**
+
+- **Printer**, **GcodePrintJob**: registered printers and G-code jobs sent directly
+- **PrintQueueSubmission**: Bambu queue jobs, linked to BamBuddy queue items, with captured filament and status
+- **PrintRating**: post-print ratings
+
+**Shared**
+
+- **User**, **Session**, **Account**, **Verification**: accounts and sign-in
+- **Notification**, **AuditLog**, **ApiToken**
 
 ## Authentication
 
-The system uses [Better Auth](https://www.better-auth.com/) for authentication. Configure your auth providers in the server configuration.
+Sign-in uses [Better Auth](https://www.better-auth.com/) with a single generic OAuth provider, Authentik (`providerId: authentik`). Email and password sign-in is disabled. The OIDC discovery URL is set in `src/server/auth.ts`; create an OAuth2/OpenID provider and application in Authentik with the slug `inventory-system`, and set the redirect URI to `<BETTER_AUTH_URL>/api/auth/oauth2/callback/authentik`.
+
+**Authentik tiles:** the app ships two launch URLs, so you can add two tiles that share the same provider: **Inventory** at `/dashboard` and **Printing** at `/printing`. The logos are in `src/assets/ma-inventory.svg` and `src/assets/ma-3d-print.svg` for use as tile icons.
+
+Roles (`admin` or user) are stored in the database and checked by the API and the UI. Kiosk terminals authenticate with the `x-kiosk-token` header, validated against `KIOSK_SECRET`.
 
 ## API Documentation
 
@@ -224,6 +342,8 @@ The application will be available at:
 
 - Frontend: http://localhost:4173
 - Backend: http://localhost:3000
+
+The container starts with `prisma db push` and then `bun run start`, so the schema is applied on startup. Run only one replica at a time during a rollout, or move schema changes to a pre-deploy job, so two instances never push at once.
 
 ## Development
 

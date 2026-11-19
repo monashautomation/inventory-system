@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader } from "@/components/printing/PageHeader";
 import { useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { trpc } from "@/client/trpc";
@@ -311,10 +312,10 @@ export default function PrintHistory() {
   return (
     <div className="bg-background p-6 md:p-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Print History</h1>
-        <p className="text-muted-foreground">
-          Complete record of all prints across the team
-        </p>
+        <PageHeader
+          title="History"
+          description="Complete record of all prints across the team"
+        />
       </div>
 
       {error && (

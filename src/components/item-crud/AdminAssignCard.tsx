@@ -71,6 +71,7 @@ export function AdminAssignCard({ itemId, onSuccess }: AdminAssignCardProps) {
         </Select>
 
         <Button
+          variant="outline"
           className="w-full"
           size="lg"
           disabled={!selectedUserId || assignMut.isPending}

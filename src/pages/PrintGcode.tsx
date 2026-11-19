@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/printing/PageHeader";
 import { PRINTING_ROUTES } from "@/lib/printingRoutes";
 import {
   type FormEvent,
@@ -231,12 +232,10 @@ export default function PrintGcode() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Print</h1>
-        <p className="text-muted-foreground">
-          Select a printer, choose a file, and hit print.
-        </p>
-      </div>
+      <PageHeader
+        title="Send G-code"
+        description="Select a printer, choose a file, and hit print. Bambu jobs go through the Queue."
+      />
 
       <Card>
         <CardHeader>

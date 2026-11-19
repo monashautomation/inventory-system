@@ -34,14 +34,14 @@ export function AdminRevokeCard({
         <Button
           className="w-full"
           size="lg"
-          variant="destructive"
+          variant="danger"
           disabled={revokeMut.isPending}
           onClick={() =>
             revokeMut.mutate({ targetUserId, cart: [{ itemId, quantity: 1 }] })
           }
         >
           <UserX className="h-4 w-4" />
-          Check In Item
+          Revoke and check in
         </Button>
       </CardContent>
     </Card>

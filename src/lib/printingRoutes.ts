@@ -2,6 +2,7 @@
 export const PRINTING_ROUTES = {
   root: "/printing",
   send: "/printing/send",
+  myPrints: "/printing/my-prints",
   queue: "/printing/queue",
   monitor: "/printing/monitor",
   cameras: "/printing/cameras",

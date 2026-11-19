@@ -97,14 +97,14 @@ export const PrintButton = ({ itemId }: PrintButtonProps) => {
           min={1}
         />
         <Button
-          size="lg"
+          variant="outline"
           onClick={handlePrint}
           disabled={
             labelMut.isPending || !isValidQuantity || quantity > MAX_VALUE
           }
         >
           <Printer />
-          {labelMut.isPending ? "Printing..." : "Print"}
+          {labelMut.isPending ? "Printing..." : "Print label"}
         </Button>
       </div>
     </div>

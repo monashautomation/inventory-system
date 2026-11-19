@@ -196,7 +196,11 @@ export function ApiTokensCard() {
                 <code className="flex-1 overflow-x-auto rounded bg-muted p-3 font-mono text-xs">
                   {createdSecret}
                 </code>
-                <Button size="sm" onClick={() => void copySecret()}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copySecret()}
+                >
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authClient } from "@/auth/client";
 import { trpc } from "@/client/trpc";
 import { toast } from "sonner";
@@ -10,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserAvatar } from "@/components/user/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -416,6 +416,12 @@ export const formatConsumableTotalCost = (totalCost: number): string =>
 export default function Dashboard() {
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user.role === "admin";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "admin" ? "admin" : "home";
+  const changeTab = (value: string) =>
+    setSearchParams(value === "admin" ? { tab: "admin" } : {}, {
+      replace: true,
+    });
 
   const { data: myPending } = trpc.consumableRequest.myPendingCount.useQuery();
   const { data: unread } = trpc.notification.unreadCount.useQuery();
@@ -434,11 +440,77 @@ export default function Dashboard() {
       enabled: isAdmin,
     });
 
+  const homeContent = (
+    <>
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            label: "Check out items",
+            hint: "Browse assets",
+            to: "/assets",
+            icon: Archive,
+          },
+          {
+            label: "Return items",
+            hint: "Check in your loans",
+            to: "/checkin",
+            icon: Package,
+          },
+          {
+            label: "Request a consumable",
+            hint: "Ask for restock",
+            to: "/consumables",
+            icon: ShoppingBag,
+          },
+        ].map((q) => (
+          <Link key={q.to} to={q.to}>
+            <Card className="h-full transition-colors hover:bg-accent">
+              <CardContent className="flex items-center gap-3 p-4">
+                <q.icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <div>
+                  <div className="font-medium">{q.label}</div>
+                  <div className="text-sm text-muted-foreground">{q.hint}</div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {/* User stat cards */}
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <StatCard
+          title="My Pending Requests"
+          value={myPending?.count ?? 0}
+          icon={ShoppingBag}
+          highlight={myPending?.count ? "text-amber-500" : undefined}
+        />
+        <StatCard
+          title="My Active Loans"
+          value={loans?.length ?? 0}
+          icon={Package}
+        />
+        <StatCard
+          title="Unread Notifications"
+          value={unread?.count ?? 0}
+          icon={Bell}
+          highlight={unread?.count ? "text-blue-500" : undefined}
+        />
+      </div>
+
+      {/* User cards */}
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
+        <MyRequestsCard />
+        <MyLoansCard />
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <div className="p-6 md:p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <h1 className="text-3xl font-bold">Home</h1>
           {session?.user.name && (
             <p className="text-muted-foreground">
               Welcome back, {session.user.name}.
@@ -446,93 +518,75 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* User stat cards */}
-        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
-          <StatCard
-            title="My Pending Requests"
-            value={myPending?.count ?? 0}
-            icon={ShoppingBag}
-            highlight={myPending?.count ? "text-amber-500" : undefined}
-          />
-          <StatCard
-            title="My Active Loans"
-            value={loans?.length ?? 0}
-            icon={Package}
-          />
-          <StatCard
-            title="Unread Notifications"
-            value={unread?.count ?? 0}
-            icon={Bell}
-            highlight={unread?.count ? "text-blue-500" : undefined}
-          />
-        </div>
+        {isAdmin ? (
+          <Tabs value={tab} onValueChange={changeTab}>
+            <TabsList className="mb-6">
+              <TabsTrigger value="home">Home</TabsTrigger>
+              <TabsTrigger value="admin">
+                Admin overview
+                {statusCounts?.PENDING ? (
+                  <span className="ml-2 rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                    {statusCounts.PENDING}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="home">{homeContent}</TabsContent>
+            <TabsContent value="admin">
+              <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard
+                  title="Pending Requests"
+                  value={statusCounts?.PENDING ?? 0}
+                  icon={Clock}
+                  highlight={
+                    statusCounts?.PENDING ? "text-amber-500" : undefined
+                  }
+                />
+                <StatCard
+                  title="Ordered"
+                  value={statusCounts?.ORDERED ?? 0}
+                  icon={ShoppingBag}
+                  highlight="text-blue-500"
+                />
+                <StatCard
+                  title="Total Items"
+                  value={inventoryStats?.total ?? 0}
+                  icon={Archive}
+                />
+                <StatCard
+                  title="Consumable Units"
+                  value={inventoryStats?.available ?? 0}
+                  icon={PackageSearch}
+                />
+              </div>
 
-        {/* User cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-2">
-          <MyRequestsCard />
-          <MyLoansCard />
-        </div>
+              <div className="mb-4 grid gap-4 md:grid-cols-2">
+                <AdminPendingRequestsCard />
+                <LowStockCard />
+              </div>
 
-        {/* Admin section */}
-        {isAdmin && (
-          <>
-            <div className="mb-6 flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                Admin Overview
-              </span>
-              <Separator className="flex-1" />
-            </div>
-
-            <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-              <StatCard
-                title="Pending Requests"
-                value={statusCounts?.PENDING ?? 0}
-                icon={Clock}
-                highlight={statusCounts?.PENDING ? "text-amber-500" : undefined}
-              />
-              <StatCard
-                title="Ordered"
-                value={statusCounts?.ORDERED ?? 0}
-                icon={ShoppingBag}
-                highlight="text-blue-500"
-              />
-              <StatCard
-                title="Total Items"
-                value={inventoryStats?.total ?? 0}
-                icon={Archive}
-              />
-              <StatCard
-                title="Consumable Units"
-                value={inventoryStats?.available ?? 0}
-                icon={PackageSearch}
-              />
-            </div>
-
-            <div className="mb-4 grid gap-4 md:grid-cols-2">
-              <AdminPendingRequestsCard />
-              <LowStockCard />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <AuditLogCard />
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">
-                    Inventory by Location
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ChartBarDynamic
-                    data={inventoryByLocation ?? []}
-                    dataKey="itemCount"
-                    nameKey="locationName"
-                    color="#10b981"
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          </>
+              <div className="grid gap-4 md:grid-cols-2">
+                <AuditLogCard />
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      Inventory by Location
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartBarDynamic
+                      data={inventoryByLocation ?? []}
+                      dataKey="itemCount"
+                      nameKey="locationName"
+                      color="#10b981"
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        ) : (
+          homeContent
         )}
       </div>
     </div>

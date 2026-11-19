@@ -1,6 +1,29 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Monash Automation primary typeface (SIL OFL, see assets/fonts/blinker/OFL.txt) */
+@font-face {
+  font-family: "Blinker";
+  src: url("./assets/fonts/blinker/Blinker-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Blinker";
+  src: url("./assets/fonts/blinker/Blinker-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Blinker";
+  src: url("./assets/fonts/blinker/Blinker-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
@@ -56,75 +79,105 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-danger-bg: var(--danger-bg);
+  --color-link: var(--link);
+  --font-sans: "Blinker", "Source Sans Pro", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
 }
 
+/* Monash Automation brand tokens. See docs/ui-brand-guidelines.md.
+   Onyx #231F20, Platinum #F5F5F7, Automation Blue #1393FF (accent only). */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #f5f5f7;
+  --foreground: #231f20;
+  --card: #ffffff;
+  --card-foreground: #231f20;
+  --popover: #ffffff;
+  --popover-foreground: #231f20;
+  --primary: #1393ff;
+  --primary-foreground: #231f20;
+  --secondary: #ededf0;
+  --secondary-foreground: #231f20;
+  --muted: #ededf0;
+  --muted-foreground: #6b6869;
+  --accent: #ededf0;
+  --accent-foreground: #231f20;
+  --destructive: #c0262d;
+  --border: #d9d8db;
+  --input: #d9d8db;
+  --ring: #1393ff;
+  --chart-1: #1393ff;
+  --chart-2: #15774a;
+  --chart-3: #8f5600;
+  --chart-4: #623cea;
+  --chart-5: #c0262d;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #231f20;
+  --sidebar-primary: #1393ff;
+  --sidebar-primary-foreground: #231f20;
+  --sidebar-accent: #ededf0;
+  --sidebar-accent-foreground: #231f20;
+  --sidebar-border: #d9d8db;
+  --sidebar-ring: #1393ff;
+  /* Status colours: meaning, not decoration. Blue = normal/informational,
+     red only for things that need action. */
+  --success: #15774a;
+  --success-bg: #e3f3eb;
+  --warning: #8f5600;
+  --warning-bg: #fff1d6;
+  --info: #0a6fd1;
+  --info-bg: #e1f1ff;
+  --danger-bg: #fde6e7;
+  --link: #0a6fd1;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #1a1718;
+  --foreground: #f5f5f7;
+  --card: #262223;
+  --card-foreground: #f5f5f7;
+  --popover: #262223;
+  --popover-foreground: #f5f5f7;
+  --primary: #1393ff;
+  --primary-foreground: #231f20;
+  --secondary: #2f2a2b;
+  --secondary-foreground: #f5f5f7;
+  --muted: #2f2a2b;
+  --muted-foreground: #a9a5a6;
+  --accent: #2f2a2b;
+  --accent-foreground: #f5f5f7;
+  --destructive: #d43d43;
+  --border: rgb(255 255 255 / 12%);
+  --input: rgb(255 255 255 / 16%);
+  --ring: #1393ff;
+  --chart-1: #4db0ff;
+  --chart-2: #3fcf8e;
+  --chart-3: #ffc759;
+  --chart-4: #9b82f5;
+  --chart-5: #ff6b70;
+  --sidebar: #262223;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #1393ff;
+  --sidebar-primary-foreground: #231f20;
+  --sidebar-accent: #2f2a2b;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: rgb(255 255 255 / 12%);
+  --sidebar-ring: #1393ff;
+  --success: #3fcf8e;
+  --success-bg: #16332a;
+  --warning: #ffc759;
+  --warning-bg: #3a2e12;
+  --info: #4db0ff;
+  --info-bg: #12304d;
+  --danger-bg: #3c1b1d;
+  --link: #4db0ff;
 }
 
 @layer base {

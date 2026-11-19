@@ -17,7 +17,25 @@ import { PrintButton } from "@/components/print-label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Pencil, X, Check, Upload, Trash2 } from "lucide-react";
+import {
+  Pencil,
+  X,
+  Check,
+  Upload,
+  Trash2,
+  MoreHorizontal,
+  ArrowRightToLine,
+  ShoppingCart,
+  Link2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ItemStatusBadge } from "@/components/data-table/item-status-badge";
+import { getLoanState } from "@/lib/loan";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,6 +89,28 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
     { id: itemId },
     { enabled: !!data },
   );
+
+  const utils = trpc.useUtils();
+  const afterLoanChange = async () => {
+    await refetch();
+    callback?.();
+    void utils.item.list.invalidate();
+    void utils.itemRecord.getUserLoanedItems.invalidate();
+  };
+  const checkoutMut = trpc.item.checkoutCart.useMutation({
+    onSuccess: async () => {
+      toast.success("Checked out. It is now on loan to you.");
+      await afterLoanChange();
+    },
+    onError: (err) => toast.error(`Could not check out: ${err.message}`),
+  });
+  const checkinMut = trpc.item.checkinCart.useMutation({
+    onSuccess: async () => {
+      toast.success("Checked in. Thanks for returning it.");
+      await afterLoanChange();
+    },
+    onError: (err) => toast.error(`Could not check in: ${err.message}`),
+  });
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -194,7 +234,17 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
   )[0];
   const isLabUse = data.stored === false;
   const isInUse = latestRecord?.loaned ?? false;
-  const statusLabel = isLabUse ? "Lab Use" : isInUse ? "On Loan" : "In Storage";
+  const { state: loanState, heldByMe } = getLoanState(data, session?.user.id);
+  const isAdmin = session?.user.role === "admin";
+  const canCheckOut = !data.consumable && loanState === "stored";
+  const canCheckIn = !data.consumable && loanState === "loaned" && heldByMe;
+  const recentRecords = (data.ItemRecords ?? [])
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .slice(0, 5);
 
   return (
     <div className="p-2 max-w-6xl mx-auto space-y-2">
@@ -202,17 +252,29 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
         {/* Main Content Card */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-2xl">{data?.name}</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Serial: {data?.serial}
-              </p>
+            <div className="space-y-2">
+              <div>
+                <CardTitle className="text-2xl">{data?.name}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {data?.serial}
+                  {data?.location?.name ? ` · ${data.location.name}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ItemStatusBadge state={loanState} heldByMe={heldByMe} />
+                {loanState === "loaned" &&
+                latestRecord?.actionBy &&
+                !heldByMe ? (
+                  <span className="text-sm text-muted-foreground">
+                    with {latestRecord.actionBy.name}
+                  </span>
+                ) : null}
+              </div>
             </div>
 
-            {/* Image next to Serial */}
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex items-start gap-3">
               {data?.image && (
-                <div className="relative h-24 w-24">
+                <div className="relative h-20 w-20">
                   {isImgLoading && (
                     <Skeleton className="h-full w-full rounded-md bg-muted" />
                   )}
@@ -222,7 +284,7 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                         loading="lazy"
                         src={imageUrl}
                         alt={`${data.name} preview`}
-                        className={`max-h-24 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
+                        className={`max-h-20 rounded-md object-contain border ${isImgLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
                         onLoad={() => setIsImgLoading(false)}
                         onError={() => setIsImgLoading(false)}
                       />
@@ -230,8 +292,29 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                   )}
                 </div>
               )}
-              {session?.user.role === "admin" && (
-                <div className="flex gap-1">
+
+              {/* One primary action, based on what you can do with this item. */}
+              {canCheckOut && (
+                <Button
+                  onClick={() => checkoutMut.mutate([{ itemId, quantity: 1 }])}
+                  disabled={checkoutMut.isPending}
+                >
+                  <ShoppingCart />
+                  {checkoutMut.isPending ? "Checking out..." : "Check out"}
+                </Button>
+              )}
+              {canCheckIn && (
+                <Button
+                  onClick={() => checkinMut.mutate([{ itemId, quantity: 1 }])}
+                  disabled={checkinMut.isPending}
+                >
+                  <ArrowRightToLine />
+                  {checkinMut.isPending ? "Checking in..." : "Check in"}
+                </Button>
+              )}
+
+              {isAdmin && (
+                <>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -239,26 +322,37 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                     className="hidden"
                     onChange={handleImageUpload}
                   />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isUploading}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-3.5 w-3.5 mr-1" />
-                    {data?.image ? "Replace" : "Upload Image"}
-                  </Button>
-                  {data?.image && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={isUploading}
-                      onClick={handleImageDelete}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label="More actions"
+                      >
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        disabled={isUploading}
+                        onSelect={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {data?.image ? "Replace image" : "Upload image"}
+                      </DropdownMenuItem>
+                      {data?.image && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isUploading}
+                          onSelect={() => void handleImageDelete()}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove image
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
               )}
             </div>
           </CardHeader>
@@ -271,27 +365,6 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                   label="Location"
                   value={data?.location?.name ?? "N/A"}
                 />
-                <InfoRow
-                  label="Status"
-                  value={
-                    <Badge
-                      variant={
-                        isLabUse
-                          ? "default"
-                          : isInUse
-                            ? "destructive"
-                            : "secondary"
-                      }
-                      className={
-                        isLabUse
-                          ? "bg-blue-600 text-white hover:bg-blue-700"
-                          : ""
-                      }
-                    >
-                      {statusLabel}
-                    </Badge>
-                  }
-                />
                 {isInUse && latestRecord?.actionBy && (
                   <InfoRow
                     label="Loaned To"
@@ -301,6 +374,34 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
                 <InfoRow label="Cost" value={`$${data?.cost}`} />
               </div>
             </Section>
+
+            {/* Recent loan history */}
+            {!data.consumable && (
+              <Section title="History">
+                {recentRecords.length ? (
+                  <ul className="mt-2 divide-y text-sm">
+                    {recentRecords.map((r) => (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between gap-3 py-1.5"
+                      >
+                        <span>
+                          {r.loaned ? "Checked out" : "Returned"} by{" "}
+                          {r.actionBy?.name ?? "someone"}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {new Date(r.createdAt).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No loans yet.
+                  </p>
+                )}
+              </Section>
+            )}
 
             {/* Tags */}
             <Section title="Tags">
@@ -365,35 +466,47 @@ const ItemDetails = ({ passedId, callback }: ItemDetailsProps) => {
         </Card>
 
         <div className="lg:col-span-1 space-y-9">
-          {/* Sidebar - QR Code */}
-          <Card className="lg:col-span-1 h-fit sticky top-6">
+          {/* Sidebar - QR code and label printing */}
+          <Card className="lg:col-span-1 h-fit">
             <CardHeader>
-              <CardTitle>Scan QR Code</CardTitle>
+              <CardTitle className="text-base">QR code</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col items-center">
+            <CardContent className="flex flex-col items-center gap-3">
               {qrIsLoading || !qrData ? (
-                <Skeleton className="h-[180px] w-[180px]" />
+                <Skeleton className="h-[140px] w-[140px]" />
               ) : typeof qrData === "string" ? (
                 <QRCodeCanvas
                   value={qrData}
-                  size={180}
+                  size={140}
                   bgColor="#ffffff"
                   fgColor="#000000"
                   level="H"
                   includeMargin
                 />
               ) : (
-                <div className="text-red-500">
+                <div className="text-destructive">
                   {qrData?.error || "Failed to load QR code"}
                 </div>
               )}
-              <p className="text-sm text-muted-foreground mt-2 break-all text-center">
-                {data.id}
-              </p>
+              {typeof qrData === "string" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-link"
+                  onClick={() => {
+                    navigator.clipboard
+                      .writeText(qrData)
+                      .then(() => toast.success("Link copied."))
+                      .catch(() => toast.error("Could not copy the link."));
+                  }}
+                >
+                  <Link2 />
+                  Copy link
+                </Button>
+              )}
+              <PrintButton itemId={itemId} />
             </CardContent>
           </Card>
-
-          <PrintButton itemId={itemId} />
 
           {session?.user.role === "admin" && data.consumable && (
             <Card>

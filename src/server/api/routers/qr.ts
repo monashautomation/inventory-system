@@ -1,7 +1,7 @@
 import { router, userProcedure } from "@/server/trpc";
 import { prisma } from "@/server/lib/prisma";
 import { z } from "zod";
-import { getBaseUrl } from "@/lib/utils";
+import { buildQrUrl, getQrBaseUrl } from "@/server/lib/qrUrl";
 import { logger as rootLogger } from "@/server/lib/logger";
 
 const logger = rootLogger.child({ module: "router:qr" });
@@ -19,7 +19,7 @@ export const qrRouter = router({
     .query(async ({ input }) => {
       //TODO: Make this generate location qr codes
       const item = await prisma.item.findUnique({ where: { id: input.id } });
-      if (item) return `${getBaseUrl()}qr/${item.id}`;
+      if (item) return buildQrUrl(getQrBaseUrl(), item.id);
       else
         return {
           ok: false as const,

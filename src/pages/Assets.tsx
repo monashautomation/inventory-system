@@ -161,6 +161,7 @@ const Assets = () => {
         getCartQuantity,
         isDeleting: deleteMut.isPending,
         isAdmin,
+        currentUserId: session?.user.id,
         disableFieldSorting: true,
       }),
     [
@@ -171,6 +172,7 @@ const Assets = () => {
       getCartQuantity,
       deleteMut.isPending,
       isAdmin,
+      session?.user.id,
     ],
   );
 
@@ -249,6 +251,7 @@ const Assets = () => {
             getCartQuantity={getCartQuantity}
             isDeleting={deleteMut.isPending}
             isAdmin={isAdmin}
+            currentUserId={session?.user.id}
           />
         )}
       />

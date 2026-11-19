@@ -84,7 +84,7 @@ export default function RestockForm({ item, callback }: RestockFormProps) {
           )}
         />
 
-        <Button type="submit" className="w-full" size="lg">
+        <Button type="submit" variant="outline" className="w-full" size="lg">
           <Plus className="h-4 w-4" />
           Add to Stock
         </Button>
