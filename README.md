@@ -2,7 +2,7 @@
 
 A full-stack inventory and 3D-printing system for student teams, built with React, TypeScript, tRPC, and PostgreSQL. It is really two apps in one codebase that share sign-in, users and the database:
 
-- **Inventory** (`/dashboard`): assets, consumables, loans, restock requests, activity log
+- **Inventory** (`/dashboard`): equipment & assets, consumables, loans, restock requests, activity log
 - **Printing** (`/printing`): printer monitoring, the Bambu print queue, G-code sending, print history and statistics
 
 Both are launched from [Authentik](https://goauthentik.io/), which is also the only sign-in method. The sidebar shows the navigation for whichever app you are in, with a switcher and an "All apps" link back to the Authentik library.
@@ -13,7 +13,7 @@ Both are launched from [Authentik](https://goauthentik.io/), which is also the o
 
 - **Asset Management**: Track items with serial numbers, locations, images, tags, and cost
 - **Consumables**: Monitor available and total quantities, restock, and track suppliers
-- **Loans**: Cart-based checkout, check-in, and a full per-item transaction history
+- **Loans**: Add equipment to a loan, check out, check in, and a full per-item transaction history
 - **Restock Requests**: Members request consumables; admins mark them Ordered, Received or Cancelled (with notifications)
 - **QR Codes**: Generate item labels and scan QR codes for quick lookup, checkout and return
 - **Location Hierarchy and Tags**: Nested locations, color-coded tags and tag groups
@@ -50,7 +50,7 @@ Captured from the running app with sample data (not real inventory).
 | | |
 |---|---|
 | ![Home](docs/screenshots/dashboard.png) **Home**: the app's primary action, daily menu, your loans and requests | ![Admin overview](docs/screenshots/admin-overview.png) **Admin overview**: pending requests, low stock, activity |
-| ![Assets](docs/screenshots/assets.png) **Assets**: one action per row (Add to cart, Return, or none) | ![Item page](docs/screenshots/item-qr.png) **Item page**: status, a single primary action, history, QR and label printing |
+| ![Assets](docs/screenshots/assets.png) **Equipment & Assets**: one action per row (Add to loan, Return, or none) | ![Item page](docs/screenshots/item-qr.png) **Item page**: status, a single primary action, history, QR and label printing |
 | ![Restock requests](docs/screenshots/restock-requests.png) **Requests**: Order, Receive or Cancel | ![Check in](docs/screenshots/check-in.png) **Check-in**: return loans, with a QR scan option |
 | ![My prints](docs/screenshots/my-prints.png) **My prints** (Printing app): your queued and sent jobs | <img src="docs/screenshots/phone-menu.png" alt="Phone menu" width="220"> **On a phone**: bottom bar with Scan in the middle, full menu behind More |
 
@@ -79,7 +79,7 @@ Every item has a QR code that opens that item's page, so a phone camera or the i
 
 ## Key workflows
 
-1. **Borrow:** find an item in Assets (or scan it), add it to the cart, check out. Admins can also check items out on a member's behalf. Every movement is stored as an `ItemRecord`.
+1. **Borrow:** find an item in Equipment & Assets (or scan it), add it to your loan, check out. Consumables are requested instead (see Restock below). Admins can also check items out on a member's behalf. Every movement is stored as an `ItemRecord`.
 2. **Return:** Check-in lists your loans; select them or scan their QR codes, then check in.
 3. **Restock:** a member requests a consumable; an admin marks it Ordered, then Received (with the quantity actually received) or Cancelled with a reason. The requester is notified and each step is written to the audit log. The Admin overview shows low stock against each consumable's minimum.
 4. **Kiosk:** on a shared terminal a student enters their ID, scans items to check them out or in, and can log after-hours lab access with a supervisor.

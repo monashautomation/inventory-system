@@ -10,6 +10,7 @@ Inventory and Printing are **tools**, not programs, so both use the Monash Autom
 |---|---|---|
 | 2026-11-17 | **The primary button is Automation Blue** (`#1393FF`) **with Onyx text** (`#231F20`). | The guidebook asks for Blue as the accent. Onyx on Blue is 5.2 : 1 contrast and passes; white on Blue is 3.2 : 1 and does not, so never put white text on Blue. |
 | 2026-11-17 | **Printing has no program colour.** Both apps use Onyx, Platinum and Blue. | The guidebook reserves program colours (yellow, purple, green, coral) for program-specific work. These apps are tools, so they stay on the main palette. |
+| 2026-11-19 | **Assets is renamed "Equipment & Assets"**, and equipment uses **"Add to loan"**, not "Add to cart". The cart is organised in sections; today it has one, **Equipment on loan**. | Equipment is borrowed and returned, so "loan" is the accurate word. Sections leave room for more kinds of items later. |
 | 2026-11-17 | Navigation is tiered by how often places are used; one primary action per screen; one action per table row. | Keeps the apps simple. Daily things are visible, rare things are one click away. |
 
 If you want to change one of these, add a new row with the date and reason instead of editing the old one.
@@ -81,7 +82,7 @@ Items are grouped by how often they are used. Keep the daily list to **four item
 | | Inventory | Printing |
 |---|---|---|
 | **Primary action** | Scan item | New print |
-| **Daily** | Home, Assets, Check in, Consumables | Overview, Monitor, Queue, My prints |
+| **Daily** | Home, Equipment & Assets, Check in, Consumables | Overview, Monitor, Queue, My prints |
 | **More** (collapsed) | My requests, Activity, Chat | Send G-code, Cameras, History, Stats |
 | **Admin** (admins only) | Requests (pending badge), Members | Printers |
 | **Footer** | Cart, account, notifications, theme | account, notifications, theme |
@@ -96,10 +97,21 @@ Items are grouped by how often they are used. Keep the daily list to **four item
 
 One action per row, chosen for what is possible with that item:
 
-- In storage: **Add to cart** (primary).
+- Equipment in storage: **Add to loan** (primary). Once added it reads **On your loan**.
+- Consumables: **Request more** (primary). Members cannot take consumables from the cart; they ask for more to be bought (see `cart-context.tsx`).
 - Held by you: **Return**.
 - Held by someone else, or lab use: no button.
 - Admins get a "⋯" menu with Edit and Delete.
+
+## Words we use
+
+| Thing | Say | Not |
+|---|---|---|
+| Borrowable items | Equipment & Assets (phone tab: Equipment) | Assets |
+| Adding equipment | Add to loan, On your loan | Add to cart |
+| Asking for consumables | Request more | Add to cart |
+| The basket | Cart, organised in sections (today: **Equipment on loan**) | Shopping cart |
+| Giving equipment back | Return / Check in | |
 
 ## Item page
 
