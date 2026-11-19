@@ -446,7 +446,7 @@ export default function Dashboard() {
         {[
           {
             label: "Check out items",
-            hint: "Browse assets",
+            hint: "Browse equipment",
             to: "/assets",
             icon: Archive,
           },

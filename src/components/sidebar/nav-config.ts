@@ -33,6 +33,8 @@ export interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
+  /** Shorter label for the phone bottom bar, where space is tight. */
+  shortTitle?: string;
   /** Match the path exactly instead of by prefix. */
   exact?: boolean;
   /** Paths that look like children of this item but belong elsewhere. */
@@ -60,7 +62,12 @@ const inventoryHome: NavItem = {
   icon: Home,
   exact: true,
 };
-const assets: NavItem = { title: "Assets", url: "/assets", icon: Box };
+const assets: NavItem = {
+  title: "Equipment & Assets",
+  shortTitle: "Equipment",
+  url: "/assets",
+  icon: Box,
+};
 const checkIn: NavItem = {
   title: "Check in",
   url: "/checkin",

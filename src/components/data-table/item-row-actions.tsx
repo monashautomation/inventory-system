@@ -30,8 +30,10 @@ interface ItemRowActionsProps {
 
 /**
  * One action per row, based on what is possible for that item:
- * Add to cart (blue), Return if you hold it, or nothing if someone else does.
- * Edit and delete live in a "more" menu for admins.
+ * Equipment: Add to loan (blue), Return if you hold it, or nothing if someone
+ * else does. Consumables: Request more, because members cannot take consumables
+ * from the cart; they ask for more to be bought. Edit and delete live in a
+ * "more" menu for admins.
  */
 export function ItemRowActions({
   consumable,
@@ -62,14 +64,14 @@ export function ItemRowActions({
   } else if (loanState === "stored" && inCart) {
     primary = (
       <Button size="sm" variant="outline" disabled>
-        In cart
+        On your loan
       </Button>
     );
   } else if (loanState === "stored") {
     primary = (
       <Button size="sm" onClick={onAddToCart}>
         <ShoppingCart className="h-3.5 w-3.5" />
-        Add to cart
+        Add to loan
       </Button>
     );
   }

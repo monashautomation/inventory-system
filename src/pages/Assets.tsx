@@ -116,7 +116,7 @@ const Assets = () => {
         }
         const added = addItem({ ...item, quantity: 1 });
         if (added) {
-          toast.success("Item added to cart.");
+          toast.success("Added to your loan.");
         }
       }
     },
@@ -205,9 +205,11 @@ const Assets = () => {
       {/* Header Section */}
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-left">Assets</h1>
+          <h1 className="text-3xl font-bold text-left">
+            Equipment &amp; Assets
+          </h1>
           <p className="text-muted-foreground">
-            Manage your inventory of assets
+            Equipment and assets you can add to a loan
           </p>
         </div>
         {isAdmin ? (

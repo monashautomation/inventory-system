@@ -20,6 +20,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form } from "@/components/ui/form";
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { trpc } from "@/client/trpc";
 function getItemInvalidReason(
@@ -112,13 +113,13 @@ export default function Cart() {
     }
 
     if (!data.consumable && itemInCart(data.id)) {
-      toast.info("Item is already in your cart");
+      toast.info("That item is already on your loan");
       return;
     }
 
     const added = addItem({ ...data, quantity: 1 });
     if (added) {
-      toast.success("Item added to cart");
+      toast.success("Added to your loan");
     }
   };
 
@@ -138,6 +139,18 @@ export default function Cart() {
 
   // Calculate total items
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  // The cart is organised in sections so more kinds of items can be added
+  // later. Today only equipment goes in (consumables are requested, not
+  // checked out; see cart-context).
+  const sections = [
+    {
+      key: "loan",
+      title: "Equipment on loan",
+      hint: "Return these with Check in.",
+      items,
+    },
+  ].filter((section) => section.items.length > 0);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
@@ -177,7 +190,7 @@ export default function Cart() {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Clear Shopping Cart?</AlertDialogTitle>
+                    <AlertDialogTitle>Clear your cart?</AlertDialogTitle>
                     <AlertDialogDescription>
                       This will remove all {items.length} items from your cart.
                       This action cannot be undone.
@@ -208,32 +221,50 @@ export default function Cart() {
             </div>
             <h3 className="text-xl font-semibold mb-2">Your cart is empty</h3>
             <p className="text-muted-foreground mb-6">
-              Looks like you haven't added anything to your cart yet
+              Add equipment to a loan to get started.
             </p>
-            <Button size="lg">Continue Shopping</Button>
+            <Button size="lg" asChild>
+              <Link to="/assets">Browse equipment</Link>
+            </Button>
           </div>
         ) : (
           /* Items List */
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <div className="py-6 space-y-6">
-                <div className="rounded-lg border bg-card p-4 md:p-6 shadow-sm">
-                  <div className="space-y-5">
-                    {items.map((item, index) => (
-                      <div key={`${item.id}-${index}`}>
-                        <CartDialogItem
-                          item={item}
-                          index={getFormIndex(item.id)}
-                          form={form}
-                          invalidReason={invalidReasons.get(item.id) ?? null}
-                        />
-                        {index < items.length - 1 && (
-                          <Separator className="my-5" />
-                        )}
-                      </div>
-                    ))}
+                {sections.map((section) => (
+                  <div
+                    key={section.key}
+                    className="rounded-lg border bg-card p-4 md:p-6 shadow-sm"
+                  >
+                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <h2 className="text-lg font-semibold">
+                        {section.title}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          ({section.items.length})
+                        </span>
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        {section.hint}
+                      </p>
+                    </div>
+                    <div className="space-y-5">
+                      {section.items.map((item, index) => (
+                        <div key={item.id}>
+                          <CartDialogItem
+                            item={item}
+                            index={getFormIndex(item.id)}
+                            form={form}
+                            invalidReason={invalidReasons.get(item.id) ?? null}
+                          />
+                          {index < section.items.length - 1 && (
+                            <Separator className="my-5" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ))}
 
                 <div className="pt-6">
                   <Button

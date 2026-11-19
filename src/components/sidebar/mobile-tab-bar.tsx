@@ -37,7 +37,7 @@ export function MobileTabBar() {
         className={cn(tabClass, active ? "text-primary" : "text-white/75")}
       >
         <item.icon className="h-5 w-5" />
-        {item.title}
+        {item.shortTitle ?? item.title}
       </Link>
     );
   };

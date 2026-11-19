@@ -89,6 +89,10 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
     return null;
   }
 
+  // Equipment is added to a loan; consumables (or a mix) go to the cart.
+  const addsToLoan =
+    selectedData.length > 0 && selectedData.every((item) => !item?.consumable);
+
   const handleBulkAddToCart = () => {
     let addedCount = 0;
 
@@ -109,7 +113,9 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
 
     if (addedCount > 0) {
       toast.success(
-        `${addedCount} item${addedCount > 1 ? "s" : ""} added to cart.`,
+        `${addedCount} item${addedCount > 1 ? "s" : ""} ${
+          addsToLoan ? "added to your loan" : "added to cart"
+        }.`,
       );
     }
     table.resetRowSelection();
@@ -191,7 +197,7 @@ export function BulkActions<TData extends Omit<CartItem, "quantity">>({
               className="text-green-600 hover:!text-green-600 hover:!bg-green-100"
             >
               <ShoppingCart className="h-4 w-4 mr-2" />
-              Add to Cart
+              {addsToLoan ? "Add to loan" : "Add to cart"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPrintDialogOpen(true)}>
