@@ -1,9 +1,20 @@
 /**
- * Bambu Lab HMS (Hardware Management System) error code lookup.
- * Codes normalized to 8-digit lowercase hex (no 0x prefix).
+ * Bambu Lab error code lookup. Bambu publishes two separate tables, and a
+ * printer reports codes from both:
+ *
+ *  - HMS_DEVICE_CODES (hmsDeviceCodes.json): 16-hex keys, attr + code, for
+ *    errors in the printer's HMS list, e.g. 0300120000020001 "The front
+ *    cover of the toolhead fell off." Regenerate with `bun run generate:hms`.
+ *  - HMS_ERROR_MAP (below): 8-hex keys (module, module number, message), for
+ *    job-level print errors, e.g. 05004003 "unable to parse the file".
+ *
  * Source: BambuStudio resources/hms/hms_en_*.json
- * 1092 entries covering models: 093, 094, 20P, 22E, 239, 26A, 31B
+ * Models: 093, 094, 20P, 22E, 239, 26A, 31B
  */
+import hmsDeviceCodes from "./hmsDeviceCodes.json";
+
+const HMS_DEVICE_CODES = hmsDeviceCodes as Record<string, string>;
+
 const HMS_ERROR_MAP: Record<string, string> = {
   "03004000": "Z axis homing failed; the task has been stopped.",
   "03004001":
@@ -2009,13 +2020,29 @@ export function isOperationalHmsError(description: string): boolean {
 
 const hex8 = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
 
+/**
+ * Looks a reported (attr, code) pair up in the right table. Real HMS codes
+ * carry a non-zero upper half in `code` and are keyed by attr + code. Job-level
+ * print errors (such as 0x4003, "unable to parse the file") have a zero upper
+ * half and use the shorter key. Never fall back to the short key for HMS
+ * codes: it would match an unrelated print error and show the wrong text.
+ */
+export function lookupHmsDescription(
+  attr: number,
+  code: number,
+): string | undefined {
+  const hms = HMS_DEVICE_CODES[hex8(attr) + hex8(code)];
+  if (hms) return hms;
+  if (code >>> 16 === 0) return HMS_ERROR_MAP[buildEcode(attr, code)];
+  return undefined;
+}
+
 export function describeHmsErrors(
   errors: { code: string; attr: number }[],
 ): HmsErrorInfo[] {
   return errors.map((e) => {
     const codeInt = parseInt(e.code, 16);
-    const ecode = buildEcode(e.attr, codeInt);
-    const known = HMS_ERROR_MAP[ecode];
+    const known = lookupHmsDescription(e.attr, codeInt);
     const description = known ?? `Unknown error (${e.code})`;
     return {
       code: e.code,
