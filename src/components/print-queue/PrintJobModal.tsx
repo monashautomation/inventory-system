@@ -13,6 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  blockedPrinterReasons,
+  evaluateTargeting,
+  type GatePrinter,
+  type GateTargeting,
+} from "@/lib/queueGate";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -172,6 +179,34 @@ export function PrintJobModal({
   const printerModels = [
     ...new Set((printers ?? []).filter((p) => p.model).map((p) => p.model!)),
   ];
+
+  // Printers with a blocking error can't take a new print until it is cleared.
+  // (Flag-only errors, such as a bad file, do not block; see
+  // docs/hms-error-policy.md.)
+  const { data: connectivity } =
+    trpc.printQueue.listPrinterConnectivity.useQuery(undefined, {
+      enabled: open,
+      refetchInterval: 15_000,
+    });
+  const gatePrinters: GatePrinter[] = (printers ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    model: p.model,
+    blockingErrors:
+      connectivity?.find((c) => c.id === p.id)?.blockingErrors ?? [],
+  }));
+  const blockedReasons = blockedPrinterReasons(gatePrinters);
+  const modelBlocked = (model: string) =>
+    !evaluateTargeting({ mode: "model", model }, gatePrinters).allowed;
+  const gateTargeting: GateTargeting | null =
+    targetingMode === "printer" && selectedPrinterId != null
+      ? { mode: "printer", printerId: selectedPrinterId }
+      : targetingMode === "model" && selectedModel
+        ? { mode: "model", model: selectedModel }
+        : null;
+  const gate = gateTargeting
+    ? evaluateTargeting(gateTargeting, gatePrinters)
+    : { allowed: true as const };
 
   const { data: filamentReqs, isLoading: reqsLoading } =
     trpc.printQueue.getFilamentRequirements.useQuery(
@@ -474,6 +509,7 @@ export function PrintJobModal({
         if (archiveSource === "existing") return archiveId != null;
         return uploadFile != null;
       case "targeting":
+        if (!gate.allowed) return false;
         if (targetingMode === "model") return !!selectedModel;
         if (targetingMode === "printer") return selectedPrinterId != null;
         return true;
@@ -1111,8 +1147,13 @@ export function PrintJobModal({
                         </SelectTrigger>
                         <SelectContent>
                           {printerModels.map((m) => (
-                            <SelectItem key={m} value={m}>
+                            <SelectItem
+                              key={m}
+                              value={m}
+                              disabled={modelBlocked(m)}
+                            >
                               {m}
+                              {modelBlocked(m) ? " - all have errors" : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1136,10 +1177,17 @@ export function PrintJobModal({
                         </SelectTrigger>
                         <SelectContent>
                           {(printers ?? []).map((p) => (
-                            <SelectItem key={p.id} value={String(p.id)}>
+                            <SelectItem
+                              key={p.id}
+                              value={String(p.id)}
+                              disabled={blockedReasons.has(p.id)}
+                            >
                               {p.name}
                               {p.model ? ` (${p.model})` : ""}
                               {p.location ? ` - ${p.location}` : ""}
+                              {blockedReasons.has(p.id)
+                                ? " - has an error"
+                                : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1147,6 +1195,17 @@ export function PrintJobModal({
                     )}
                   </div>
                 )}
+
+                {!gate.allowed ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{gate.reason}</AlertDescription>
+                  </Alert>
+                ) : blockedReasons.size > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Printers with an error are greyed out until it is cleared on
+                    Monitor.
+                  </p>
+                ) : null}
               </div>
             )}
 

@@ -181,18 +181,28 @@ function QueueItemRow({
   const printerErrorIsWarning =
     hasPrinterError && item.printerHmsErrors!.every((e) => e.operational);
 
+  // Flag-only errors (a bad file, a cancelled job) are shown but do not block.
+  const printerErrorIsFlagOnly =
+    hasPrinterError && item.printerHmsErrors!.every((e) => !e.blocking);
+
   const statusConfig = hasPrinterError
-    ? printerErrorIsWarning
+    ? printerErrorIsFlagOnly
       ? {
-          label: "Action needed",
+          label: "Notice",
           className:
-            "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+            "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
         }
-      : {
-          label: "Error",
-          className:
-            "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
-        }
+      : printerErrorIsWarning
+        ? {
+            label: "Action needed",
+            className:
+              "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+          }
+        : {
+            label: "Error",
+            className:
+              "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+          }
     : (STATUS_CONFIG[status] ?? {
         label: status,
         className: "bg-slate-100 text-slate-600",
@@ -351,17 +361,20 @@ function QueueItemRow({
         {hasPrinterError && (
           <div
             className={`rounded-md border px-2 py-1.5 space-y-1 ${
-              printerErrorIsWarning
-                ? "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300"
-                : "border-destructive/40 bg-destructive/10 text-destructive"
+              printerErrorIsFlagOnly
+                ? "border-border bg-muted text-muted-foreground"
+                : printerErrorIsWarning
+                  ? "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+                  : "border-destructive/40 bg-destructive/10 text-destructive"
             }`}
           >
             <div className="flex items-start gap-1.5 text-xs font-medium">
               <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
               <span>
                 {printerLabel}{" "}
-                {printerErrorIsWarning ? "needs attention" : "has an error"} -
-                this job cannot start until it's resolved.
+                {printerErrorIsFlagOnly
+                  ? "has a notice - it does not block new prints."
+                  : `${printerErrorIsWarning ? "needs attention" : "has an error"} - this job cannot start until it's resolved.`}
               </span>
             </div>
             <ul className="space-y-0.5 pl-[18px]">
@@ -369,6 +382,9 @@ function QueueItemRow({
                 <li key={i} className="flex gap-1.5 text-xs">
                   <span className="font-mono shrink-0">{e.code}</span>
                   <span>{e.description}</span>
+                  {!e.blocking && e.flagReason ? (
+                    <span className="opacity-80">({e.flagReason})</span>
+                  ) : null}
                 </li>
               ))}
             </ul>

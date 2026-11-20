@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { logger as rootLogger } from "@/server/lib/logger";
 import { describeHmsErrors, type HmsErrorInfo } from "@/server/lib/hmsErrors";
+import { evaluateTargeting, type GatePrinter } from "@/lib/queueGate";
 import { prisma } from "@/server/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
@@ -144,6 +145,46 @@ const targetingSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
+interface PrinterErrorState extends GatePrinter {
+  /** Errors on the flag-only list: shown, but they do not block. */
+  flaggedErrors: { code: string; description: string; reason: string | null }[];
+}
+
+/**
+ * Each active printer with its current errors split into blocking and
+ * flag-only. Blocking errors (everything not on the flag-only list, see
+ * docs/hms-error-policy.md) stop a new print being queued to that printer.
+ */
+async function loadPrinterErrorStates(): Promise<PrinterErrorState[]> {
+  const [printers, statuses] = await Promise.all([
+    listBambuddyPrinters(),
+    listBambuddyPrinterStatuses(),
+  ]);
+  const byId = new Map(printers.map((p) => [p.id, p]));
+  return statuses.flatMap((s) => {
+    const printer = byId.get(s.id);
+    if (!printer?.is_active) return [];
+    const infos = describeHmsErrors(s.hms_errors ?? []);
+    return [
+      {
+        id: s.id,
+        name: s.name,
+        model: printer.model,
+        blockingErrors: infos
+          .filter((e) => e.blocking)
+          .map((e) => `${e.code} ${e.description}`),
+        flaggedErrors: infos
+          .filter((e) => !e.blocking)
+          .map((e) => ({
+            code: e.code,
+            description: e.description,
+            reason: e.flagReason,
+          })),
+      },
+    ];
+  });
+}
+
 const addToQueueInputSchema = z.object({
   archiveId: z.number().int().positive(),
   targeting: targetingSchema,
@@ -182,12 +223,20 @@ export const printQueueRouter = router({
 
   listPrinterConnectivity: userProcedure.query(async () => {
     try {
-      const statuses = await listBambuddyPrinterStatuses();
+      const [statuses, errorStates] = await Promise.all([
+        listBambuddyPrinterStatuses(),
+        loadPrinterErrorStates().catch((): PrinterErrorState[] => []),
+      ]);
+      const errorsById = new Map(errorStates.map((e) => [e.id, e]));
       return statuses.map((s) => ({
         id: s.id,
         name: s.name,
         connected: s.connected,
         awaitingPlateClear: s.awaiting_plate_clear ?? false,
+        // Errors that stop a new print being queued to this printer.
+        blockingErrors: errorsById.get(s.id)?.blockingErrors ?? [],
+        // Errors that are shown but do not block.
+        flaggedErrors: errorsById.get(s.id)?.flaggedErrors ?? [],
       }));
     } catch (err) {
       logger.error({ err }, "Failed to fetch printer connectivity");
@@ -382,6 +431,24 @@ export const printQueueRouter = router({
     .input(addToQueueInputSchema)
     .mutation(async ({ input, ctx }) => {
       const { targeting, filamentConstraints, options } = input;
+
+      // Refuse to queue to a printer with a blocking error. If printer state
+      // can't be read, fail open: BamBuddy still has the final say.
+      try {
+        const gate = evaluateTargeting(
+          targeting,
+          await loadPrinterErrorStates(),
+        );
+        if (!gate.allowed) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: gate.reason ?? "That printer has an error to clear first.",
+          });
+        }
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        logger.warn({ err }, "Could not check printer errors before queueing");
+      }
 
       // Rename the archive to the person queuing this print. Reusing an
       // archive originally uploaded/named by someone else (or for a

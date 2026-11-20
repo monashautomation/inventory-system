@@ -1,0 +1,159 @@
+/**
+ * Builds the list of printer errors that are FLAGGED but do not BLOCK new
+ * prints from being queued. Everything not on the list blocks.
+ *
+ * Rule of thumb: an error is flag-only when the problem is the file or job
+ * that was submitted (or a job that was cancelled or paused on purpose), and
+ * the printer itself is fine, so the next print is not affected. Physical,
+ * storage, network and hardware problems are NOT flag-only, because they
+ * would hit the next print too.
+ *
+ * Writes:
+ *  - src/server/lib/hmsNonBlocking.json  (used at runtime)
+ *  - docs/hms-error-policy.md            (the list, for review)
+ *
+ * Run `bun run generate:hms-policy` after editing RULES or after
+ * `bun run generate:hms`.
+ */
+const MODELS = ["093", "094", "20P", "22E", "239", "26A", "31B"];
+const BASE =
+  "https://raw.githubusercontent.com/bambulab/BambuStudio/master/resources/hms";
+
+interface Rule {
+  id: string;
+  title: string;
+  why: string;
+  patterns: RegExp[];
+}
+
+const RULES: Rule[] = [
+  {
+    id: "file-rejected",
+    title: "The submitted file was rejected",
+    why: "The printer could not read or accept the file. Nothing is wrong with the printer; the file needs fixing or resending.",
+    patterns: [
+      /unable to parse the (3mf )?file/i,
+      /^Unsupported print file path or name/i,
+      /^The file name is not supported/i,
+      /3MF file is invalid/i,
+      /content of print file is unreadable/i,
+      /^The print file is unauthorized/i,
+      /^Slicing for the print job failed/i,
+      /slicing progress has not been updated for a long time/i,
+      /Failed to get filament-hotend mapping table from the slicing file/i,
+    ],
+  },
+  {
+    id: "slicing-mismatch",
+    title: "The sliced file does not match the printer",
+    why: "The file was sliced for a different printer, nozzle or hotend setup. Re-slice it; the printer is fine.",
+    patterns: [
+      /sliced file is not compatible with current printer model/i,
+      /nozzle diameter in sliced file is not consistent/i,
+      /nozzle setup does not match the slicing file\. Please initiate the print after re-slicing/i,
+      /hotend quantity or model does not match the sliced file/i,
+      /sliced file is not consistent with the current printer model\. Continue\?/i,
+    ],
+  },
+  {
+    id: "stopped-on-purpose",
+    title: "The job was cancelled or paused on purpose",
+    why: "Someone cancelled the job, or the file itself contains a pause. The printer is fine.",
+    patterns: [
+      /^The task was canceled\.?$/i,
+      /^Printing was cancelled\.?$/i,
+      /pause command added to the printing file/i,
+    ],
+  },
+  {
+    id: "print-quality",
+    title: "Print-quality warning for the current job",
+    why: "AI monitoring flagged a possible failed print. It concerns that job, not the machine.",
+    // Only the detections themselves. Camera faults that merely mention
+    // spaghetti detection being unavailable are hardware problems and block.
+    patterns: [
+      /^Possible spaghetti/i,
+      /^Spaghetti defects were detected/i,
+      /AI print monitor has detected a spaghetti defect/i,
+    ],
+  },
+  {
+    id: "notice",
+    title: "Informational notice",
+    why: "A heads-up about the current job or a setting. Nothing to fix.",
+    patterns: [
+      /^Current filament will be used in this print job/i,
+      /Open Door Detection level for this print job will be set as/i,
+      /time-lapse mode is set to .* in the slicing file/i,
+      /Timelapse is not supported as Spiral Vase/i,
+      /^First layer inspection is not supported for the current print job/i,
+      /G-code data error detected\. The system has automatically reloaded/i,
+      /The print job has been completed\. Automatic air purification/i,
+    ],
+  },
+];
+
+interface Entry {
+  ecode: string;
+  intro: string;
+}
+interface HmsFile {
+  data: {
+    device_hms: { en: Entry[] };
+    device_error: { en: Entry[] };
+  };
+}
+
+// key -> text, from both tables across all models.
+const all = new Map<string, string>();
+for (const model of MODELS) {
+  const res = await fetch(`${BASE}/hms_en_${model}.json`);
+  if (!res.ok) throw new Error(`hms_en_${model}.json: HTTP ${res.status}`);
+  const file = (await res.json()) as HmsFile;
+  for (const e of [...file.data.device_hms.en, ...file.data.device_error.en]) {
+    all.set(e.ecode.toLowerCase(), e.intro);
+  }
+}
+
+const json: Record<string, string> = {};
+const byRule = new Map<string, Map<string, string[]>>();
+for (const rule of RULES) byRule.set(rule.id, new Map());
+
+for (const [key, text] of [...all.entries()].sort()) {
+  const rule = RULES.find((r) => r.patterns.some((p) => p.test(text)));
+  if (!rule) continue;
+  json[key] = rule.id;
+  const texts = byRule.get(rule.id)!;
+  texts.set(text, [...(texts.get(text) ?? []), key]);
+}
+
+await Bun.write(
+  new URL("../src/server/lib/hmsNonBlocking.json", import.meta.url),
+  JSON.stringify(json) + "\n",
+);
+
+let md = `# Printer errors that flag but do not block
+
+Generated by \`bun run generate:hms-policy\`. Edit the rules in \`server/generateHmsPolicy.ts\`, not this file.
+
+**Everything not listed here blocks.** A printer with a blocking error cannot be chosen for a new queued print until the error is cleared. The errors below are still shown (with a note), but they do not block, because the problem is the submitted file or job and the printer itself is fine.
+
+To change the policy, add or remove a pattern in \`RULES\`, run \`bun run generate:hms-policy\`, and review the diff to this file.
+
+${Object.keys(json).length} error codes across ${[...byRule.values()].reduce((n, m) => n + m.size, 0)} distinct messages.
+`;
+for (const rule of RULES) {
+  const texts = byRule.get(rule.id)!;
+  md += `\n## ${rule.title}\n\n${rule.why}\n\n`;
+  for (const [text, keys] of [...texts.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    md += `- ${text}  \n  \`${[...new Set(keys)].join("`, `")}\`\n`;
+  }
+}
+await Bun.write(new URL("../docs/hms-error-policy.md", import.meta.url), md);
+console.log(
+  `Wrote ${Object.keys(json).length} codes (${[...byRule.values()].reduce((n, m) => n + m.size, 0)} messages).`,
+);
+for (const rule of RULES)
+  console.log(`  ${rule.id}: ${byRule.get(rule.id)!.size} messages`);
