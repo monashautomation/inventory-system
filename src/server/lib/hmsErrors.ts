@@ -12,8 +12,25 @@
  * Models: 093, 094, 20P, 22E, 239, 26A, 31B
  */
 import hmsDeviceCodes from "./hmsDeviceCodes.json";
+import hmsNonBlocking from "./hmsNonBlocking.json";
 
 const HMS_DEVICE_CODES = hmsDeviceCodes as Record<string, string>;
+
+/**
+ * Errors that are flagged but do not block new prints (code key -> reason id).
+ * Everything not listed blocks. See docs/hms-error-policy.md; regenerate with
+ * `bun run generate:hms-policy`.
+ */
+const NON_BLOCKING = hmsNonBlocking as Record<string, string>;
+
+/** Why a flag-only error does not block, in words for the UI. */
+export const FLAG_REASONS: Record<string, string> = {
+  "file-rejected": "The file was rejected. Fix or resend it.",
+  "slicing-mismatch": "The file was sliced for a different setup. Re-slice it.",
+  "stopped-on-purpose": "The job was cancelled or paused on purpose.",
+  "print-quality": "Print-quality warning for the current job.",
+  notice: "Informational.",
+};
 
 const HMS_ERROR_MAP: Record<string, string> = {
   "03004000": "Z axis homing failed; the task has been stopped.",
@@ -2007,6 +2024,12 @@ export interface HmsErrorInfo {
   operational: boolean;
   /** Bambu's own page for this HMS code. */
   wikiUrl: string;
+  /** True unless the error is on the flag-only list. A printer with a
+   *  blocking error cannot be chosen for a new queued print. Unknown codes
+   *  block. */
+  blocking: boolean;
+  /** For flag-only errors, why it does not block (words for the UI). */
+  flagReason: string | null;
 }
 
 // Problems the operator resolves by loading filament / closing a cover /
@@ -2027,14 +2050,26 @@ const hex8 = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
  * half and use the shorter key. Never fall back to the short key for HMS
  * codes: it would match an unrelated print error and show the wrong text.
  */
+export function lookupHmsEntry(
+  attr: number,
+  code: number,
+): { key: string; description: string } | undefined {
+  const hmsKey = hex8(attr) + hex8(code);
+  const hms = HMS_DEVICE_CODES[hmsKey];
+  if (hms) return { key: hmsKey, description: hms };
+  if (code >>> 16 === 0) {
+    const printKey = buildEcode(attr, code);
+    const description = HMS_ERROR_MAP[printKey];
+    if (description) return { key: printKey, description };
+  }
+  return undefined;
+}
+
 export function lookupHmsDescription(
   attr: number,
   code: number,
 ): string | undefined {
-  const hms = HMS_DEVICE_CODES[hex8(attr) + hex8(code)];
-  if (hms) return hms;
-  if (code >>> 16 === 0) return HMS_ERROR_MAP[buildEcode(attr, code)];
-  return undefined;
+  return lookupHmsEntry(attr, code)?.description;
 }
 
 export function describeHmsErrors(
@@ -2042,22 +2077,29 @@ export function describeHmsErrors(
 ): HmsErrorInfo[] {
   return errors.map((e) => {
     const codeInt = parseInt(e.code, 16);
-    const known = lookupHmsDescription(e.attr, codeInt);
+    const entry = lookupHmsEntry(e.attr, codeInt);
+    const known = entry?.description;
     const description = known ?? `Unknown error (${e.code})`;
+    const reasonId = entry ? NON_BLOCKING[entry.key] : undefined;
     return {
       code: e.code,
       description,
       operational: known != null && isOperationalHmsError(known),
+      blocking: reasonId == null,
+      flagReason: reasonId ? (FLAG_REASONS[reasonId] ?? null) : null,
       wikiUrl: `https://e.bambulab.com/?e=${hex8(e.attr).toUpperCase()}${hex8(codeInt).toUpperCase()}`,
     };
   });
 }
 
-/** "warning" (orange) when every error is operational, otherwise "error". */
+/**
+ * "warning" (orange) when every error is something an operator just fixes
+ * (filament out, door open) or is flag-only, otherwise "error" (red).
+ */
 export function hmsAttentionLevel(
-  errors: { operational: boolean }[],
+  errors: { operational: boolean; blocking: boolean }[],
 ): "warning" | "error" {
-  return errors.length > 0 && errors.every((e) => e.operational)
+  return errors.length > 0 && errors.every((e) => e.operational || !e.blocking)
     ? "warning"
     : "error";
 }

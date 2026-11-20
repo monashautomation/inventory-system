@@ -859,8 +859,18 @@ function PrinterDetail({
                         Bambu info
                         <ExternalLink className="h-3 w-3" />
                       </a>
+                      {!e.blocking && e.flagReason ? (
+                        <span className="shrink-0 text-xs opacity-80 mt-0.5">
+                          Flag only: {e.flagReason}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
+                  {status.hmsErrors.some((e) => e.blocking) ? (
+                    <li className="text-xs opacity-80">
+                      Blocks new prints until it is cleared.
+                    </li>
+                  ) : null}
                 </ul>
               ) : (
                 <div className="flex items-start gap-2">
