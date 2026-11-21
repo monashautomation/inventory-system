@@ -515,7 +515,9 @@ async function fetchBambuStatus(printer: {
 const PRINTER_LIST_TTL_MS = 60_000;
 const STATUS_POLL_STUCK_MS = 30_000;
 
-let printerListCache: Prisma.PrinterGetPayload<{ omit: { authToken: false } }>[] = [];
+let printerListCache: Prisma.PrinterGetPayload<{
+  omit: { authToken: false };
+}>[] = [];
 let printerListFetchedAt = 0;
 let statusPollRunning = false;
 let statusPollStartedAt = 0;
