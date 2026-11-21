@@ -31,7 +31,10 @@ type ItemUncheckedCreateSerialInput = Omit<
 };
 
 // Initialize base Prisma Client
-const basePrisma = new PrismaClient();
+// Printer.authToken (the PrusaLink API key) is omitted from every query by default so
+// it can't leak through printer lists, includes, tRPC or MCP responses (audit INV-1).
+// Server code that talks to a printer opts back in with `omit: { authToken: false }`.
+const basePrisma = new PrismaClient({ omit: { printer: { authToken: true } } });
 
 export const prisma = basePrisma.$extends({
   model: {

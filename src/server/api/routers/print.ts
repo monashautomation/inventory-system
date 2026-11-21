@@ -591,9 +591,15 @@ export const printRouter = router({
       },
     })
     .query(async ({ ctx }) => {
-      return ctx.prisma.printer.findMany({
+      // Never return the PrusaLink API key; the UI only needs to know one is set (INV-1).
+      const printers = await ctx.prisma.printer.findMany({
+        omit: { authToken: false },
         orderBy: { createdAt: "desc" },
       });
+      return printers.map(({ authToken, ...printer }) => ({
+        ...printer,
+        hasAuthToken: Boolean(authToken),
+      }));
     }),
 
   getProjects: userProcedure.query(async () => {
@@ -615,7 +621,7 @@ export const printRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
 
@@ -903,7 +909,7 @@ export const printRouter = router({
   pausePrint: userProcedure
     .input(z.object({ printerIpAddress: ipAddressSchema }))
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
       if (!printer)
@@ -973,7 +979,7 @@ export const printRouter = router({
   resumePrint: userProcedure
     .input(z.object({ printerIpAddress: ipAddressSchema }))
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
       if (!printer)
@@ -1043,7 +1049,7 @@ export const printRouter = router({
   cancelPrint: userProcedure
     .input(z.object({ printerIpAddress: ipAddressSchema }))
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
       if (!printer)
@@ -1467,7 +1473,7 @@ export const printRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { id: input.printerId },
         select: { id: true, _count: { select: { printJobs: true } } },
       });
@@ -1508,7 +1514,7 @@ export const printRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { printerId, ...data } = input;
 
-      const existing = await ctx.prisma.printer.findUnique({
+      const existing = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { id: printerId },
       });
 
@@ -1555,7 +1561,7 @@ export const printRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
 
@@ -1666,7 +1672,7 @@ export const printRouter = router({
           userId: ctx.user.id,
         },
         include: {
-          printer: true,
+          printer: { omit: { authToken: false } },
         },
       });
 
@@ -1765,7 +1771,7 @@ export const printRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
 
@@ -2006,7 +2012,7 @@ export const printRouter = router({
         });
       }
 
-      const printer = await ctx.prisma.printer.findUnique({
+      const printer = await ctx.prisma.printer.findUnique({ omit: { authToken: false },
         where: { ipAddress: input.printerIpAddress },
       });
 
@@ -2137,7 +2143,7 @@ export const printRouter = router({
       },
     })
     .query(async ({ ctx }) => {
-      const printers = await ctx.prisma.printer.findMany();
+      const printers = await ctx.prisma.printer.findMany({ omit: { authToken: false } });
 
       interface ActivePrintEntry {
         printerName: string;
@@ -2308,7 +2314,7 @@ export const printRouter = router({
     // Fetch bambuddy printers + local DB printers in parallel
     const [bambuddyPrinters, localPrinters] = await Promise.all([
       listBambuddyPrinters().catch((): BambuddyPrinter[] => []),
-      ctx.prisma.printer.findMany({ orderBy: { createdAt: "desc" } }),
+      ctx.prisma.printer.findMany({ omit: { authToken: false }, orderBy: { createdAt: "desc" } }),
     ]);
 
     // Fetch all bambu statuses in parallel - one list call, no per-printer resolution
@@ -2699,7 +2705,7 @@ export const printRouter = router({
   getKioskPrinterStatuses: kioskProcedure.query(async ({ ctx }) => {
     const [bambuddyPrinters, localPrinters] = await Promise.all([
       listBambuddyPrinters().catch((): BambuddyPrinter[] => []),
-      ctx.prisma.printer.findMany({ orderBy: { createdAt: "desc" } }),
+      ctx.prisma.printer.findMany({ omit: { authToken: false }, orderBy: { createdAt: "desc" } }),
     ]);
 
     const bambuStatusResults = await Promise.allSettled(

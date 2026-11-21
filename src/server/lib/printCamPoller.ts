@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import * as http from "node:http";
 import {
   resolveBambuddyPrinterId,
@@ -514,7 +515,7 @@ async function fetchBambuStatus(printer: {
 const PRINTER_LIST_TTL_MS = 60_000;
 const STATUS_POLL_STUCK_MS = 30_000;
 
-let printerListCache: Awaited<ReturnType<typeof prisma.printer.findMany>> = [];
+let printerListCache: Prisma.PrinterGetPayload<{ omit: { authToken: false } }>[] = [];
 let printerListFetchedAt = 0;
 let statusPollRunning = false;
 let statusPollStartedAt = 0;
@@ -525,6 +526,7 @@ let statusPollStartedAt = 0;
 // per serial, migrates job history off the stale rows, then deletes them.
 async function dedupeBambuPrintersBySerial(): Promise<void> {
   const printers = await prisma.printer.findMany({
+    omit: { authToken: false },
     where: { type: "BAMBU", serialNumber: { not: null } },
     orderBy: { updatedAt: "desc" },
   });
@@ -592,6 +594,7 @@ export async function syncBambuPrinters(): Promise<void> {
   await dedupeBambuPrintersBySerial();
 
   const existingBambuPrinters = await prisma.printer.findMany({
+    omit: { authToken: false },
     where: { type: "BAMBU" },
   });
   const existingBySerial = new Map(
@@ -645,7 +648,7 @@ async function refreshPrinterListCache(): Promise<void> {
     logger.error({ err }, "Bambu sync failed"),
   );
   const fresh = await Promise.race([
-    prisma.printer.findMany(),
+    prisma.printer.findMany({ omit: { authToken: false } }),
     new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error("[printCam] printer list query timeout")),

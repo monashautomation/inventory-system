@@ -177,7 +177,7 @@ function EditPrinterDialog({
     name: string;
     type: PrinterType;
     ipAddress: string;
-    authToken: string | null;
+    hasAuthToken: boolean;
     serialNumber: string | null;
     webcamUrl: string | null;
   };
@@ -188,7 +188,8 @@ function EditPrinterDialog({
     name: printer.name,
     type: printer.type,
     ipAddress: printer.ipAddress,
-    authToken: printer.authToken ?? "",
+    // Write-only: the saved key is never sent to the browser. Blank keeps it.
+    authToken: "",
     serialNumber: printer.serialNumber ?? "",
     webcamUrl: printer.webcamUrl ?? "",
   });
@@ -216,7 +217,7 @@ function EditPrinterDialog({
       name: form.name.trim(),
       type: form.type,
       ipAddress: form.ipAddress.trim(),
-      authToken: form.authToken.trim() || null,
+      authToken: form.authToken.trim() || undefined,
       serialNumber: form.serialNumber.trim() || null,
       webcamUrl: form.webcamUrl.trim() || null,
     });
@@ -229,7 +230,7 @@ function EditPrinterDialog({
         name: printer.name,
         type: printer.type,
         ipAddress: printer.ipAddress,
-        authToken: printer.authToken ?? "",
+        authToken: "",
         serialNumber: printer.serialNumber ?? "",
         webcamUrl: printer.webcamUrl ?? "",
       });
@@ -335,7 +336,7 @@ export default function PrinterManagement() {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     <span className="text-muted-foreground">Auth Token</span>
                     <span className="truncate">
-                      {printer.authToken ? "••••••••" : "-"}
+                      {printer.hasAuthToken ? "••••••••" : "-"}
                     </span>
                     <span className="text-muted-foreground">Webcam</span>
                     <span className="truncate">

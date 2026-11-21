@@ -316,8 +316,12 @@ model Chat {
   userMessages      Json     // Stores Record<string, UserMessageData>
   aiMessageChildIds Json     // Stores Record<string, string[]>
   userMessageChildIds Json   // Stores Record<string, string[]>
+  /// Owner. Null only for chats created before ownership existed (hidden from everyone).
+  userId            String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@index([userId])
 }
 
 enum NotificationType {

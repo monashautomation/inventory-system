@@ -422,9 +422,10 @@ async function initializeAIProvider() {
 export const chatRouter = router({
   createConversation: userProcedure
     .input(CreateConversationInput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const conversation = await prisma.chat.create({
         data: {
+          userId: ctx.user.id,
           title: input.title ?? "New Conversation",
           aiMessages: {},
           userMessages: {},
@@ -442,9 +443,9 @@ export const chatRouter = router({
 
   getConversation: userProcedure
     .input(GetConversationInput)
-    .query(async ({ input }) => {
-      const conversation = await prisma.chat.findUnique({
-        where: { id: input.conversationId },
+    .query(async ({ input, ctx }) => {
+      const conversation = await prisma.chat.findFirst({
+        where: { id: input.conversationId, userId: ctx.user.id },
       });
 
       if (!conversation) {
@@ -485,8 +486,8 @@ export const chatRouter = router({
   sendMessage: userProcedure
     .input(SendMessageInput)
     .mutation(async ({ input, ctx }) => {
-      const conversation = await prisma.chat.findUnique({
-        where: { id: input.conversationId },
+      const conversation = await prisma.chat.findFirst({
+        where: { id: input.conversationId, userId: ctx.user.id },
       });
 
       if (!conversation) {
@@ -571,8 +572,9 @@ export const chatRouter = router({
       };
     }),
 
-  getConversations: userProcedure.query(async () => {
+  getConversations: userProcedure.query(async ({ ctx }) => {
     const conversations = await prisma.chat.findMany({
+      where: { userId: ctx.user.id },
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
@@ -586,10 +588,13 @@ export const chatRouter = router({
 
   deleteConversation: userProcedure
     .input(z.object({ conversationId: z.string().uuid() }))
-    .mutation(async ({ input }) => {
-      await prisma.chat.delete({
-        where: { id: input.conversationId },
+    .mutation(async ({ input, ctx }) => {
+      const { count } = await prisma.chat.deleteMany({
+        where: { id: input.conversationId, userId: ctx.user.id },
       });
+      if (count === 0) {
+        throw new Error("Conversation not found");
+      }
 
       return { success: true };
     }),
