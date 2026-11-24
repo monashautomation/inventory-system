@@ -840,30 +840,36 @@ function PrinterDetail({
                 : "border-destructive/50 bg-destructive/10 text-destructive"
             }`}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               {status.hmsErrors && status.hmsErrors.length > 0 ? (
-                <ul className="space-y-1">
+                <ul className="min-w-0 flex-1 space-y-2">
                   {status.hmsErrors.map((e, i) => (
                     <li key={i} className="flex items-start gap-2">
                       {isWarning(status) ? (
                         <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       ) : null}
-                      <span className="font-semibold shrink-0">{e.code}</span>
-                      <span>{e.description}</span>
-                      <a
-                        href={e.wikiUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 inline-flex items-center gap-1 underline underline-offset-2 text-xs mt-0.5"
-                      >
-                        Bambu info
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      {!e.blocking && e.flagReason ? (
-                        <span className="shrink-0 text-xs opacity-80 mt-0.5">
-                          Flag only: {e.flagReason}
-                        </span>
-                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <p>
+                          <span className="font-semibold mr-2">{e.code}</span>
+                          <span className="break-words">{e.description}</span>
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                          <a
+                            href={e.wikiUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 underline underline-offset-2"
+                          >
+                            Bambu info
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                          {!e.blocking && e.flagReason ? (
+                            <span className="opacity-80">
+                              Flag only: {e.flagReason}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
                     </li>
                   ))}
                   {status.hmsErrors.some((e) => e.blocking) ? (
@@ -873,9 +879,9 @@ function PrinterDetail({
                   ) : null}
                 </ul>
               ) : (
-                <div className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
                   <span className="font-semibold shrink-0">Error:</span>
-                  <span>{status.stateMessage}</span>
+                  <span className="break-words">{status.stateMessage}</span>
                 </div>
               )}
               {status.printerType === "BAMBU" && status.bambuddyId != null ? (
