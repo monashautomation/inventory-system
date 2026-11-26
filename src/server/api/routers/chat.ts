@@ -419,6 +419,16 @@ async function initializeAIProvider() {
 }
 
 // Chat router
+/**
+ * Which chats the caller may see (audit INV-2): their own, plus, for admins, the
+ * chats created before chats had owners (userId null), so that history isn't lost.
+ */
+function visibleChats(user: { id: string; role?: string | null }) {
+  return user.role === "admin"
+    ? { OR: [{ userId: user.id }, { userId: null }] }
+    : { userId: user.id };
+}
+
 export const chatRouter = router({
   createConversation: userProcedure
     .input(CreateConversationInput)
@@ -445,7 +455,7 @@ export const chatRouter = router({
     .input(GetConversationInput)
     .query(async ({ input, ctx }) => {
       const conversation = await prisma.chat.findFirst({
-        where: { id: input.conversationId, userId: ctx.user.id },
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
 
       if (!conversation) {
@@ -487,7 +497,7 @@ export const chatRouter = router({
     .input(SendMessageInput)
     .mutation(async ({ input, ctx }) => {
       const conversation = await prisma.chat.findFirst({
-        where: { id: input.conversationId, userId: ctx.user.id },
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
 
       if (!conversation) {
@@ -574,7 +584,7 @@ export const chatRouter = router({
 
   getConversations: userProcedure.query(async ({ ctx }) => {
     const conversations = await prisma.chat.findMany({
-      where: { userId: ctx.user.id },
+      where: visibleChats(ctx.user),
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
@@ -590,7 +600,7 @@ export const chatRouter = router({
     .input(z.object({ conversationId: z.string().uuid() }))
     .mutation(async ({ input, ctx }) => {
       const { count } = await prisma.chat.deleteMany({
-        where: { id: input.conversationId, userId: ctx.user.id },
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
       if (count === 0) {
         throw new Error("Conversation not found");
