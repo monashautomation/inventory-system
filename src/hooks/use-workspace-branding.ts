@@ -10,7 +10,7 @@ export function useWorkspaceBranding(workspace: Workspace) {
   useEffect(() => {
     const { label, logo } = WORKSPACES[workspace];
     const previousTitle = document.title;
-    document.title = `${label} · Operation Tamarin`;
+    document.title = `${label} · Monash Automation`;
 
     let cleanupIcon: (() => void) | undefined;
     if (workspace !== "inventory") {
