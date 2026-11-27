@@ -44,7 +44,7 @@ export function WorkspaceSwitcher({
               {active.label}
             </span>
             <span className="block text-xs text-sidebar-foreground/60">
-              Operation Tamarin
+              Monash Automation
             </span>
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />

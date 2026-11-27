@@ -419,12 +419,23 @@ async function initializeAIProvider() {
 }
 
 // Chat router
+/**
+ * Which chats the caller may see (audit INV-2): their own, plus, for admins, the
+ * chats created before chats had owners (userId null), so that history isn't lost.
+ */
+function visibleChats(user: { id: string; role?: string | null }) {
+  return user.role === "admin"
+    ? { OR: [{ userId: user.id }, { userId: null }] }
+    : { userId: user.id };
+}
+
 export const chatRouter = router({
   createConversation: userProcedure
     .input(CreateConversationInput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const conversation = await prisma.chat.create({
         data: {
+          userId: ctx.user.id,
           title: input.title ?? "New Conversation",
           aiMessages: {},
           userMessages: {},
@@ -442,9 +453,9 @@ export const chatRouter = router({
 
   getConversation: userProcedure
     .input(GetConversationInput)
-    .query(async ({ input }) => {
-      const conversation = await prisma.chat.findUnique({
-        where: { id: input.conversationId },
+    .query(async ({ input, ctx }) => {
+      const conversation = await prisma.chat.findFirst({
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
 
       if (!conversation) {
@@ -485,8 +496,8 @@ export const chatRouter = router({
   sendMessage: userProcedure
     .input(SendMessageInput)
     .mutation(async ({ input, ctx }) => {
-      const conversation = await prisma.chat.findUnique({
-        where: { id: input.conversationId },
+      const conversation = await prisma.chat.findFirst({
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
 
       if (!conversation) {
@@ -571,8 +582,9 @@ export const chatRouter = router({
       };
     }),
 
-  getConversations: userProcedure.query(async () => {
+  getConversations: userProcedure.query(async ({ ctx }) => {
     const conversations = await prisma.chat.findMany({
+      where: visibleChats(ctx.user),
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
@@ -586,10 +598,13 @@ export const chatRouter = router({
 
   deleteConversation: userProcedure
     .input(z.object({ conversationId: z.string().uuid() }))
-    .mutation(async ({ input }) => {
-      await prisma.chat.delete({
-        where: { id: input.conversationId },
+    .mutation(async ({ input, ctx }) => {
+      const { count } = await prisma.chat.deleteMany({
+        where: { id: input.conversationId, ...visibleChats(ctx.user) },
       });
+      if (count === 0) {
+        throw new Error("Conversation not found");
+      }
 
       return { success: true };
     }),
